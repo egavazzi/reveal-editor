@@ -3,7 +3,8 @@
   import { REVEAL_THEMES, TYPOGRAPHY_PRESETS } from '../lib/model/settings.js'
   import {
     currentLayers, selectLayer, toggleLayerHidden, toggleLayerLocked, moveLayer,
-    selectedImageInfo, setImageProperties, updateDeckSettings as updateSettings
+    currentSpeakerNotes, selectedImageInfo, setImageProperties, setSpeakerNotes,
+    updateDeckSettings as updateSettings
   } from '../lib/actions.js'
 
   const presets = {
@@ -27,6 +28,11 @@
     void editor.selectionVersion
     return selectedImageInfo()
   })
+  const notes = $derived.by(() => {
+    void editor.docVersion
+    void editor.slideIndex.h
+    return currentSpeakerNotes()
+  })
 
   function setPreset(e) {
     const size = presets[e.currentTarget.value]
@@ -38,6 +44,7 @@
   <header>
     <button class:active={editor.sidePanel === 'layers'} onclick={() => editor.sidePanel = 'layers'}>Layers</button>
     <button class:active={editor.sidePanel === 'settings'} onclick={() => editor.sidePanel = 'settings'}>Deck</button>
+    <button class:active={editor.sidePanel === 'notes'} onclick={() => editor.sidePanel = 'notes'}>Notes</button>
     {#if image}<button class:active={editor.sidePanel === 'image'} onclick={() => editor.sidePanel = 'image'}>Image</button>{/if}
     <button class="close" title="Close panel" onclick={() => editor.sidePanel = null}>×</button>
   </header>
@@ -81,6 +88,17 @@
           {/each}
         </select>
       </label>
+      <label>Transition
+        <select value={editor.settings.transition} onchange={(e) => updateSettings({ transition: e.currentTarget.value })}>
+          <option value="none">None</option><option value="fade">Fade</option><option value="slide">Slide</option>
+          <option value="convex">Convex</option><option value="concave">Concave</option><option value="zoom">Zoom</option>
+        </select>
+      </label>
+      <label>Transition speed
+        <select value={editor.settings.transitionSpeed} onchange={(e) => updateSettings({ transitionSpeed: e.currentTarget.value })}>
+          <option value="default">Default</option><option value="fast">Fast</option><option value="slow">Slow</option>
+        </select>
+      </label>
 
       <h3>Canvas</h3>
       <label>Format
@@ -118,6 +136,20 @@
     </section>
   {/if}
 
+  {#if editor.sidePanel === 'notes'}
+    <section class="panel notes-panel">
+      <h3>Speaker notes</h3>
+      <p class="hint">Saved as native reveal.js notes for the current slide. Press S while presenting to open speaker view.</p>
+      <textarea
+        rows="12"
+        placeholder="Private notes for this slide…"
+        value={notes}
+        onchange={(e) => setSpeakerNotes(e.currentTarget.value)}
+      ></textarea>
+      {#if notes}<button onclick={() => setSpeakerNotes('')}>Clear notes</button>{/if}
+    </section>
+  {/if}
+
   {#if image && editor.sidePanel === 'image'}
     <section class="panel image-panel">
       <h3>Image</h3>
@@ -152,7 +184,8 @@
   h3:not(:first-child) { margin-top: 20px; }
   label { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; color: #9a9ba3; font-size: 12px; }
   label.check { flex-direction: row; align-items: center; color: #d6d7dc; }
-  input, select { min-width: 0; box-sizing: border-box; width: 100%; background: #34353d; color: #d6d7dc; border: 1px solid #45464f; border-radius: 4px; padding: 4px 6px; }
+  input, select, textarea { min-width: 0; box-sizing: border-box; width: 100%; background: #34353d; color: #d6d7dc; border: 1px solid #45464f; border-radius: 4px; padding: 4px 6px; }
+  textarea { resize: vertical; font: inherit; line-height: 1.4; }
   input[type='checkbox'] { width: auto; } input[type='color'] { height: 30px; padding: 1px; }
   .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .hint, .empty { margin: 4px 0 10px; color: #777983; font-size: 11px; }

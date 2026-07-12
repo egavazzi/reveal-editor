@@ -13,6 +13,7 @@ import { editor } from '../../stores/editor.svelte.js'
  */
 export function resolveEditable(target, section) {
   if (!section.contains(target) || target === section) return null
+  if (target.closest('aside.notes, .re-transient')) return null
   const reEl = target.closest('.re-el')
   if (reEl && section.contains(reEl)) return reEl
   let el = target
@@ -136,14 +137,14 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
     const section = currentSection()
     if (!section) return
     const el = resolveEditable(e.target, section)
-    if (el) onDblClick?.(el, e)
+    if (el && !el.hasAttribute('data-re-locked')) onDblClick?.(el, e)
   }
 
   function buildSelecto() {
     selecto = new Selecto({
       container: doc.body,
       rootContainer: doc.body,
-      selectableTargets: ['.reveal .slides section.present > *'],
+      selectableTargets: ['.reveal .slides section.present > :not(aside.notes):not(.re-transient)'],
       hitRate: 0,
       selectByClick: false,
       selectFromInside: false,

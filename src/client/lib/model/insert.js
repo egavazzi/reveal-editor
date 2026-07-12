@@ -111,6 +111,17 @@ export function insertCodeBlock(bridge) {
   return placeAt(bridge, pre, 600, 160)
 }
 
+export function insertHtmlBlock(bridge) {
+  const doc = bridge.doc
+  const el = doc.createElement('div')
+  el.className = 're-el re-html'
+  el.style.width = '600px'
+  el.style.height = '320px'
+  el.style.overflow = 'auto'
+  el.innerHTML = '<div style="padding: 24px; border: 2px solid currentColor">Custom HTML</div>'
+  return placeAt(bridge, el, 600, 320)
+}
+
 /** Extract an image blob from a paste event, if any. */
 export function imageFromClipboard(event) {
   for (const item of event.clipboardData?.items ?? []) {

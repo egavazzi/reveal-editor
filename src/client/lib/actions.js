@@ -4,7 +4,7 @@
 import { editor, runtime } from '../stores/editor.svelte.js'
 import {
   insertTextBox, insertShape, insertImageBlob, imageFromClipboard,
-  insertMathBox, insertCodeBlock, insertVideoBlob
+  insertMathBox, insertCodeBlock, insertVideoBlob, insertHtmlBlock
 } from './model/insert.js'
 import { startTextEdit, formatText, isEditingText, activeElement } from './editors/text.js'
 import { ensurePositioned } from './model/position.js'
@@ -182,7 +182,9 @@ export function beginTextEdit(el, { selectAll = false } = {}) {
 export function editElement(el) {
   const tag = el.tagName.toLowerCase()
   if (tag === 'img' || tag === 'svg' || tag === 'video') return
-  if (el.classList.contains('re-math') || (el.querySelector('.katex') && isMathOnly(el))) {
+  if (el.classList.contains('re-html')) {
+    openHtmlEditor(el)
+  } else if (el.classList.contains('re-math') || (el.querySelector('.katex') && isMathOnly(el))) {
     openMathEditor(el)
   } else if (tag === 'pre' || el.querySelector('pre > code')) {
     openCodeEditor(el)
@@ -220,6 +222,21 @@ export function addCode() {
   openCodeEditor(el)
 }
 
+export function addHtml() {
+  snapshotSlide()
+  const el = insertHtmlBlock(runtime.bridge)
+  runtime.overlay.setSelection([el])
+  markDirty()
+  openHtmlEditor(el)
+}
+
+export function openHtmlEditor(el) {
+  snapshotSlide()
+  runtime.popoverEl = el
+  runtime.popoverOriginal = el.innerHTML
+  editor.popover = { type: 'html', value: el.innerHTML, lang: '' }
+}
+
 export function openCodeEditor(el) {
   snapshotSlide()
   const target = el.tagName.toLowerCase() === 'pre' ? el : el.querySelector('pre')
@@ -244,6 +261,8 @@ export function updatePopover(value, lang) {
     if (!el || !editor.popover) return
     if (editor.popover.type === 'math') {
       commitMath(runtime.bridge, el, editor.popover.value)
+    } else if (editor.popover.type === 'html') {
+      el.innerHTML = editor.popover.value
     } else {
       commitCode(runtime.bridge, el, editor.popover.value, editor.popover.lang)
     }
@@ -261,6 +280,8 @@ export function closePopover(keep) {
     // flush the last debounced edit synchronously
     if (editor.popover.type === 'math') {
       commitMath(runtime.bridge, el, editor.popover.value)
+    } else if (editor.popover.type === 'html') {
+      el.innerHTML = editor.popover.value
     } else {
       commitCode(runtime.bridge, el, editor.popover.value, editor.popover.lang)
     }
@@ -356,6 +377,51 @@ export function slideBackground(color) {
   markDirty()
 }
 
+export function currentSlideTransition() {
+  return runtime.bridge?.currentSection?.getAttribute('data-transition') || ''
+}
+
+export function setCurrentSlideTransition(transition) {
+  const section = runtime.bridge?.currentSection
+  if (!section) return
+  snapshotSlide()
+  if (transition) section.setAttribute('data-transition', transition)
+  else section.removeAttribute('data-transition')
+  runtime.bridge.sync()
+  markDirty()
+}
+
+export function currentSpeakerNotes() {
+  const section = runtime.bridge?.currentSection
+  return [...(section?.children || [])].find((el) => el.matches('aside.notes'))?.textContent || ''
+}
+
+export function setSpeakerNotes(notes) {
+  const section = runtime.bridge?.currentSection
+  if (!section) return
+  snapshotSlide()
+  let aside = [...section.children].find((el) => el.matches('aside.notes'))
+  if (notes) {
+    if (!aside) {
+      aside = section.ownerDocument.createElement('aside')
+      aside.className = 'notes'
+      section.appendChild(aside)
+    }
+    aside.textContent = notes
+  } else {
+    aside?.remove()
+  }
+  runtime.bridge.sync()
+  markDirty()
+}
+
+export function openPresentation({ pdf = false } = {}) {
+  if (!editor.deckFile) return
+  const file = encodeURIComponent(editor.deckFile)
+  const suffix = pdf ? '?print-pdf' : ''
+  window.open(`/deck/${file}${suffix}`, '_blank', 'noopener')
+}
+
 function refreshSlideState() {
   runtime.overlay.setSelection([])
   editor.slideCount = runtime.bridge.getSections().length
@@ -425,9 +491,10 @@ export function sendToBack() {
 export function currentLayers() {
   const section = runtime.bridge?.currentSection
   if (!section) return []
-  return [...section.children].reverse().map((el, reverseIndex) => ({
+  const children = [...section.children].filter((el) => !el.matches('aside.notes, .re-transient'))
+  return children.reverse().map((el, reverseIndex) => ({
     el,
-    index: section.children.length - reverseIndex - 1,
+    index: children.length - reverseIndex - 1,
     label: el.getAttribute('aria-label') || el.getAttribute('alt') ||
       el.textContent?.trim().replace(/\s+/g, ' ').slice(0, 32) || `<${el.tagName.toLowerCase()}>`,
     tag: el.tagName.toLowerCase(),

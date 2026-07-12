@@ -36,10 +36,10 @@ should not grow a second source model or attempt to rewrite QMD.
 
 - [ ] Represent vertical slide stacks in the sidebar and support reordering
       within and between stacks.
-- [ ] Edit speaker notes using native `<aside class="notes">` markup.
-- [ ] Configure slide transitions and per-slide transition overrides.
-- [ ] Add a safe raw-HTML block for advanced embeds and custom interactions.
-- [ ] Add presentation/print entry points, including reveal.js PDF mode.
+- [x] Edit speaker notes using native `<aside class="notes">` markup.
+- [x] Configure slide transitions and per-slide transition overrides.
+- [x] Add a safe raw-HTML block for advanced embeds and custom interactions.
+- [x] Add presentation/print entry points, including reveal.js PDF mode.
 
 ### 3. Strengthen visual composition
 

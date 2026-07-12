@@ -69,7 +69,7 @@ export function slideSummaries(bridge, canvas) {
       section.querySelector('h1, h2, h3, p, li')?.textContent.trim().slice(0, 60) ?? ''
     const background = section.getAttribute('data-background-color') ?? null
     const boxes = [...section.children]
-      .filter((el) => el.tagName !== 'SECTION')
+      .filter((el) => el.tagName !== 'SECTION' && !el.matches('aside.notes, .re-transient'))
       .slice(0, 40)
       .map((el) => {
         const left = parseFloat(el.style.left)

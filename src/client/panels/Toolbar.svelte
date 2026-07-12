@@ -1,8 +1,8 @@
 <script>
   import { editor, runtime } from '../stores/editor.svelte.js'
   import {
-    addText, addShape, addMath, addCode, pickImage, pickVideo, saveDeck,
-    undoAction, redoAction
+    addText, addShape, addMath, addCode, addHtml, pickImage, pickVideo, saveDeck,
+    undoAction, redoAction, openPresentation
   } from '../lib/actions.js'
 
   function toggleAutosave(e) {
@@ -35,11 +35,13 @@
     {/each}
     <button title="LaTeX math" onclick={addMath}>∑</button>
     <button title="Code block" onclick={addCode}>{'{}'}</button>
+    <button title="Custom HTML block" onclick={addHtml}>{'</>'}</button>
   </div>
 
   <div class="group" class:disabled={!editor.ready}>
     <button title="Layers" onclick={() => togglePanel('layers')}>Layers</button>
     <button title="Deck, grid and presentation settings" onclick={() => togglePanel('settings')}>Deck</button>
+    <button title="Speaker notes" onclick={() => togglePanel('notes')}>Notes</button>
   </div>
 
   <div class="group" class:disabled={!editor.ready}>
@@ -56,6 +58,8 @@
   <button onclick={() => saveDeck()} disabled={!editor.ready || editor.saving}>
     {editor.saving ? 'Saving…' : 'Save'}
   </button>
+  <button title="Open presentation" onclick={() => openPresentation()} disabled={!editor.ready}>Present</button>
+  <button title="Open PDF/print view" onclick={() => openPresentation({ pdf: true })} disabled={!editor.ready}>PDF</button>
   <button onclick={() => runtime.bridge?.prev()} disabled={!editor.ready}>←</button>
   <span class="slide-indicator">
     {editor.ready ? `${editor.slideIndex.h + 1} / ${editor.slideCount}` : '–'}

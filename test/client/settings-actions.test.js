@@ -2,7 +2,8 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { editor, runtime } from '../../src/client/stores/editor.svelte.js'
 import {
-  redoAction, selectedImageInfo, setImageProperties, undoAction, updateDeckSettings
+  currentSpeakerNotes, currentSlideTransition, redoAction, selectedImageInfo,
+  setCurrentSlideTransition, setImageProperties, setSpeakerNotes, undoAction, updateDeckSettings
 } from '../../src/client/lib/actions.js'
 import { DEFAULT_SETTINGS } from '../../src/client/lib/model/settings.js'
 
@@ -18,6 +19,7 @@ function makeBridge() {
     },
     config: () => ({ width: 960, height: 700, margin: 0.04, controls: true }),
     getSections: () => [...slidesEl.children].filter((el) => el.tagName === 'SECTION'),
+    get currentSection() { return slidesEl.querySelector('section') },
     getIndex: () => ({ h: 0, v: 0 }),
     sync() {},
     goTo() {}
@@ -93,5 +95,20 @@ describe('settings actions', () => {
     undoAction()
     expect(runtime.bridge.slidesEl.querySelector('[data-re-settings]')).toBeNull()
     expect(runtime.bridge.slidesEl.querySelector('img').hasAttribute('data-re-href')).toBe(false)
+  })
+
+  it('writes native speaker notes and per-slide transitions with undo', () => {
+    setSpeakerNotes('Remember the demo')
+    expect(currentSpeakerNotes()).toBe('Remember the demo')
+    expect(runtime.bridge.currentSection.querySelector('aside.notes').textContent)
+      .toBe('Remember the demo')
+
+    setCurrentSlideTransition('zoom')
+    expect(currentSlideTransition()).toBe('zoom')
+    expect(runtime.bridge.currentSection.getAttribute('data-transition')).toBe('zoom')
+
+    undoAction()
+    expect(currentSlideTransition()).toBe('')
+    expect(currentSpeakerNotes()).toBe('Remember the demo')
   })
 })

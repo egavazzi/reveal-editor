@@ -37,7 +37,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
   slideNumberFormat: 'c/t',
   slideNumberPosition: 'bottom-right',
   theme: '',
-  typography: ''
+  typography: '',
+  transition: 'slide',
+  transitionSpeed: 'default'
 })
 
 const TEMPLATE_SELECTOR = 'template[data-re-settings]'
@@ -85,7 +87,9 @@ export function settingsFromRevealConfig(config = {}, doc = null) {
     slideNumberFormat: typeof config.slideNumber === 'string'
       ? config.slideNumber
       : DEFAULT_SETTINGS.slideNumberFormat,
-    theme: themeFromDocument(doc)
+    theme: themeFromDocument(doc),
+    transition: config.transition || DEFAULT_SETTINGS.transition,
+    transitionSpeed: config.transitionSpeed || DEFAULT_SETTINGS.transitionSpeed
   }
 }
 
@@ -134,7 +138,8 @@ const RUNTIME_SCRIPT = `(() => {
     Reveal.configure({ width: s.width || 960, height: s.height || 700,
       margin: (s.margin ?? 4) / 100, controls: s.controls !== false,
       slideNumber: s.slideNumbers ? (s.slideNumberFormat || 'c/t') : false,
-      showSlideNumber: 'all' });
+      showSlideNumber: 'all', transition: s.transition || 'slide',
+      transitionSpeed: s.transitionSpeed || 'default' });
     if (/^[a-z0-9_-]+$/i.test(s.theme || '')) {
       const link = document.querySelector('link[rel~="stylesheet"][href*="/theme/"], link[rel~="stylesheet"][href^="theme/"]');
       if (link) {
@@ -215,7 +220,9 @@ export function applySettings(bridge) {
     margin: Math.max(0, Number(s.margin) || 0) / 100,
     controls: Boolean(s.controls),
     slideNumber: s.slideNumbers ? (s.slideNumberFormat || 'c/t') : false,
-    showSlideNumber: 'all'
+    showSlideNumber: 'all',
+    transition: 'none',
+    transitionSpeed: s.transitionSpeed || 'default'
   })
   if (!s.controls) controls?.style.setProperty('display', 'none', 'important')
   let previewStyle = bridge.doc.getElementById(PREVIEW_STYLE_ID)

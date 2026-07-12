@@ -3,6 +3,7 @@
   import {
     applyFormat, setFontSize, setTextColor,
     toggleFragment, setFragmentIndex, bringToFront, sendToBack,
+    currentSlideTransition, setCurrentSlideTransition,
     slideBackground, selectionInfo, arrangeSelection
   } from '../lib/actions.js'
 
@@ -17,6 +18,12 @@
     void editor.selectionVersion
     void editor.docVersion
     return selectionInfo()
+  })
+  const slideTransition = $derived.by(() => {
+    void editor.slideIndex.h
+    void editor.slideIndex.v
+    void editor.docVersion
+    return currentSlideTransition()
   })
 </script>
 
@@ -92,6 +99,14 @@
         <input type="color" onchange={(e) => slideBackground(e.currentTarget.value)} />
       </label>
       <button title="Clear background" onclick={() => slideBackground('')}>clear</button>
+      <label>
+        slide transition
+        <select value={slideTransition} onchange={(e) => setCurrentSlideTransition(e.currentTarget.value)}>
+          <option value="">Deck default</option><option value="none">None</option><option value="fade">Fade</option>
+          <option value="slide">Slide</option><option value="convex">Convex</option><option value="concave">Concave</option>
+          <option value="zoom">Zoom</option>
+        </select>
+      </label>
     {/if}
   </div>
 {/if}
@@ -149,5 +164,12 @@
     border: 1px solid #45464f;
     border-radius: 4px;
     background: #34353d;
+  }
+  select {
+    background: #34353d;
+    color: #d6d7dc;
+    border: 1px solid #45464f;
+    border-radius: 4px;
+    padding: 2px 5px;
   }
 </style>

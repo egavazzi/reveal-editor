@@ -16,7 +16,7 @@ export const editor = $state({
   selectionTag: '',
   selectionVersion: 0,
   textEditing: false,
-  popover: null, // { type: 'math' | 'code', value, lang }
+  popover: null, // { type: 'math' | 'code' | 'html', value, lang }
   sidePanel: null, // 'layers' | 'settings'
   settings: {},
   // bumped whenever slide content changes; sidebar re-derives thumbnails

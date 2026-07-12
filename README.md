@@ -97,7 +97,13 @@ this editor.
   border, corner radius, shadow, and a presentation link
 - **Deck setup**: the Deck panel controls the reveal theme, canvas format/size
   and margins, editor grid display/snapping, navigation-arrow visibility, and
-  slide number format/position
+  slide number format/position, typography, and transitions
+- **Speaker notes**: the Notes panel writes native `<aside class="notes">`
+  content for Reveal's speaker view
+- **Custom HTML**: insert a trusted HTML/CSS/JS block with `</>`; scripts are
+  preserved but intentionally execute only after opening the saved presentation
+- **Present/PDF**: open the standalone deck or Reveal's `?print-pdf` view from
+  the toolbar
 - **Save**: Ctrl+S or the Save button; optional autosave toggle
 - **Undo/redo**: Ctrl+Z / Ctrl+Shift+Z, ~100 steps
 - **Copy/paste/duplicate elements**: Ctrl+C / Ctrl+V / Ctrl+D
@@ -129,8 +135,6 @@ KaTeX markup or highlight spans.
 - Horizontal slides only in the sidebar; vertical stacks render but aren't
   managed visually
 - One deck per editor instance; localhost only (that's the security model)
-- Speaker-notes editing and PDF export: use reveal's own facilities
-  (`?print-pdf`) for now
 - Markdown-source decks (`data-markdown`) are not supported: reveal replaces
   the markdown source with rendered HTML at load time, so the editor refuses
   to open them rather than overwrite the source with that HTML on save
