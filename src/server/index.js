@@ -11,6 +11,17 @@ export async function createServer({ deckPath, port = 3737, dev = false, repoRoo
   const deckDir = dirname(deckPath)
   const deckFile = basename(deckPath)
 
+  // --- Host header validation (defense against DNS rebinding) ---
+  const ALLOWED_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]'])
+  app.use((req, res, next) => {
+    const host = req.headers.host ?? ''
+    const hostname = host.toLowerCase().replace(/:\d+$/, '')
+    if (!ALLOWED_HOSTS.has(hostname)) {
+      return res.status(403).json({ error: 'invalid Host header' })
+    }
+    next()
+  })
+
   app.use(express.json({ limit: '50mb' }))
 
   // --- API ---

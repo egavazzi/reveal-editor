@@ -9,10 +9,10 @@ import {
 import { startTextEdit, formatText, isEditingText, activeElement } from './editors/text.js'
 import { ensurePositioned } from './model/position.js'
 import {
-  renderMath, getMathSource, commitMath, getCodeState, commitCode
+  renderMath, getMathSource, commitMath, getCodeState, commitCode, isMathOnly
 } from './editors/mathcode.js'
 import {
-  addSlide, duplicateSlide, deleteSlide, moveSlide, setSlideBackground
+  addSlide, duplicateSlide, deleteSlide, setSlideBackground
 } from './model/slides.js'
 import { snapshot, undo as histUndo, redo as histRedo } from './history/history.js'
 import { cleanElementHtml } from './model/clean.js'
@@ -126,7 +126,7 @@ export function beginTextEdit(el, { selectAll = false } = {}) {
 export function editElement(el) {
   const tag = el.tagName.toLowerCase()
   if (tag === 'img' || tag === 'svg') return
-  if (el.classList.contains('re-math') || el.querySelector('.katex')) {
+  if (el.classList.contains('re-math') || (el.querySelector('.katex') && isMathOnly(el))) {
     openMathEditor(el)
   } else if (tag === 'pre' || el.querySelector('pre > code')) {
     openCodeEditor(el)
@@ -223,6 +223,7 @@ export function applyFormat(command, value) {
 
 /** Font size applies to whole boxes (like slides.com), not text runs. */
 export function setFontSize(px) {
+  if (!(Number.isFinite(px) && px > 0)) return
   const targets = isEditingText() ? [activeElement()] : runtime.overlay.getSelection()
   for (const el of targets.filter(Boolean)) {
     el.style.fontSize = `${px}px`
@@ -259,11 +260,6 @@ export function slideDuplicate() {
 export function slideDelete() {
   snapshotDeck()
   if (deleteSlide(runtime.bridge, editor.slideIndex.h)) refreshSlideState()
-}
-
-export function slideMove(from, to) {
-  moveSlide(runtime.bridge, from, to)
-  refreshSlideState()
 }
 
 /** Apply a full slide permutation (order = old indices in new sequence). */

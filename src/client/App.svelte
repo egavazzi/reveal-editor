@@ -9,7 +9,7 @@
   import {
     editElement, handlePaste, snapshotSlide, undoAction, redoAction,
     deleteSelection, copySelection, pasteElements, duplicateSelection,
-    nudgeSelection, clearSelection
+    nudgeSelection, clearSelection, markDirty
   } from './lib/actions.js'
   import { isEditingText } from './lib/editors/text.js'
   import { subscribeEvents } from './lib/api.js'
@@ -26,6 +26,14 @@
     ;(async () => {
       try {
         const { file, html, mtimeMs } = await fetchDeck()
+        const doc = new DOMParser().parseFromString(html, 'text/html')
+        if (doc.querySelector('.slides [data-markdown], .slides section[data-markdown]')) {
+          editor.error =
+            'This deck uses reveal.js’s markdown plugin (data-markdown). ' +
+            'The editor cannot open it: the markdown source is replaced with rendered ' +
+            'HTML at load time, so saving would overwrite your markdown with that HTML.'
+          return
+        }
         editor.deckFile = file
         editor.mtimeMs = mtimeMs
         pristineHtml = html
@@ -73,8 +81,7 @@
           snapshotSlide()
         },
         onEdit() {
-          editor.dirty = true
-          editor.docVersion++
+          markDirty()
         },
         onDblClick(el) {
           editElement(el)

@@ -99,3 +99,6 @@ KaTeX markup or highlight spans.
 - One deck per editor instance; localhost only (that's the security model)
 - Speaker-notes editing, themes, and PDF export: use reveal's own
   facilities (`?print-pdf`, editing the theme `<link>` by hand)
+- Markdown-source decks (`data-markdown`) are not supported: reveal replaces
+  the markdown source with rendered HTML at load time, so the editor refuses
+  to open them rather than overwrite the source with that HTML on save

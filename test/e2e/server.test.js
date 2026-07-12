@@ -3,6 +3,7 @@
 // exercises the full HTTP surface: deck round-trip, conflict detection,
 // asset upload with dedupe.
 import { mkdtemp, readFile, rm, utimes } from 'node:fs/promises'
+import http from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -11,6 +12,34 @@ import { createServer } from '../../src/server/index.js'
 import { scaffoldDeck } from '../../src/server/scaffold.js'
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
+
+// node's built-in fetch (undici) silently ignores attempts to override the
+// Host header, so spoofing it for the DNS-rebinding test requires the raw
+// http client instead.
+function requestWithHost({ port, path, method, host, body }) {
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      {
+        host: '127.0.0.1',
+        port,
+        path,
+        method,
+        headers: {
+          Host: host,
+          ...(body ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } : {})
+        }
+      },
+      (res) => {
+        let data = ''
+        res.on('data', (chunk) => (data += chunk))
+        res.on('end', () => resolve({ status: res.statusCode, body: data }))
+      }
+    )
+    req.on('error', reject)
+    if (body) req.write(body)
+    req.end()
+  })
+}
 
 let dir, deckPath, server, base
 
@@ -63,6 +92,21 @@ describe('server e2e', () => {
       body: JSON.stringify({ slidesHtml: '<section><h2>clobber</h2></section>', baseMtimeMs: 12345 })
     })
     expect(res.status).toBe(409)
+    expect(await readFile(deckPath, 'utf8')).toBe(before)
+  })
+
+  it('rejects requests with a non-local Host header (DNS rebinding guard)', async () => {
+    const before = await readFile(deckPath, 'utf8')
+    const port = server.address().port
+    const res = await requestWithHost({
+      port,
+      path: '/api/deck',
+      method: 'PUT',
+      host: 'evil.example.com',
+      body: JSON.stringify({ slidesHtml: '<section><h2>clobber</h2></section>' })
+    })
+    expect(res.status).toBe(403)
+    expect(JSON.parse(res.body)).toEqual({ error: 'invalid Host header' })
     expect(await readFile(deckPath, 'utf8')).toBe(before)
   })
 

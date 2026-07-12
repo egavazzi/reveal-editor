@@ -23,6 +23,16 @@ export function renderMath(bridge, el) {
   }
 }
 
+/**
+ * True when an element's content is purely text + math (no other markup),
+ * so the plain-text math editor can round-trip it without data loss.
+ */
+export function isMathOnly(el) {
+  const clone = el.cloneNode(true)
+  restoreMath(clone)
+  return clone.querySelector('*') === null
+}
+
 /** The authored LaTeX source of an element (delimited), from live DOM. */
 export function getMathSource(el) {
   const clone = el.cloneNode(true)
@@ -53,8 +63,11 @@ export function getCodeState(el) {
 export function commitCode(bridge, el, source, lang) {
   const code = el.querySelector('code') ?? el
   code.textContent = source
-  code.className = lang ? `language-${lang}` : ''
-  if (!code.className) code.removeAttribute('class')
+  for (const c of [...code.classList]) {
+    if (c.startsWith('language-') || c === 'hljs') code.classList.remove(c)
+  }
+  if (lang) code.classList.add(`language-${lang}`)
+  if (!code.classList.length) code.removeAttribute('class')
   code.setAttribute(CODE_SRC_ATTR, code.innerHTML)
   code.removeAttribute('data-highlighted')
   const hljs = bridge.Reveal.getPlugin?.('highlight')?.hljs

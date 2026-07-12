@@ -45,17 +45,6 @@ export function deleteSlide(bridge, index) {
   return true
 }
 
-export function moveSlide(bridge, from, to) {
-  if (from === to) return
-  const sections = bridge.getSections()
-  const section = sections[from]
-  const target = sections[to]
-  if (from < to) target.after(section)
-  else target.before(section)
-  bridge.sync()
-  bridge.goTo(to)
-}
-
 export function setSlideBackground(bridge, index, { color, image } = {}) {
   const section = bridge.getSections()[index]
   if (!section) return
@@ -93,7 +82,12 @@ export function slideSummaries(bridge, canvas) {
           y: (top / canvas.height) * 100,
           w: Math.min(100, (width / canvas.width) * 100),
           h: Math.min(100, (height / canvas.height) * 100),
-          kind: el.tagName === 'IMG' ? 'img' : el.tagName === 'SVG' ? 'shape' : 'text'
+          kind:
+            el.tagName.toLowerCase() === 'img'
+              ? 'img'
+              : el.tagName.toLowerCase() === 'svg'
+                ? 'shape'
+                : 'text'
         }
       })
       .filter(Boolean)
