@@ -64,7 +64,20 @@ if (args._[0] === 'new') {
 }
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const { url } = await createServer({ deckPath, port: args.port, dev: args.dev, repoRoot })
+let url
+try {
+  ;({ url } = await createServer({ deckPath, port: args.port, dev: args.dev, repoRoot }))
+} catch (err) {
+  if (err.code === 'EADDRINUSE') {
+    console.error(
+      `Port ${args.port} is already in use — is another reveal-editor (or dev server) running?\n` +
+      `Close it, or pick another port:  reveal-editor <deck> --port ${args.port + 1}`
+    )
+  } else {
+    console.error(`Could not start reveal-editor: ${err.message}`)
+  }
+  process.exit(1)
+}
 console.log(`reveal-editor: editing ${deckPath}`)
 console.log(`  → ${url}`)
 
