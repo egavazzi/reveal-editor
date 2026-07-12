@@ -1,0 +1,92 @@
+<script>
+  import { editor } from '../stores/editor.svelte.js'
+  import { applyFormat, setFontSize, setTextColor } from '../lib/actions.js'
+
+  // Prevent toolbar clicks from stealing focus/selection from the
+  // contenteditable element inside the iframe.
+  function keepFocus(e) {
+    e.preventDefault()
+  }
+
+  const visible = $derived(editor.textEditing || editor.selectionCount > 0)
+</script>
+
+{#if visible}
+  <div class="formatbar" role="toolbar" tabindex="-1" onmousedown={keepFocus}>
+    {#if editor.textEditing}
+      <button title="Bold (Ctrl+B)" onclick={() => applyFormat('bold')}><b>B</b></button>
+      <button title="Italic (Ctrl+I)" onclick={() => applyFormat('italic')}><i>I</i></button>
+      <button title="Underline (Ctrl+U)" onclick={() => applyFormat('underline')}><u>U</u></button>
+      <button title="Bullet list" onclick={() => applyFormat('insertUnorderedList')}>•≡</button>
+      <button title="Numbered list" onclick={() => applyFormat('insertOrderedList')}>1≡</button>
+      <button title="Clear formatting" onclick={() => applyFormat('removeFormat')}>⌫fmt</button>
+      <span class="sep"></span>
+    {/if}
+    <label>
+      size
+      <input
+        type="number"
+        min="8"
+        max="200"
+        placeholder="px"
+        onchange={(e) => setFontSize(Number(e.currentTarget.value))}
+      />
+    </label>
+    <label>
+      color
+      <input type="color" onchange={(e) => setTextColor(e.currentTarget.value)} />
+    </label>
+  </div>
+{/if}
+
+<style>
+  .formatbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    background: #2b2c33;
+    border-bottom: 1px solid #131418;
+  }
+  button {
+    background: #34353d;
+    color: #d6d7dc;
+    border: 1px solid #45464f;
+    border-radius: 6px;
+    padding: 2px 10px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  button:hover {
+    background: #3f4049;
+  }
+  .sep {
+    width: 1px;
+    height: 18px;
+    background: #45464f;
+    margin: 0 6px;
+  }
+  label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: #9a9ba3;
+    font-size: 12px;
+  }
+  input[type='number'] {
+    width: 60px;
+    background: #34353d;
+    color: #d6d7dc;
+    border: 1px solid #45464f;
+    border-radius: 4px;
+    padding: 2px 6px;
+  }
+  input[type='color'] {
+    width: 32px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid #45464f;
+    border-radius: 4px;
+    background: #34353d;
+  }
+</style>

@@ -13,7 +13,8 @@ export const editor = $state({
   saving: false,
   statusMessage: '',
   selectionCount: 0,
-  selectionTag: ''
+  selectionTag: '',
+  textEditing: false
 })
 
 // Non-reactive handles to live DOM machinery (never proxied by Svelte).

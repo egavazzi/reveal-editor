@@ -45,6 +45,22 @@ describe('formatFragment', () => {
     expect(out).toBe('<div class="re-el" style="left: 1px; top: 5px; width: 20px; height: 10px; color: red">x</div>')
   })
 
+  it('gives positioned elements their own lines (svg/img canvas elements)', () => {
+    const out = formatFragment(
+      '<section><h2>t</h2><svg data-shape="rect" style="position: absolute; left: 1px"><rect></rect></svg>' +
+      '<img src="x.png" style="position: absolute; left: 2px"></section>'
+    )
+    expect(out.split('\n').length).toBe(5)
+    expect(out).toContain('\n  <svg')
+    expect(out).toContain('\n  <img')
+    expect(formatFragment(out)).toBe(out)
+  })
+
+  it('keeps non-positioned inline svg in verbatim mode', () => {
+    const src = '<p>flow <svg><rect></rect></svg> art</p>'
+    expect(formatFragment(src)).toBe(src)
+  })
+
   it('preserves comments', () => {
     const out = formatFragment('<section><!-- intro --><h2>t</h2></section>')
     expect(out).toContain('<!-- intro -->')

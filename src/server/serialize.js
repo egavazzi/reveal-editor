@@ -97,21 +97,24 @@ function isElement(node) {
   return !node.nodeName.startsWith('#')
 }
 
+// A child may go on its own line if surrounding whitespace cannot change
+// rendering: block-level elements, or elements taken out of flow by
+// absolute/fixed positioning (e.g. positioned <svg>/<img> canvas elements).
+function isSplittable(node) {
+  if (BLOCK_ELEMENTS.has(node.tagName)) return true
+  const style = node.attrs?.find((a) => a.name === 'style')?.value ?? ''
+  return /position:\s*(absolute|fixed)/.test(style)
+}
+
 // Children may be printed one-per-line only if that cannot change rendering:
-// every child element is block-level and there is no visible text between them.
+// every child element is splittable and there is no visible text between them.
 function canPrettyPrintChildren(node) {
   if (VERBATIM_CONTENT.has(node.tagName)) return false
   const children = node.childNodes ?? []
   const elements = children.filter(isElement)
   if (elements.length === 0) return false
   if (!children.every((c) => isElement(c) || isWhitespaceText(c))) return false
-  return elements.every((c) => BLOCK_ELEMENTS.has(c.tagName))
-}
-
-// Serialize a node exactly (after normalization) using parse5, which
-// preserves all internal whitespace. Used for inline/mixed content.
-function serializeVerbatim(node) {
-  return serialize({ nodeName: '#document-fragment', childNodes: [node] })
+  return elements.every(isSplittable)
 }
 
 function printNode(node, indent, out) {

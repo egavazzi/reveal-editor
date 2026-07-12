@@ -3,6 +3,8 @@
 import Moveable from 'moveable'
 import Selecto from 'selecto'
 import { ensurePositioned, roundGeometry } from '../model/position.js'
+import { syncShapeGeometry } from '../model/shapes.js'
+import { isEditingText, activeElement } from '../editors/text.js'
 
 /**
  * An "editable unit" is what a click selects: a .re-el, or any direct child
@@ -73,6 +75,7 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick })
         e.target.style.height = `${e.height}px`
         e.target.style.left = `${e.drag.left}px`
         e.target.style.top = `${e.drag.top}px`
+        syncShapeGeometry(e.target)
       })
       .on('resizeEnd', (e) => commit(e.target, true))
       .on('rotateStart', (e) => ensurePositioned(e.target, bridge))
@@ -85,6 +88,7 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick })
   function commit(el, didChange) {
     if (!didChange) return
     roundGeometry(el)
+    syncShapeGeometry(el)
     moveable?.updateRect()
     onEdit?.()
   }
@@ -96,8 +100,9 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick })
   }
 
   function onClick(e) {
-    // Ignore clicks on moveable handles
+    // Ignore clicks on moveable handles, and leave text editing alone
     if (e.target.closest?.('.moveable-control-box, .re-moveable')) return
+    if (isEditingText() && activeElement()?.contains(e.target)) return
     const section = currentSection()
     if (!section) return
     const el = resolveEditable(e.target, section)

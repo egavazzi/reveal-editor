@@ -6,24 +6,32 @@
   import { saveDeck } from './lib/model/save.js'
   import { enterEditMode } from './lib/overlay/editmode.js'
   import { createOverlay } from './lib/overlay/overlay.js'
+  import { editElement, handlePaste } from './lib/actions.js'
   import { editor, runtime } from './stores/editor.svelte.js'
+  import Toolbar from './panels/Toolbar.svelte'
+  import FormatBar from './panels/FormatBar.svelte'
 
-  let iframeEl
   let iframeSrc = $state('')
   let pristineHtml = ''
 
-  onMount(async () => {
-    try {
-      const { file, html, mtimeMs } = await fetchDeck()
-      editor.deckFile = file
-      editor.mtimeMs = mtimeMs
-      pristineHtml = html
-      iframeSrc = `/deck/${encodeURIComponent(file)}?editmode=1`
-    } catch (err) {
-      editor.error = `Could not load deck: ${err.message}`
-    }
+  onMount(() => {
+    ;(async () => {
+      try {
+        const { file, html, mtimeMs } = await fetchDeck()
+        editor.deckFile = file
+        editor.mtimeMs = mtimeMs
+        pristineHtml = html
+        iframeSrc = `/deck/${encodeURIComponent(file)}?editmode=1`
+      } catch (err) {
+        editor.error = `Could not load deck: ${err.message}`
+      }
+    })()
     window.addEventListener('keydown', onKeydown)
-    return () => window.removeEventListener('keydown', onKeydown)
+    window.addEventListener('paste', handlePaste)
+    return () => {
+      window.removeEventListener('keydown', onKeydown)
+      window.removeEventListener('paste', handlePaste)
+    }
   })
 
   async function onIframeSrcSet(node) {
@@ -39,6 +47,9 @@
         },
         onEdit() {
           editor.dirty = true
+        },
+        onDblClick(el) {
+          editElement(el)
         }
       })
       editor.ready = true
@@ -47,8 +58,9 @@
       bridge.Reveal.on('slidechanged', () => {
         editor.slideIndex = runtime.bridge.getIndex()
       })
-      // Ctrl+S must also work when focus is inside the deck iframe.
+      // Shortcuts and paste must also work when focus is inside the iframe.
       bridge.doc.addEventListener('keydown', onKeydown)
+      bridge.doc.addEventListener('paste', handlePaste)
     } catch (err) {
       editor.error = `Could not attach to deck: ${err.message}`
     }
@@ -60,40 +72,17 @@
       saveDeck()
     }
   }
-
-  function prev() {
-    runtime.bridge?.prev()
-  }
-  function next() {
-    runtime.bridge?.next()
-  }
 </script>
 
 <div class="editor">
-  <header class="toolbar">
-    <span class="brand">reveal-editor</span>
-    <span class="deck-name">{editor.deckFile ?? '…'}{editor.dirty ? ' •' : ''}</span>
-    <div class="spacer"></div>
-    <button onclick={() => saveDeck()} disabled={!editor.ready || editor.saving}>
-      {editor.saving ? 'Saving…' : 'Save'}
-    </button>
-    <button onclick={prev} disabled={!editor.ready}>←</button>
-    <span class="slide-indicator">
-      {editor.ready ? `${editor.slideIndex.h + 1} / ${editor.slideCount}` : '–'}
-    </span>
-    <button onclick={next} disabled={!editor.ready}>→</button>
-  </header>
+  <Toolbar />
+  <FormatBar />
 
   <main class="stage">
     {#if editor.error}
       <div class="error-banner">{editor.error}</div>
     {:else if iframeSrc}
-      <iframe
-        bind:this={iframeEl}
-        src={iframeSrc}
-        title="presentation"
-        use:onIframeSrcSet
-      ></iframe>
+      <iframe src={iframeSrc} title="presentation" use:onIframeSrcSet></iframe>
     {/if}
   </main>
 
@@ -127,43 +116,6 @@
     font-family: system-ui, sans-serif;
     font-size: 14px;
   }
-  .toolbar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 14px;
-    background: #26272e;
-    border-bottom: 1px solid #131418;
-  }
-  .brand {
-    font-weight: 700;
-    color: #8ab4ff;
-  }
-  .deck-name {
-    color: #9a9ba3;
-  }
-  .spacer {
-    flex: 1;
-  }
-  .slide-indicator {
-    min-width: 60px;
-    text-align: center;
-  }
-  button {
-    background: #34353d;
-    color: #d6d7dc;
-    border: 1px solid #45464f;
-    border-radius: 6px;
-    padding: 4px 12px;
-    cursor: pointer;
-  }
-  button:hover:not(:disabled) {
-    background: #3f4049;
-  }
-  button:disabled {
-    opacity: 0.4;
-    cursor: default;
-  }
   .stage {
     flex: 1;
     position: relative;
@@ -193,5 +145,8 @@
     border-top: 1px solid #131418;
     min-height: 20px;
     color: #9a9ba3;
+  }
+  .spacer {
+    flex: 1;
   }
 </style>
