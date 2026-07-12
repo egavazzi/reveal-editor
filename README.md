@@ -30,6 +30,31 @@ npm install
 
 No build step — the editor UI ships pre-built in `dist/`.
 
+### Optional: a global `reveal-editor` command
+
+`npm run edit -- …` only works from inside this folder. To be able to type
+`reveal-editor …` from anywhere, run once per machine, inside this folder:
+
+```sh
+npm link
+```
+
+This symlinks the command into npm's global bin directory. If typing
+`reveal-editor` afterwards says "command not found", that directory is not
+on your PATH — either add it, or link the command into a directory that is,
+e.g.:
+
+```sh
+ln -s "$(npm prefix -g)/bin/reveal-editor" ~/.local/bin/
+```
+
+Then, from any directory:
+
+```sh
+reveal-editor new ~/talks/egu2026
+reveal-editor ~/talks/egu2026
+```
+
 ## Usage
 
 ```sh
