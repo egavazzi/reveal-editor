@@ -5,11 +5,12 @@
   import { stashPristineState } from './lib/model/stash.js'
   import { saveDeck } from './lib/model/save.js'
   import { enterEditMode } from './lib/overlay/editmode.js'
+  import { initializeSettings } from './lib/model/settings.js'
   import { createOverlay } from './lib/overlay/overlay.js'
   import {
     editElement, handlePaste, snapshotSlide, undoAction, redoAction,
     deleteSelection, copySelection, pasteElements, duplicateSelection,
-    nudgeSelection, clearSelection, markDirty
+    nudgeSelection, clearSelection, markDirty, handleFileDrop
   } from './lib/actions.js'
   import { isEditingText } from './lib/editors/text.js'
   import { subscribeEvents } from './lib/api.js'
@@ -18,6 +19,7 @@
   import FormatBar from './panels/FormatBar.svelte'
   import PopoverEditor from './panels/PopoverEditor.svelte'
   import Sidebar from './panels/Sidebar.svelte'
+  import Inspector from './panels/Inspector.svelte'
 
   let iframeSrc = $state('')
   let pristineHtml = ''
@@ -72,10 +74,14 @@
       runtime.bridge = bridge
       stashPristineState(bridge.slidesEl, pristineHtml)
       runtime.editMode = enterEditMode(bridge)
+      initializeSettings(bridge)
       runtime.overlay = createOverlay(bridge, {
         onSelectionChange(targets) {
           editor.selectionCount = targets.length
           editor.selectionTag = targets[0]?.tagName.toLowerCase() ?? ''
+          editor.selectionVersion++
+          if (targets.length === 1 && editor.selectionTag === 'img') editor.sidePanel = 'image'
+          else if (editor.sidePanel === 'image') editor.sidePanel = null
         },
         onBeforeEdit() {
           snapshotSlide()
@@ -96,6 +102,10 @@
       // Shortcuts and paste must also work when focus is inside the iframe.
       bridge.doc.addEventListener('keydown', onKeydown)
       bridge.doc.addEventListener('paste', handlePaste)
+      bridge.doc.addEventListener('dragover', (e) => {
+        if ([...(e.dataTransfer?.items ?? [])].some((item) => item.kind === 'file')) e.preventDefault()
+      })
+      bridge.doc.addEventListener('drop', handleFileDrop)
     } catch (err) {
       editor.error = `Could not attach to deck: ${err.message}`
     }
@@ -157,6 +167,7 @@
         <iframe src={iframeSrc} title="presentation" use:onIframeSrcSet></iframe>
       {/if}
     </main>
+    {#if editor.sidePanel}<Inspector />{/if}
   </div>
 
   <PopoverEditor />

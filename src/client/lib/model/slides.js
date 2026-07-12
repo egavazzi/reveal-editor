@@ -83,7 +83,7 @@ export function slideSummaries(bridge, canvas) {
           w: Math.min(100, (width / canvas.width) * 100),
           h: Math.min(100, (height / canvas.height) * 100),
           kind:
-            el.tagName.toLowerCase() === 'img'
+            ['img', 'video'].includes(el.tagName.toLowerCase())
               ? 'img'
               : el.tagName.toLowerCase() === 'svg'
                 ? 'shape'

@@ -33,15 +33,20 @@
   <script>
     // ?editmode=1 is added by reveal-editor's iframe only; never part of the saved file.
     var editMode = new URLSearchParams(location.search).has('editmode');
+    var settingsNode = document.querySelector('.slides template[data-re-settings]');
+    var deckSettings = {};
+    try { deckSettings = settingsNode ? JSON.parse(settingsNode.innerHTML) : {}; } catch (_) {}
     Reveal.initialize({
-      width: 960,
-      height: 700,
+      width: deckSettings.width || 960,
+      height: deckSettings.height || 700,
+      margin: (deckSettings.margin == null ? 4 : deckSettings.margin) / 100,
       center: false,
       hash: !editMode,
       keyboard: !editMode,
       touch: !editMode,
-      controls: !editMode,
+      controls: !editMode && deckSettings.controls !== false,
       progress: !editMode,
+      slideNumber: !editMode && deckSettings.slideNumbers ? (deckSettings.slideNumberFormat || 'c/t') : false,
       transition: editMode ? 'none' : 'slide',
       katex: { local: 'reveal/katex' },
       plugins: [RevealHighlight, RevealMath.KaTeX, RevealNotes]

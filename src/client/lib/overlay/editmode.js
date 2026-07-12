@@ -12,6 +12,7 @@ export function getCanvasSize(bridge) {
 }
 
 export function enterEditMode(bridge) {
+  bridge.doc.body.classList.add('re-edit-mode')
   bridge.Reveal.configure({
     keyboard: false,
     touch: false,
@@ -88,6 +89,16 @@ function injectEditStyles(doc) {
     /* faint canvas edge */
     .reveal .slides {
       outline: 1px solid rgba(128, 128, 128, 0.35);
+    }
+    body.re-show-grid .reveal .slides section.present {
+      background-image:
+        linear-gradient(rgba(47,111,186,.16) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(47,111,186,.16) 1px, transparent 1px);
+      background-size: var(--re-grid-size) var(--re-grid-size);
+    }
+    body.re-show-grid .reveal .slides section.present::before {
+      content: ''; position: absolute; pointer-events: none; z-index: 2147483646;
+      inset: var(--re-safe-margin); border: 1px dashed rgba(47,111,186,.45);
     }
     body { overflow: hidden; }
   `

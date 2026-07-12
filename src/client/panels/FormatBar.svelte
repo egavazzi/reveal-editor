@@ -14,6 +14,7 @@
 
   const info = $derived.by(() => {
     void editor.selectionCount
+    void editor.selectionVersion
     void editor.docVersion
     return selectionInfo()
   })
