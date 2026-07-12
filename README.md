@@ -88,6 +88,9 @@ this editor.
   (Julia included), highlighted by the deck's own highlight.js
 - **Slides**: sidebar thumbnails — click to jump, drag to reorder, buttons
   to add/duplicate/delete; slide background color in the context bar
+- **Vertical stacks**: add vertical slides, navigate their numbered sidebar
+  thumbnails, reorder within stacks, or promote/demote between horizontal and
+  vertical structure
 - **Fragments**: select an element → "fragment" checkbox (+ optional
   explicit order) to make it appear step-by-step
 - **Layers**: open the Layers panel to select, reorder, show/hide, and
@@ -132,8 +135,6 @@ KaTeX markup or highlight spans.
 
 ## Limitations (v1)
 
-- Horizontal slides only in the sidebar; vertical stacks render but aren't
-  managed visually
 - One deck per editor instance; localhost only (that's the security model)
 - Markdown-source decks (`data-markdown`) are not supported: reveal replaces
   the markdown source with rendered HTML at load time, so the editor refuses

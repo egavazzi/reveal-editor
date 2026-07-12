@@ -52,6 +52,20 @@ function makeBridge(iframe, win) {
     getSections() {
       return [...doc.querySelectorAll('.reveal .slides > section')]
     },
+    getSlide(h, v = 0) {
+      const horizontal = doc.querySelectorAll('.reveal .slides > section')[h]
+      if (!horizontal) return null
+      const vertical = [...horizontal.children].filter((el) => el.tagName === 'SECTION')
+      return vertical.length ? vertical[v] ?? null : horizontal
+    },
+    getSlideEntries() {
+      return [...doc.querySelectorAll('.reveal .slides > section')].flatMap((horizontal, h) => {
+        const vertical = [...horizontal.children].filter((el) => el.tagName === 'SECTION')
+        return vertical.length
+          ? vertical.map((section, v) => ({ section, h, v, vertical: true }))
+          : [{ section: horizontal, h, v: 0, vertical: false }]
+      })
+    },
     getIndex() {
       return Reveal.getIndices()
     },

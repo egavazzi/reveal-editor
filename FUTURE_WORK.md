@@ -34,7 +34,7 @@ should not grow a second source model or attempt to rewrite QMD.
 
 ### 2. Complete core reveal.js authoring
 
-- [ ] Represent vertical slide stacks in the sidebar and support reordering
+- [x] Represent vertical slide stacks in the sidebar and support reordering
       within and between stacks.
 - [x] Edit speaker notes using native `<aside class="notes">` markup.
 - [x] Configure slide transitions and per-slide transition overrides.

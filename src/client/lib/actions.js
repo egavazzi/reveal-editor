@@ -14,7 +14,8 @@ import {
   renderMath, getMathSource, commitMath, getCodeState, commitCode, isMathOnly
 } from './editors/mathcode.js'
 import {
-  addSlide, duplicateSlide, deleteSlide, setSlideBackground
+  addSlide, addVerticalSlide, deleteCurrentSlide, duplicateCurrentSlide,
+  demoteHorizontalSlide, moveCurrentSlide, promoteVerticalSlide, setSlideBackground
 } from './model/slides.js'
 import { snapshot, undo as histUndo, redo as histRedo } from './history/history.js'
 import { cleanElementHtml } from './model/clean.js'
@@ -27,11 +28,11 @@ export { saveDeck } from './model/save.js'
 export { slideSummaries } from './model/slides.js'
 
 export function snapshotSlide() {
-  snapshot(runtime.bridge, { type: 'slide', h: editor.slideIndex.h })
+  snapshot(runtime.bridge, { type: 'slide', h: editor.slideIndex.h, v: editor.slideIndex.v ?? 0 })
 }
 
 export function snapshotDeck() {
-  snapshot(runtime.bridge, { type: 'deck', h: editor.slideIndex.h })
+  snapshot(runtime.bridge, { type: 'deck', h: editor.slideIndex.h, v: editor.slideIndex.v ?? 0 })
 }
 
 export function undoAction() {
@@ -47,7 +48,7 @@ export function redoAction() {
 function afterHistory(entry) {
   if (entry.scope.type === 'deck') initializeSettings(runtime.bridge, entry.settings)
   runtime.overlay.setSelection([])
-  editor.slideCount = runtime.bridge.getSections().length
+  editor.slideCount = runtime.bridge.getSlideEntries?.().length ?? runtime.bridge.getSections().length
   editor.slideIndex = runtime.bridge.getIndex()
   markDirty()
 }
@@ -345,13 +346,48 @@ export function slideApplyLayout(layout) {
 
 export function slideDuplicate() {
   snapshotDeck()
-  duplicateSlide(runtime.bridge, editor.slideIndex.h)
+  duplicateCurrentSlide(runtime.bridge, editor.slideIndex.h, editor.slideIndex.v ?? 0)
   refreshSlideState()
 }
 
 export function slideDelete() {
   snapshotDeck()
-  if (deleteSlide(runtime.bridge, editor.slideIndex.h)) refreshSlideState()
+  if (deleteCurrentSlide(runtime.bridge, editor.slideIndex.h, editor.slideIndex.v ?? 0)) refreshSlideState()
+}
+
+export function slideAddVertical(layout = 'blank') {
+  snapshotDeck()
+  const section = addVerticalSlide(runtime.bridge, editor.slideIndex.h, editor.slideIndex.v ?? 0)
+  applyLayout(section, layout, editor.settings)
+  refreshSlideState()
+}
+
+export function slideMove(direction) {
+  snapshotDeck()
+  if (moveCurrentSlide(runtime.bridge, editor.slideIndex.h, editor.slideIndex.v ?? 0, direction)) {
+    refreshSlideState()
+    return true
+  }
+  return false
+}
+
+export function slidePromote() {
+  snapshotDeck()
+  if (promoteVerticalSlide(runtime.bridge, editor.slideIndex.h, editor.slideIndex.v ?? 0)) {
+    refreshSlideState()
+    return true
+  }
+  return false
+}
+
+export function slideDemote() {
+  snapshotDeck()
+  if ((editor.slideIndex.v ?? 0) !== 0) return false
+  if (demoteHorizontalSlide(runtime.bridge, editor.slideIndex.h)) {
+    refreshSlideState()
+    return true
+  }
+  return false
 }
 
 /** Apply a full slide permutation (order = old indices in new sequence). */
@@ -367,13 +403,13 @@ export function slideReorder(order) {
   refreshSlideState()
 }
 
-export function slideGoTo(index) {
-  runtime.bridge.goTo(index)
+export function slideGoTo(h, v = 0) {
+  runtime.bridge.goTo(h, v)
 }
 
 export function slideBackground(color) {
   snapshotSlide()
-  setSlideBackground(runtime.bridge, editor.slideIndex.h, { color })
+  setSlideBackground(runtime.bridge, editor.slideIndex.h, editor.slideIndex.v ?? 0, { color })
   markDirty()
 }
 
@@ -424,7 +460,7 @@ export function openPresentation({ pdf = false } = {}) {
 
 function refreshSlideState() {
   runtime.overlay.setSelection([])
-  editor.slideCount = runtime.bridge.getSections().length
+  editor.slideCount = runtime.bridge.getSlideEntries?.().length ?? runtime.bridge.getSections().length
   editor.slideIndex = runtime.bridge.getIndex()
   markDirty()
 }

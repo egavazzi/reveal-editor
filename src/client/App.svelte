@@ -101,7 +101,7 @@
         }
       })
       editor.ready = true
-      editor.slideCount = bridge.getSections().length
+      editor.slideCount = bridge.getSlideEntries().length
       editor.slideIndex = bridge.getIndex()
       bridge.Reveal.on('slidechanged', () => {
         editor.slideIndex = runtime.bridge.getIndex()

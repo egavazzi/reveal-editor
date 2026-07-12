@@ -2,7 +2,8 @@
   import { dndzone } from 'svelte-dnd-action'
   import { editor, runtime } from '../stores/editor.svelte.js'
   import {
-    slideSummaries, slideAdd, slideApplyLayout, slideDuplicate, slideDelete, slideGoTo, slideReorder
+    slideSummaries, slideAdd, slideAddVertical, slideApplyLayout, slideDuplicate,
+    slideDelete, slideDemote, slideGoTo, slideMove, slidePromote, slideReorder
   } from '../lib/actions.js'
   import { getCanvasSize } from '../lib/overlay/editmode.js'
   import { isSlideEmpty, SLIDE_LAYOUTS } from '../lib/model/layouts.js'
@@ -30,6 +31,11 @@
 
   function handleFinalize(e) {
     items = e.detail.items
+    if (items.some((item) => item.vertical)) {
+      editor.statusMessage = 'Use the up/down buttons to reorder slides while vertical stacks are present.'
+      items = slideSummaries(runtime.bridge, getCanvasSize(runtime.bridge))
+      return
+    }
     slideReorder(items.map((it) => it.index))
   }
 </script>
@@ -44,13 +50,14 @@
     {#each items as item (item.id)}
       <div
         class="thumb-wrap"
-        class:current={item.index === editor.slideIndex.h}
-        onclick={() => slideGoTo(item.index)}
-        onkeydown={(e) => e.key === 'Enter' && slideGoTo(item.index)}
+        class:vertical={item.vertical}
+        class:current={item.h === editor.slideIndex.h && item.v === (editor.slideIndex.v ?? 0)}
+        onclick={() => slideGoTo(item.h, item.v)}
+        onkeydown={(e) => e.key === 'Enter' && slideGoTo(item.h, item.v)}
         role="button"
         tabindex="0"
       >
-        <span class="num">{item.index + 1}</span>
+        <span class="num">{item.h + 1}{item.vertical ? `.${item.v + 1}` : ''}</span>
         <div class="thumb" style:background={item.background ?? '#fff'}>
           {#each item.boxes as box, i (i)}
             <div
@@ -73,8 +80,13 @@
       {/each}
     </select>
     <button title="Add slide with selected layout" onclick={() => slideAdd(layout)} disabled={!editor.ready}>+</button>
+    <button title="Add vertical slide with selected layout" onclick={() => slideAddVertical(layout)} disabled={!editor.ready}>+V</button>
     <button title="Apply layout to current empty slide" onclick={() => slideApplyLayout(layout)} disabled={!editor.ready || !currentEmpty}>▦</button>
     <button title="Duplicate slide" onclick={slideDuplicate} disabled={!editor.ready}>⧉</button>
+    <button title="Move current slide up/left" onclick={() => slideMove(-1)} disabled={!editor.ready}>↑</button>
+    <button title="Move current slide down/right" onclick={() => slideMove(1)} disabled={!editor.ready}>↓</button>
+    <button title="Demote horizontal slide into previous vertical stack" onclick={slideDemote} disabled={!editor.ready || editor.slideIndex.h === 0 || editor.slideIndex.v > 0}>↳</button>
+    <button title="Promote vertical slide to horizontal" onclick={slidePromote} disabled={!editor.ready || editor.slideIndex.v === 0}>↰</button>
     <button
       title="Delete slide"
       onclick={slideDelete}
@@ -125,6 +137,7 @@
   .thumb-wrap.current .thumb {
     border-color: #2f6fba;
   }
+  .thumb-wrap.vertical { margin-left: 14px; }
   .box {
     position: absolute;
     border-radius: 1px;

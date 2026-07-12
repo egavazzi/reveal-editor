@@ -62,7 +62,9 @@
   <button title="Open PDF/print view" onclick={() => openPresentation({ pdf: true })} disabled={!editor.ready}>PDF</button>
   <button onclick={() => runtime.bridge?.prev()} disabled={!editor.ready}>←</button>
   <span class="slide-indicator">
-    {editor.ready ? `${editor.slideIndex.h + 1} / ${editor.slideCount}` : '–'}
+    {editor.ready
+      ? `${editor.slideIndex.h + 1}${editor.slideIndex.v ? `.${editor.slideIndex.v + 1}` : ''} / ${editor.slideCount}`
+      : '–'}
   </span>
   <button onclick={() => runtime.bridge?.next()} disabled={!editor.ready}>→</button>
 </header>
