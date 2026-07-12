@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>New presentation</title>
+  <link rel="stylesheet" href="reveal/dist/reveal.css">
+  <link rel="stylesheet" href="reveal/dist/theme/white.css">
+  <link rel="stylesheet" href="reveal/plugin/highlight/monokai.css">
+  <style>
+    /* reveal-editor conventions — keep this block so positioned elements render without the editor */
+    .reveal .slides section.re-slide { height: 100%; }
+    .reveal .re-el { position: absolute; margin: 0; }
+    .reveal img.re-el { max-width: none; max-height: none; }
+    .reveal svg.re-el { display: block; }
+    .reveal .re-el pre { width: 100%; height: 100%; margin: 0; }
+    .reveal .re-el pre code { max-height: none; height: 100%; box-sizing: border-box; }
+  </style>
+</head>
+<body>
+  <div class="reveal">
+    <div class="slides">
+      <section class="re-slide">
+        <h1 class="re-el" style="position: absolute; left: 80px; top: 250px; width: 800px; text-align: center; font-size: 72px">New presentation</h1>
+        <p class="re-el" style="position: absolute; left: 80px; top: 400px; width: 800px; text-align: center">Author · Date</p>
+      </section>
+    </div>
+  </div>
+  <script src="reveal/dist/reveal.js"></script>
+  <script src="reveal/plugin/highlight/highlight.js"></script>
+  <script src="reveal/plugin/math/math.js"></script>
+  <script src="reveal/plugin/notes/notes.js"></script>
+  <script>
+    // ?editmode=1 is added by reveal-editor's iframe only; never part of the saved file.
+    var editMode = new URLSearchParams(location.search).has('editmode');
+    Reveal.initialize({
+      width: 960,
+      height: 700,
+      center: false,
+      hash: !editMode,
+      keyboard: !editMode,
+      touch: !editMode,
+      controls: !editMode,
+      progress: !editMode,
+      transition: editMode ? 'none' : 'slide',
+      katex: { local: 'reveal/katex' },
+      plugins: [RevealHighlight, RevealMath.KaTeX, RevealNotes]
+    });
+  </script>
+</body>
+</html>
