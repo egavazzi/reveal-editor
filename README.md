@@ -53,6 +53,9 @@ Then, from any directory:
 ```sh
 reveal-editor new ~/talks/egu2026
 reveal-editor ~/talks/egu2026
+
+# one-way copy of rendered Quarto HTML for final visual polishing
+reveal-editor eject talk.html ~/talks/polished-talk
 ```
 
 ## Usage
@@ -64,6 +67,9 @@ npm run edit -- new ~/talks/egu2026
 # edit an existing one
 npm run edit -- ~/talks/egu2026/deck.html
 
+# eject rendered Quarto HTML into an independent deck
+npm run edit -- eject talk.html ~/talks/polished-talk
+
 # options: --port <n>, --no-open, --dev (editor UI from source)
 ```
 
@@ -71,6 +77,9 @@ The browser opens automatically. To **present**, just open `deck.html` in
 any browser — each deck folder vendors its own pinned copy of reveal.js and
 KaTeX (`reveal/`), so decks work offline, forever, with no dependency on
 this editor.
+
+See [Quarto interoperability](docs/QUARTO_INTEROP.md) for reproducible asset
+workflows and the one-way eject tradeoff.
 
 ## Editing
 

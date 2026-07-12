@@ -51,11 +51,11 @@ should not grow a second source model or attempt to rewrite QMD.
 
 ### 4. Interoperate without becoming Quarto
 
-- [ ] Document using generated plots and assets from Julia, Python, or R in an
+- [x] Document using generated plots and assets from Julia, Python, or R in an
       HTML-native deck.
-- [ ] Prototype a one-way Quarto HTML import/eject command with an explicit
+- [x] Prototype a one-way Quarto HTML import/eject command with an explicit
       warning that subsequent QMD renders will not update the ejected deck.
-- [ ] Explore copying individual rendered Quarto elements rather than importing
+- [x] Explore copying individual rendered Quarto elements rather than importing
       an entire generated presentation.
 
 ### 5. Reliability and maintainability
