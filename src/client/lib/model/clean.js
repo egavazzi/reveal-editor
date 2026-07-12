@@ -43,7 +43,7 @@ function cleanSection(section) {
   removeStyleProps(section, ['display', 'top'])
 }
 
-function restoreMath(root) {
+export function restoreMath(root) {
   // KaTeX keeps the original TeX in a MathML annotation; restore the
   // delimited source text. Delimiters normalize to \( \) inline, $$ $$
   // display (documented in README).

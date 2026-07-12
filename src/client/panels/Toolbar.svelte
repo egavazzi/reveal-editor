@@ -1,6 +1,6 @@
 <script>
   import { editor, runtime } from '../stores/editor.svelte.js'
-  import { addText, addShape, pickImage, saveDeck } from '../lib/actions.js'
+  import { addText, addShape, addMath, addCode, pickImage, saveDeck } from '../lib/actions.js'
 
   const shapes = [
     { kind: 'rect', label: '▭', title: 'Rectangle' },
@@ -20,6 +20,8 @@
     {#each shapes as s (s.kind)}
       <button title={s.title} onclick={() => addShape(s.kind)}>{s.label}</button>
     {/each}
+    <button title="LaTeX math" onclick={addMath}>∑</button>
+    <button title="Code block" onclick={addCode}>{'{}'}</button>
   </div>
 
   <div class="spacer"></div>

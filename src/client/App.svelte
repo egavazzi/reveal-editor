@@ -10,6 +10,7 @@
   import { editor, runtime } from './stores/editor.svelte.js'
   import Toolbar from './panels/Toolbar.svelte'
   import FormatBar from './panels/FormatBar.svelte'
+  import PopoverEditor from './panels/PopoverEditor.svelte'
 
   let iframeSrc = $state('')
   let pristineHtml = ''
@@ -85,6 +86,8 @@
       <iframe src={iframeSrc} title="presentation" use:onIframeSrcSet></iframe>
     {/if}
   </main>
+
+  <PopoverEditor />
 
   <footer class="statusbar">
     <span>{editor.statusMessage}</span>

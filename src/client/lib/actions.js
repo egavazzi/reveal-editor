@@ -2,8 +2,14 @@
 // live deck DOM. Components call these; they coordinate stores, overlay
 // selection, and model mutations.
 import { editor, runtime } from '../stores/editor.svelte.js'
-import { insertTextBox, insertShape, insertImageBlob, imageFromClipboard } from './model/insert.js'
+import {
+  insertTextBox, insertShape, insertImageBlob, imageFromClipboard,
+  insertMathBox, insertCodeBlock
+} from './model/insert.js'
 import { startTextEdit, formatText, isEditingText, activeElement } from './editors/text.js'
+import {
+  renderMath, getMathSource, commitMath, getCodeState, commitCode
+} from './editors/mathcode.js'
 export { saveDeck } from './model/save.js'
 
 export function markDirty() {
@@ -77,8 +83,90 @@ export function beginTextEdit(el, { selectAll = false } = {}) {
 export function editElement(el) {
   const tag = el.tagName.toLowerCase()
   if (tag === 'img' || tag === 'svg') return
-  if (el.querySelector('.katex') || tag === 'pre') return // handled in M5 editors
-  beginTextEdit(el)
+  if (el.classList.contains('re-math') || el.querySelector('.katex')) {
+    openMathEditor(el)
+  } else if (tag === 'pre' || el.querySelector('pre > code')) {
+    openCodeEditor(el)
+  } else {
+    beginTextEdit(el)
+  }
+}
+
+// --- math ---
+
+export function addMath() {
+  const el = insertMathBox(runtime.bridge)
+  renderMath(runtime.bridge, el)
+  runtime.overlay.setSelection([el])
+  markDirty()
+  openMathEditor(el)
+}
+
+export function openMathEditor(el) {
+  runtime.popoverEl = el
+  runtime.popoverOriginal = el.innerHTML
+  editor.popover = { type: 'math', value: getMathSource(el), lang: '' }
+}
+
+// --- code ---
+
+export function addCode() {
+  const el = insertCodeBlock(runtime.bridge)
+  commitCode(runtime.bridge, el, el.querySelector('code').textContent, 'julia')
+  runtime.overlay.setSelection([el])
+  markDirty()
+  openCodeEditor(el)
+}
+
+export function openCodeEditor(el) {
+  const target = el.tagName.toLowerCase() === 'pre' ? el : el.querySelector('pre')
+  const { source, lang } = getCodeState(target)
+  runtime.popoverEl = target
+  runtime.popoverOriginal = target.innerHTML
+  editor.popover = { type: 'code', value: source, lang }
+}
+
+// --- popover lifecycle (shared by math and code) ---
+
+let applyTimer = null
+
+/** Live-apply popover changes to the slide element (debounced). */
+export function updatePopover(value, lang) {
+  if (!editor.popover) return
+  editor.popover.value = value
+  if (lang !== undefined) editor.popover.lang = lang
+  clearTimeout(applyTimer)
+  applyTimer = setTimeout(() => {
+    const el = runtime.popoverEl
+    if (!el || !editor.popover) return
+    if (editor.popover.type === 'math') {
+      commitMath(runtime.bridge, el, editor.popover.value)
+    } else {
+      commitCode(runtime.bridge, el, editor.popover.value, editor.popover.lang)
+    }
+    runtime.overlay.refresh()
+    markDirty()
+  }, 250)
+}
+
+export function closePopover(keep) {
+  clearTimeout(applyTimer)
+  const el = runtime.popoverEl
+  if (!keep && el && runtime.popoverOriginal != null) {
+    el.innerHTML = runtime.popoverOriginal
+  } else if (keep && el && editor.popover) {
+    // flush the last debounced edit synchronously
+    if (editor.popover.type === 'math') {
+      commitMath(runtime.bridge, el, editor.popover.value)
+    } else {
+      commitCode(runtime.bridge, el, editor.popover.value, editor.popover.lang)
+    }
+    markDirty()
+  }
+  runtime.overlay.refresh()
+  editor.popover = null
+  runtime.popoverEl = null
+  runtime.popoverOriginal = null
 }
 
 export function applyFormat(command, value) {

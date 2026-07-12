@@ -14,12 +14,15 @@ export const editor = $state({
   statusMessage: '',
   selectionCount: 0,
   selectionTag: '',
-  textEditing: false
+  textEditing: false,
+  popover: null // { type: 'math' | 'code', value, lang }
 })
 
 // Non-reactive handles to live DOM machinery (never proxied by Svelte).
 export const runtime = {
   bridge: null,
   overlay: null,
-  editMode: null
+  editMode: null,
+  popoverEl: null,
+  popoverOriginal: null
 }

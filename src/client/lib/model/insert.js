@@ -61,6 +61,28 @@ export async function insertImageBlob(bridge, blob, name) {
   return placeAt(bridge, img, w, h)
 }
 
+export function insertMathBox(bridge) {
+  const doc = bridge.doc
+  const el = doc.createElement('div')
+  el.className = 're-el re-math'
+  el.style.fontSize = '40px'
+  el.textContent = '\\(E = mc^2\\)'
+  return placeAt(bridge, el, 240, 60)
+}
+
+export function insertCodeBlock(bridge) {
+  const doc = bridge.doc
+  const pre = doc.createElement('pre')
+  pre.className = 're-el'
+  pre.style.width = '600px'
+  pre.style.margin = '0'
+  const code = doc.createElement('code')
+  code.className = 'language-julia'
+  code.textContent = 'function f(x)\n    return x .^ 2\nend'
+  pre.appendChild(code)
+  return placeAt(bridge, pre, 600, 160)
+}
+
 /** Extract an image blob from a paste event, if any. */
 export function imageFromClipboard(event) {
   for (const item of event.clipboardData?.items ?? []) {
