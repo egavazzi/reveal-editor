@@ -4,7 +4,6 @@ import { existsSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { loadDeck, saveDeck } from './deck.js'
 import { assetsRouter } from './assets.js'
-import { scaffoldDeck } from './scaffold.js'
 import { watchDeck } from './watch.js'
 
 export async function createServer({ deckPath, port = 3737, dev = false, repoRoot }) {
@@ -42,15 +41,6 @@ export async function createServer({ deckPath, port = 3737, dev = false, repoRoo
   })
 
   app.use('/api/assets', assetsRouter(deckDir))
-
-  app.post('/api/deck/new', async (req, res) => {
-    try {
-      const created = await scaffoldDeck(join(deckDir, req.body?.dir ?? 'new-deck'))
-      res.json({ ok: true, path: created })
-    } catch (err) {
-      res.status(500).json({ error: String(err.message ?? err) })
-    }
-  })
 
   app.get('/api/events', (req, res) => {
     res.set({

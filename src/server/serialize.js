@@ -7,6 +7,7 @@
 //    rendering is never changed by reformatting.
 //  - Canonical attribute order and inline-style ordering for stable git diffs.
 import { parseFragment, serialize } from 'parse5'
+import postcss from 'postcss'
 
 const VOID_ELEMENTS = new Set([
   'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
@@ -42,19 +43,32 @@ function escapeAttr(s) {
 }
 
 function normalizeStyle(value) {
-  const decls = value.split(';').map((d) => d.trim()).filter(Boolean).map((d) => {
-    const i = d.indexOf(':')
-    if (i === -1) return null
-    return { key: d.slice(0, i).trim().toLowerCase(), value: d.slice(i + 1).trim() }
-  }).filter(Boolean)
+  let nodes
+  try {
+    nodes = postcss.parse(`a{${value}}`, { from: undefined }).first?.nodes ?? []
+  } catch {
+    return value.trim()
+  }
+  // Preserve unusual-but-valid inline CSS that includes comments or other
+  // node types rather than trying to reorder a structure we do not own.
+  if (!nodes.every((node) => node.type === 'decl')) return value.trim()
+
+  const decls = nodes.map((node) => ({
+    key: node.prop,
+    rankKey: node.prop.toLowerCase(),
+    value: node.value,
+    important: node.important
+  }))
   // Stable sort: known keys in canonical order first, unknown keys keep
   // their original relative order after them.
   const rank = (k) => {
     const i = STYLE_KEY_ORDER.indexOf(k)
     return i === -1 ? STYLE_KEY_ORDER.length : i
   }
-  decls.sort((a, b) => rank(a.key) - rank(b.key) || 0)
-  return decls.map((d) => `${d.key}: ${d.value}`).join('; ')
+  decls.sort((a, b) => rank(a.rankKey) - rank(b.rankKey) || 0)
+  return decls
+    .map((d) => `${d.key}: ${d.value}${d.important ? ' !important' : ''}`)
+    .join('; ')
 }
 
 function attrSortKey(name) {

@@ -45,6 +45,15 @@ describe('formatFragment', () => {
     expect(out).toBe('<div class="re-el" style="left: 1px; top: 5px; width: 20px; height: 10px; color: red">x</div>')
   })
 
+  it('preserves semicolons in CSS values and case-sensitive custom properties', () => {
+    const out = formatFragment(
+      `<div style="--BrandColor: red; color: var(--BrandColor); background-image: url('data:image/svg+xml;utf8,a;b')">x</div>`
+    )
+    expect(out).toContain('--BrandColor: red')
+    expect(out).toContain('color: var(--BrandColor)')
+    expect(out).toContain("background-image: url('data:image/svg+xml;utf8,a;b')")
+  })
+
   it('gives positioned elements their own lines (svg/img canvas elements)', () => {
     const out = formatFragment(
       '<section><h2>t</h2><svg data-shape="rect" style="position: absolute; left: 1px"><rect></rect></svg>' +

@@ -88,13 +88,18 @@ describe('cleanSlides', () => {
     expect(cleanSlides(slides)).toBe('<section><h2>t</h2></section>')
   })
 
-  it('un-bakes reveal lazy loading (data-src wins over runtime src)', () => {
+  it('un-bakes reveal lazy loading for loaded media and source elements', () => {
     const slides = makeSlides(
-      '<section><img data-src="assets/plot.png" src="assets/plot.png"></section>'
+      '<section>' +
+      '<img src="assets/plot.png" data-lazy-loaded="">' +
+      '<video data-lazy-loaded=""><source src="assets/movie.mp4" data-lazy-loaded=""></video>' +
+      '</section>'
     )
     const out = cleanSlides(slides)
     expect(out).toContain('data-src="assets/plot.png"')
-    expect(out).not.toContain(' src=')
+    expect(out).toContain('data-src="assets/movie.mp4"')
+    expect(out).not.toContain('data-lazy-loaded')
+    expect(out).not.toMatch(/<(?:img|source)[^>]*\ssrc=/)
   })
 })
 

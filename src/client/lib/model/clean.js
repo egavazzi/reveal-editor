@@ -82,8 +82,14 @@ function cleanFragments(root) {
 }
 
 function stripLazyLoading(root) {
-  for (const el of root.querySelectorAll('[data-src][src]')) {
-    el.removeAttribute('src')
+  // reveal.js moves data-src to src while an asset is loaded and marks the
+  // element so it can reverse that mutation when the slide is unloaded.
+  for (const el of root.querySelectorAll('[data-lazy-loaded]')) {
+    if (el.hasAttribute('src')) {
+      el.setAttribute('data-src', el.getAttribute('src'))
+      el.removeAttribute('src')
+    }
+    el.removeAttribute('data-lazy-loaded')
   }
 }
 

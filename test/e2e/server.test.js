@@ -111,4 +111,13 @@ describe('server e2e', () => {
     const body = await res.json()
     expect(body.path ?? '').not.toContain('..')
   })
+
+  it('does not expose filesystem scaffolding over HTTP', async () => {
+    const res = await fetch(`${base}api/deck/new`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dir: '../../outside-the-deck' })
+    })
+    expect(res.status).toBe(404)
+  })
 })
