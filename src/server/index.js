@@ -90,7 +90,14 @@ export async function createServer({ deckPath, port = 3737, dev = false, repoRoo
   }
 
   const server = await new Promise((resolvePromise, reject) => {
-    const s = app.listen(port, '127.0.0.1', () => resolvePromise(s))
+    // Express 5 invokes the listen callback even on failure, passing the
+    // error as its first argument (the server never binds and address()
+    // stays null) — so the error must be handled here, not only via the
+    // 'error' event.
+    const s = app.listen(port, '127.0.0.1', (err) => {
+      if (err) reject(err)
+      else resolvePromise(s)
+    })
     s.on('error', reject)
   })
 
