@@ -142,6 +142,8 @@ KaTeX markup or highlight spans.
 ## Maintenance
 
 - `npm test` — round-trip/idempotency suite + server e2e (31+ tests)
+- `npm run test:browser` — headless Firefox smoke test for live settings,
+  save, and standalone reload (requires Firefox + GeckoDriver)
 - `npm run vendor` — refresh `templates/reveal-dist/` after bumping the
   reveal.js/katex versions in package.json
 - `npm run build` — rebuild the editor UI into `dist/` after changing

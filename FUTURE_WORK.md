@@ -60,11 +60,11 @@ should not grow a second source model or attempt to rewrite QMD.
 
 ### 5. Reliability and maintainability
 
-- [ ] Add real-browser coverage for Reveal lifecycle, settings, themes, media,
+- [x] Add real-browser coverage for Reveal lifecycle, settings, themes, media,
       and save/reload behavior.
-- [ ] Exercise all supported operating systems in CI.
-- [ ] Add fixtures for older and heavily customized reveal.js decks.
-- [ ] Keep the editor dependency-light and split large action/panel modules as
+- [x] Exercise all supported operating systems in CI.
+- [x] Add fixtures for older and heavily customized reveal.js decks.
+- [x] Keep the editor dependency-light and split large action/panel modules as
       features accumulate.
 
 ## Explicitly out of scope for now

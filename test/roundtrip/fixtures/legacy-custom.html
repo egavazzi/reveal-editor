@@ -1,0 +1,17 @@
+<!doctype html>
+<html><head>
+  <meta charset="utf-8"><title>Legacy customized deck</title>
+  <link rel="stylesheet" href="vendor/reveal.css">
+  <style>my-widget { display:block } .slides section { text-align:left }</style>
+</head><body>
+<div class='reveal'><div class='slides'>
+  <section data-state="custom-event">
+    <section data-transition="fade"><h1>Nested A</h1><aside class="notes">Say A</aside></section>
+    <section><my-widget data-config='{"mode":"live"}'></my-widget></section>
+  </section>
+  <section data-background-image="media/sky.webp">
+    <svg viewBox="0 0 20 20"><foreignObject width="20" height="20"><div xmlns="http://www.w3.org/1999/xhtml">HTML in SVG</div></foreignObject></svg>
+  </section>
+</div></div>
+<script>window.Reveal && Reveal.initialize({ embedded: true, center: false })</script>
+</body></html>
