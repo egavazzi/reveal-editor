@@ -1,13 +1,17 @@
 <script>
   import { editor, runtime } from '../stores/editor.svelte.js'
   import {
-    addText, addShape, addMath, addCode, pickImage, saveDeck,
+    addText, addShape, addMath, addCode, pickImage, pickVideo, saveDeck,
     undoAction, redoAction
   } from '../lib/actions.js'
 
   function toggleAutosave(e) {
     editor.autosave = e.currentTarget.checked
     localStorage.setItem('reveal-editor:autosave', editor.autosave ? '1' : '0')
+  }
+
+  function togglePanel(name) {
+    editor.sidePanel = editor.sidePanel === name ? null : name
   }
 
   const shapes = [
@@ -25,11 +29,17 @@
   <div class="group" class:disabled={!editor.ready}>
     <button title="Text box" onclick={addText}>T</button>
     <button title="Image (or paste with Ctrl+V)" onclick={pickImage}>🖼</button>
+    <button title="Video (MP4 or WebM; files can also be dropped)" onclick={pickVideo}>▶</button>
     {#each shapes as s (s.kind)}
       <button title={s.title} onclick={() => addShape(s.kind)}>{s.label}</button>
     {/each}
     <button title="LaTeX math" onclick={addMath}>∑</button>
     <button title="Code block" onclick={addCode}>{'{}'}</button>
+  </div>
+
+  <div class="group" class:disabled={!editor.ready}>
+    <button title="Layers" onclick={() => togglePanel('layers')}>Layers</button>
+    <button title="Deck, grid and presentation settings" onclick={() => togglePanel('settings')}>Deck</button>
   </div>
 
   <div class="group" class:disabled={!editor.ready}>

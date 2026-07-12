@@ -77,8 +77,8 @@ this editor.
 - **Select**: click; shift-click or rubber-band for multi-select; Escape clears
 - **Move/resize/rotate**: drag the handles; snapping to slide edges/centers
   and sibling elements; arrow keys nudge (Shift = 10 px)
-- **Insert** (toolbar): text box, image (file picker or just Ctrl+V a
-  screenshot — saved to `assets/`), rectangle/ellipse/line/arrow, LaTeX
+- **Insert** (toolbar): text box, image (file picker, drop, or just Ctrl+V a
+  screenshot), video (MP4/WebM picker or drop), rectangle/ellipse/line/arrow, LaTeX
   math (∑), code block (`{}`)
 - **Text**: double-click to edit in place; bold/italic/underline/lists in
   the context bar; font size and color apply to the whole box
@@ -90,7 +90,14 @@ this editor.
   to add/duplicate/delete; slide background color in the context bar
 - **Fragments**: select an element → "fragment" checkbox (+ optional
   explicit order) to make it appear step-by-step
-- **Layers**: bring to front / send to back
+- **Layers**: open the Layers panel to select, reorder, show/hide, and
+  lock/unlock objects; quick bring-to-front/send-to-back buttons remain in
+  the context bar
+- **Images**: select an image to set exact dimensions, crop position,
+  border, corner radius, shadow, and a presentation link
+- **Deck setup**: the Deck panel controls canvas format/size and margins,
+  editor grid display/snapping, navigation-arrow visibility, and slide
+  number format/position
 - **Save**: Ctrl+S or the Save button; optional autosave toggle
 - **Undo/redo**: Ctrl+Z / Ctrl+Shift+Z, ~100 steps
 - **Copy/paste/duplicate elements**: Ctrl+C / Ctrl+V / Ctrl+D

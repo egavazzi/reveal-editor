@@ -61,6 +61,34 @@ export async function insertImageBlob(bridge, blob, name) {
   return placeAt(bridge, img, w, h)
 }
 
+/** Upload and insert an HTML5 video with its intrinsic aspect ratio. */
+export async function insertVideoBlob(bridge, blob, name) {
+  const { path } = await uploadAsset(blob, name)
+  const doc = bridge.doc
+  const natural = await new Promise((resolvePromise, reject) => {
+    const probe = doc.createElement('video')
+    probe.onloadedmetadata = () => resolvePromise({
+      w: probe.videoWidth || 640,
+      h: probe.videoHeight || 360
+    })
+    probe.onerror = reject
+    probe.preload = 'metadata'
+    probe.src = path
+  })
+  const { width: cw, height: ch } = getCanvasSize(bridge)
+  const scale = Math.min(1, (cw * 0.6) / natural.w, (ch * 0.6) / natural.h)
+  const w = Math.round(natural.w * scale)
+  const h = Math.round(natural.h * scale)
+  const video = doc.createElement('video')
+  video.className = 're-el'
+  video.src = path
+  video.controls = true
+  video.preload = 'metadata'
+  video.style.width = `${w}px`
+  video.style.height = `${h}px`
+  return placeAt(bridge, video, w, h)
+}
+
 export function insertMathBox(bridge) {
   const doc = bridge.doc
   const el = doc.createElement('div')

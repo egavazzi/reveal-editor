@@ -14,8 +14,11 @@ export const editor = $state({
   statusMessage: '',
   selectionCount: 0,
   selectionTag: '',
+  selectionVersion: 0,
   textEditing: false,
   popover: null, // { type: 'math' | 'code', value, lang }
+  sidePanel: null, // 'layers' | 'settings'
+  settings: {},
   // bumped whenever slide content changes; sidebar re-derives thumbnails
   docVersion: 0,
   autosave: localStorage.getItem('reveal-editor:autosave') === '1'

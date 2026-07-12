@@ -4,6 +4,7 @@
 // editor bookkeeping.
 import { cleanSlides, cleanElementHtml } from '../model/clean.js'
 import { rehydrate } from '../model/rehydrate.js'
+import { editor } from '../../stores/editor.svelte.js'
 
 const LIMIT = 100
 
@@ -12,7 +13,11 @@ const future = []
 
 function capture(bridge, scope) {
   if (scope.type === 'deck') {
-    return { scope, html: cleanSlides(bridge.slidesEl) }
+    return {
+      scope,
+      html: cleanSlides(bridge.slidesEl),
+      settings: { ...editor.settings }
+    }
   }
   const section = bridge.getSections()[scope.h]
   return { scope, html: cleanElementHtml(section) }
@@ -49,7 +54,7 @@ export function undo(bridge) {
   if (!entry) return false
   future.push(capture(bridge, entry.scope))
   restore(bridge, entry)
-  return true
+  return entry
 }
 
 export function redo(bridge) {
@@ -57,7 +62,7 @@ export function redo(bridge) {
   if (!entry) return false
   past.push(capture(bridge, entry.scope))
   restore(bridge, entry)
-  return true
+  return entry
 }
 
 export function historySizes() {

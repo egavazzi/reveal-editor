@@ -76,6 +76,14 @@ describe('formatFragment', () => {
     expect(formatFragment(out)).toBe(out)
   })
 
+  it('preserves settings JSON stored inside template content', () => {
+    const src = '<template data-re-settings>{"slideNumbers":true,"slideNumberFormat":"c/t"}</template>' +
+      '<section><h2>Title</h2></section>'
+    const out = formatFragment(src)
+    expect(out).toContain('<template data-re-settings>{"slideNumbers":true,"slideNumberFormat":"c/t"}</template>')
+    expect(formatFragment(out)).toBe(out)
+  })
+
   it('indents with the given base indent', () => {
     const out = formatFragment('<section><h2>t</h2></section>', '      ')
     expect(out).toBe('      <section>\n        <h2>t</h2>\n      </section>')

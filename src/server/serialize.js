@@ -111,6 +111,13 @@ function isElement(node) {
   return !node.nodeName.startsWith('#')
 }
 
+function childrenOf(node) {
+  // parse5 stores <template> children on a separate document fragment.
+  return node.tagName === 'template'
+    ? (node.content?.childNodes ?? [])
+    : (node.childNodes ?? [])
+}
+
 // A child may go on its own line if surrounding whitespace cannot change
 // rendering: block-level elements, or elements taken out of flow by
 // absolute/fixed positioning (e.g. positioned <svg>/<img> canvas elements).
@@ -124,7 +131,7 @@ function isSplittable(node) {
 // every child element is splittable and there is no visible text between them.
 function canPrettyPrintChildren(node) {
   if (VERBATIM_CONTENT.has(node.tagName)) return false
-  const children = node.childNodes ?? []
+  const children = childrenOf(node)
   const elements = children.filter(isElement)
   if (elements.length === 0) return false
   if (!children.every((c) => isElement(c) || isWhitespaceText(c))) return false
@@ -147,13 +154,13 @@ function printNode(node, indent, out) {
     out.push(indent + open)
     return
   }
-  const children = (node.childNodes ?? []).filter((c) => !isWhitespaceText(c) || VERBATIM_CONTENT.has(node.tagName))
+  const children = childrenOf(node).filter((c) => !isWhitespaceText(c) || VERBATIM_CONTENT.has(node.tagName))
 
   if (children.length === 0) {
     out.push(`${indent}${open}</${node.tagName}>`)
   } else if (canPrettyPrintChildren(node)) {
     out.push(indent + open)
-    for (const child of node.childNodes) {
+    for (const child of childrenOf(node)) {
       if (isWhitespaceText(child)) continue
       printNode(child, indent + '  ', out)
     }

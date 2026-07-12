@@ -4,7 +4,7 @@
 import { editor, runtime } from '../stores/editor.svelte.js'
 import {
   insertTextBox, insertShape, insertImageBlob, imageFromClipboard,
-  insertMathBox, insertCodeBlock
+  insertMathBox, insertCodeBlock, insertVideoBlob
 } from './model/insert.js'
 import { startTextEdit, formatText, isEditingText, activeElement } from './editors/text.js'
 import { ensurePositioned } from './model/position.js'
@@ -18,6 +18,9 @@ import { snapshot, undo as histUndo, redo as histRedo } from './history/history.
 import { cleanElementHtml } from './model/clean.js'
 import { rehydrate } from './model/rehydrate.js'
 import { saveDeck } from './model/save.js'
+import {
+  initializeSettings, updateSettings as updateSettingsModel, writeSettings
+} from './model/settings.js'
 export { saveDeck } from './model/save.js'
 export { slideSummaries } from './model/slides.js'
 
@@ -30,14 +33,17 @@ export function snapshotDeck() {
 }
 
 export function undoAction() {
-  if (histUndo(runtime.bridge)) afterHistory()
+  const entry = histUndo(runtime.bridge)
+  if (entry) afterHistory(entry)
 }
 
 export function redoAction() {
-  if (histRedo(runtime.bridge)) afterHistory()
+  const entry = histRedo(runtime.bridge)
+  if (entry) afterHistory(entry)
 }
 
-function afterHistory() {
+function afterHistory(entry) {
+  if (entry.scope.type === 'deck') initializeSettings(runtime.bridge, entry.settings)
   runtime.overlay.setSelection([])
   editor.slideCount = runtime.bridge.getSections().length
   editor.slideIndex = runtime.bridge.getIndex()
@@ -53,6 +59,12 @@ export function markDirty() {
     clearTimeout(autosaveTimer)
     autosaveTimer = setTimeout(() => saveDeck(), 1500)
   }
+}
+
+export function updateDeckSettings(patch) {
+  snapshotDeck()
+  updateSettingsModel(patch)
+  markDirty()
 }
 
 export function addText() {
@@ -92,6 +104,37 @@ export function pickImage() {
   input.click()
 }
 
+export async function addVideoBlob(blob, name) {
+  try {
+    snapshotSlide()
+    const el = await insertVideoBlob(runtime.bridge, blob, name)
+    runtime.overlay.setSelection([el])
+    markDirty()
+  } catch (err) {
+    editor.statusMessage = `Video insert failed: ${err.message}`
+  }
+}
+
+export function pickVideo() {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'video/mp4,video/webm,video/*'
+  input.onchange = () => {
+    const file = input.files?.[0]
+    if (file) addVideoBlob(file, file.name)
+  }
+  input.click()
+}
+
+export function handleFileDrop(event) {
+  const file = [...(event.dataTransfer?.files ?? [])][0]
+  if (!file || (!file.type.startsWith('image/') && !file.type.startsWith('video/'))) return false
+  event.preventDefault()
+  if (file.type.startsWith('video/')) addVideoBlob(file, file.name)
+  else addImageBlob(file, file.name)
+  return true
+}
+
 export function handlePaste(event) {
   if (isEditingText()) return // let the browser paste text normally
   const blob = imageFromClipboard(event)
@@ -125,7 +168,7 @@ export function beginTextEdit(el, { selectAll = false } = {}) {
 /** Route a double-click on a slide element to the right editor. */
 export function editElement(el) {
   const tag = el.tagName.toLowerCase()
-  if (tag === 'img' || tag === 'svg') return
+  if (tag === 'img' || tag === 'svg' || tag === 'video') return
   if (el.classList.contains('re-math') || (el.querySelector('.katex') && isMathOnly(el))) {
     openMathEditor(el)
   } else if (tag === 'pre' || el.querySelector('pre > code')) {
@@ -349,6 +392,111 @@ export function sendToBack() {
   }
   runtime.overlay.refresh()
   markDirty()
+}
+
+export function currentLayers() {
+  const section = runtime.bridge?.currentSection
+  if (!section) return []
+  return [...section.children].reverse().map((el, reverseIndex) => ({
+    el,
+    index: section.children.length - reverseIndex - 1,
+    label: el.getAttribute('aria-label') || el.getAttribute('alt') ||
+      el.textContent?.trim().replace(/\s+/g, ' ').slice(0, 32) || `<${el.tagName.toLowerCase()}>`,
+    tag: el.tagName.toLowerCase(),
+    hidden: el.hasAttribute('data-re-hidden'),
+    locked: el.hasAttribute('data-re-locked'),
+    selected: runtime.overlay?.getSelection().includes(el) ?? false
+  }))
+}
+
+export function selectLayer(el) {
+  if (!el || el.hasAttribute('data-re-locked') || el.hasAttribute('data-re-hidden')) return
+  runtime.overlay.setSelection([el])
+}
+
+export function toggleLayerHidden(el) {
+  if (!el) return
+  snapshotSlide()
+  const hidden = !el.hasAttribute('data-re-hidden')
+  el.toggleAttribute('data-re-hidden', hidden)
+  el.style.visibility = hidden ? 'hidden' : ''
+  if (hidden && runtime.overlay.getSelection().includes(el)) runtime.overlay.setSelection([])
+  markDirty()
+}
+
+export function toggleLayerLocked(el) {
+  if (!el) return
+  snapshotSlide()
+  const locked = !el.hasAttribute('data-re-locked')
+  el.toggleAttribute('data-re-locked', locked)
+  if (locked && runtime.overlay.getSelection().includes(el)) runtime.overlay.setSelection([])
+  markDirty()
+}
+
+export function moveLayer(el, direction) {
+  const section = el?.closest('section')
+  if (!section) return
+  snapshotSlide()
+  if (direction === 'up' && el.nextElementSibling) el.nextElementSibling.after(el)
+  if (direction === 'down' && el.previousElementSibling) el.previousElementSibling.before(el)
+  runtime.overlay.refresh()
+  markDirty()
+}
+
+// --- image properties ---
+
+export function selectedImageInfo() {
+  const sel = runtime.overlay?.getSelection() ?? []
+  const el = sel.length === 1 && sel[0].tagName.toLowerCase() === 'img' ? sel[0] : null
+  if (!el) return null
+  const position = (el.style.objectPosition || '50% 50%').split(/\s+/)
+  return {
+    el,
+    width: Math.round(parseFloat(el.style.width) || el.getBoundingClientRect().width),
+    height: Math.round(parseFloat(el.style.height) || el.getBoundingClientRect().height),
+    crop: el.style.objectFit === 'cover',
+    cropX: Number.isFinite(parseFloat(position[0])) ? parseFloat(position[0]) : 50,
+    cropY: Number.isFinite(parseFloat(position[1])) ? parseFloat(position[1]) : 50,
+    borderWidth: parseFloat(el.style.borderWidth) || 0,
+    borderColor: el.style.borderColor || '#000000',
+    radius: parseFloat(el.style.borderRadius) || 0,
+    shadow: el.style.boxShadow !== '' && el.style.boxShadow !== 'none',
+    href: el.getAttribute('data-re-href') || ''
+  }
+}
+
+export function setImageProperties(values) {
+  const info = selectedImageInfo()
+  if (!info) return
+  let href = null
+  if (values.href != null) {
+    href = String(values.href).trim()
+    if (/^(?:javascript|data|vbscript):/i.test(href)) href = ''
+  }
+  // A saved image link needs the deck-level click runtime. Capture the whole
+  // deck so undo can also remove support nodes added by the first link.
+  if (href) snapshotDeck()
+  else snapshotSlide()
+  const { el } = info
+  if (values.width != null) el.style.width = `${Math.max(1, Number(values.width))}px`
+  if (values.height != null) el.style.height = `${Math.max(1, Number(values.height))}px`
+  if (values.crop != null) el.style.objectFit = values.crop ? 'cover' : 'contain'
+  const x = values.cropX ?? info.cropX
+  const y = values.cropY ?? info.cropY
+  if (values.cropX != null || values.cropY != null) el.style.objectPosition = `${x}% ${y}%`
+  if (values.borderWidth != null) el.style.borderWidth = `${Math.max(0, Number(values.borderWidth))}px`
+  if (values.borderWidth != null) el.style.borderStyle = Number(values.borderWidth) ? 'solid' : ''
+  if (values.borderColor != null) el.style.borderColor = values.borderColor
+  if (values.radius != null) el.style.borderRadius = `${Math.max(0, Number(values.radius))}px`
+  if (values.shadow != null) el.style.boxShadow = values.shadow ? '0 8px 24px rgba(0,0,0,.35)' : ''
+  if (values.href != null) {
+    if (href) el.setAttribute('data-re-href', href)
+    else el.removeAttribute('data-re-href')
+    if (href) writeSettings(runtime.bridge.slidesEl, editor.settings)
+  }
+  runtime.overlay.refresh()
+  markDirty()
+  bumpSelection()
 }
 
 // --- element clipboard / delete / nudge ---

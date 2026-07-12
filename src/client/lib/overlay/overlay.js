@@ -5,6 +5,7 @@ import Selecto from 'selecto'
 import { ensurePositioned, roundGeometry } from '../model/position.js'
 import { syncShapeGeometry } from '../model/shapes.js'
 import { isEditingText, activeElement } from '../editors/text.js'
+import { editor } from '../../stores/editor.svelte.js'
 
 /**
  * An "editable unit" is what a click selects: a .re-el, or any direct child
@@ -48,6 +49,8 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
       elementSnapDirections: { top: true, left: true, bottom: true, right: true, center: true, middle: true },
       snapDirections: { top: true, left: true, bottom: true, right: true, center: true, middle: true },
       snapThreshold: 5,
+      snapGridWidth: editor.settings.snapGrid ? Number(editor.settings.gridSize) || 20 : 0,
+      snapGridHeight: editor.settings.snapGrid ? Number(editor.settings.gridSize) || 20 : 0,
       throttleRotate: 1,
       className: 're-moveable'
     })
@@ -106,7 +109,7 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
   }
 
   function setSelection(els) {
-    targets = els.filter(Boolean)
+    targets = els.filter((el) => el && !el.hasAttribute('data-re-locked') && !el.hasAttribute('data-re-hidden'))
     buildMoveable()
     onSelectionChange?.(targets)
   }
@@ -118,7 +121,7 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
     const section = currentSection()
     if (!section) return
     const el = resolveEditable(e.target, section)
-    if (!el) {
+    if (!el || el.hasAttribute('data-re-locked')) {
       if (targets.length) setSelection([])
       return
     }
@@ -151,7 +154,7 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
       // don't start rubber band from an element or the moveable box
       const section = currentSection()
       if (
-        e.inputEvent.target.closest?.('.moveable-control-box, .re-moveable') ||
+        e.inputEvent.target.closest?.('.moveable-control-box, .re-moveable, .controls, .slide-number') ||
         (section && resolveEditable(e.inputEvent.target, section))
       ) {
         e.stop()
@@ -173,6 +176,7 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
     setSelection,
     getSelection: () => targets,
     refresh: () => moveable?.updateRect(),
+    reconfigure: () => buildMoveable(),
     destroy() {
       doc.removeEventListener('click', onClick)
       doc.removeEventListener('dblclick', onDoubleClick)
