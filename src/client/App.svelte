@@ -2,34 +2,50 @@
   import { onMount } from 'svelte'
   import { fetchDeck } from './lib/api.js'
   import { connectDeck } from './lib/iframe/bridge.js'
+  import { stashPristineState } from './lib/model/stash.js'
+  import { saveDeck } from './lib/model/save.js'
   import { editor, runtime } from './stores/editor.svelte.js'
 
   let iframeEl
   let iframeSrc = $state('')
+  let pristineHtml = ''
 
   onMount(async () => {
     try {
-      const { file, mtimeMs } = await fetchDeck()
+      const { file, html, mtimeMs } = await fetchDeck()
       editor.deckFile = file
       editor.mtimeMs = mtimeMs
+      pristineHtml = html
       iframeSrc = `/deck/${encodeURIComponent(file)}?editmode=1`
     } catch (err) {
       editor.error = `Could not load deck: ${err.message}`
     }
+    window.addEventListener('keydown', onKeydown)
+    return () => window.removeEventListener('keydown', onKeydown)
   })
 
   async function onIframeSrcSet(node) {
     try {
       const bridge = await connectDeck(node)
       runtime.bridge = bridge
+      stashPristineState(bridge.slidesEl, pristineHtml)
       editor.ready = true
       editor.slideCount = bridge.getSections().length
       editor.slideIndex = bridge.getIndex()
       bridge.Reveal.on('slidechanged', () => {
         editor.slideIndex = runtime.bridge.getIndex()
       })
+      // Ctrl+S must also work when focus is inside the deck iframe.
+      bridge.doc.addEventListener('keydown', onKeydown)
     } catch (err) {
       editor.error = `Could not attach to deck: ${err.message}`
+    }
+  }
+
+  function onKeydown(e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault()
+      saveDeck()
     }
   }
 
@@ -46,6 +62,9 @@
     <span class="brand">reveal-editor</span>
     <span class="deck-name">{editor.deckFile ?? '…'}</span>
     <div class="spacer"></div>
+    <button onclick={() => saveDeck()} disabled={!editor.ready || editor.saving}>
+      {editor.saving ? 'Saving…' : 'Save'}
+    </button>
     <button onclick={prev} disabled={!editor.ready}>←</button>
     <span class="slide-indicator">
       {editor.ready ? `${editor.slideIndex.h + 1} / ${editor.slideCount}` : '–'}
