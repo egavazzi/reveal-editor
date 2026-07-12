@@ -389,7 +389,7 @@ export function pasteElements() {
       if (!Number.isNaN(v)) el.style[prop] = `${v + 24}px`
     }
     section.appendChild(el)
-    rehydrate(bridge, section)
+    rehydrate(bridge, el)
     pasted.push(el)
   }
   runtime.overlay.setSelection(pasted)

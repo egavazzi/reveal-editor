@@ -56,12 +56,15 @@ describe('cleanSlides', () => {
   it('restores code blocks from the pristine stash', () => {
     const src = 'function f(x)\n    return x\nend'
     const slides = makeSlides(
-      `<section><pre><code class="language-julia hljs" data-highlighted="yes" data-re-code-src="${src.replace(/\n/g, '&#10;')}">` +
+      `<section><pre class="re-el code-wrapper"><code class="language-julia hljs" tabindex="0" data-highlighted="yes" data-re-code-src="${src.replace(/\n/g, '&#10;')}">` +
       '<span class="hljs-keyword">function</span> f(x)…mangled…</code></pre></section>'
     )
     const out = cleanSlides(slides)
     expect(out).toContain(`<code class="language-julia">${src}</code>`)
+    expect(out).toContain('<pre class="re-el">')
     expect(out).not.toContain('hljs')
+    expect(out).not.toContain('code-wrapper')
+    expect(out).not.toContain('tabindex')
     expect(out).not.toContain('data-re-code-src')
   })
 
@@ -92,6 +95,20 @@ describe('cleanSlides', () => {
     const out = cleanSlides(slides)
     expect(out).toContain('data-src="assets/plot.png"')
     expect(out).not.toContain(' src=')
+  })
+})
+
+describe('rehydrate', () => {
+  it('never re-stashes an already-live code block (paste-over-code regression)', async () => {
+    const { rehydrate } = await import('../../src/client/lib/model/rehydrate.js')
+    const bridge = { Reveal: { getPlugin: () => null }, win: {} }
+    const section = document.createElement('section')
+    section.innerHTML =
+      '<pre><code class="language-julia" data-re-code-src="x = 1">' +
+      '<span class="hljs-keyword">x</span> = 1</code></pre>'
+    // simulates pasteElements rehydrating into a section with live code
+    rehydrate(bridge, section)
+    expect(section.querySelector('code').getAttribute('data-re-code-src')).toBe('x = 1')
   })
 })
 

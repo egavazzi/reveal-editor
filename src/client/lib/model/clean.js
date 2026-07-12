@@ -12,6 +12,8 @@ const RUNTIME_SECTION_CLASSES = [
 const RUNTIME_FRAGMENT_CLASSES = ['visible', 'current-fragment']
 // Classes highlight.js adds to code elements at runtime.
 const RUNTIME_CODE_CLASSES = ['hljs']
+// Classes reveal's highlight plugin adds to <pre> at runtime.
+const RUNTIME_PRE_CLASSES = ['code-wrapper']
 
 // Editor-transient attributes, stripped from every element. Deliberately
 // does NOT include contenteditable: the rich-text editor removes its own
@@ -65,6 +67,10 @@ function restoreCode(root) {
     const src = code.getAttribute(CODE_SRC_ATTR)
     if (src != null) code.innerHTML = src
     removeClasses(code, RUNTIME_CODE_CLASSES)
+    code.removeAttribute('tabindex')
+  }
+  for (const pre of root.querySelectorAll('pre')) {
+    removeClasses(pre, RUNTIME_PRE_CLASSES)
   }
 }
 
