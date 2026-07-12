@@ -2,9 +2,9 @@
   import { editor } from '../stores/editor.svelte.js'
   import { REVEAL_THEMES, TYPOGRAPHY_PRESETS } from '../lib/model/settings.js'
   import {
-    currentLayers, selectLayer, toggleLayerHidden, toggleLayerLocked, moveLayer,
-    currentSpeakerNotes, selectedImageInfo, setImageProperties, setSpeakerNotes,
-    updateDeckSettings as updateSettings
+    currentLayers, selectLayer, toggleLayerHidden, toggleLayerLocked, moveLayer, setLayerName,
+    currentSpeakerNotes, selectedElementInfo, selectedImageInfo, setElementProperties,
+    setImageProperties, setSpeakerNotes, updateDeckSettings as updateSettings
   } from '../lib/actions.js'
 
   const presets = {
@@ -28,6 +28,12 @@
     void editor.selectionVersion
     return selectedImageInfo()
   })
+  const element = $derived.by(() => {
+    void editor.docVersion
+    void editor.selectionCount
+    void editor.selectionVersion
+    return selectedElementInfo()
+  })
   const notes = $derived.by(() => {
     void editor.docVersion
     void editor.slideIndex.h
@@ -46,6 +52,7 @@
     <button class:active={editor.sidePanel === 'settings'} onclick={() => editor.sidePanel = 'settings'}>Deck</button>
     <button class:active={editor.sidePanel === 'notes'} onclick={() => editor.sidePanel = 'notes'}>Notes</button>
     {#if image}<button class:active={editor.sidePanel === 'image'} onclick={() => editor.sidePanel = 'image'}>Image</button>{/if}
+    {#if element}<button class:active={editor.sidePanel === 'element'} onclick={() => editor.sidePanel = 'element'}>Element</button>{/if}
     <button class="close" title="Close panel" onclick={() => editor.sidePanel = null}>×</button>
   </header>
 
@@ -59,6 +66,7 @@
           <button class="name" title={layer.label} onclick={() => selectLayer(layer.el)}>
             <span class="tag">{layer.tag}</span>{layer.label}
           </button>
+          <input class="layer-name" aria-label="Layer name" value={layer.el.getAttribute('aria-label') || ''} placeholder="name" onchange={(e) => setLayerName(layer.el, e.currentTarget.value)} />
           <button title="Move forward one level" onclick={() => moveLayer(layer.el, 'up')}>↑</button>
           <button title="Move backward one level" onclick={() => moveLayer(layer.el, 'down')}>↓</button>
           <button title={layer.hidden ? 'Show layer' : 'Hide layer'} onclick={() => toggleLayerHidden(layer.el)}>{layer.hidden ? '◌' : '◉'}</button>
@@ -171,6 +179,22 @@
       <label>Link URL<input type="url" placeholder="https://…" value={image.href} onchange={(e) => setImageProperties({ href: e.currentTarget.value })} /></label>
     </section>
   {/if}
+
+  {#if element && editor.sidePanel === 'element'}
+    <section class="panel element-panel">
+      <h3>{element.group ? 'Group' : 'Element'} geometry</h3>
+      <div class="row">
+        <label>X<input type="number" value={element.x} onchange={(e) => setElementProperties({ x: +e.currentTarget.value })} /></label>
+        <label>Y<input type="number" value={element.y} onchange={(e) => setElementProperties({ y: +e.currentTarget.value })} /></label>
+      </div>
+      <div class="row">
+        <label>Width<input type="number" min="1" value={element.width} onchange={(e) => setElementProperties({ width: +e.currentTarget.value })} /></label>
+        <label>Height<input type="number" min="1" value={element.height} onchange={(e) => setElementProperties({ height: +e.currentTarget.value })} /></label>
+      </div>
+      <label>Rotation (°)<input type="number" step="1" value={element.rotation} onchange={(e) => setElementProperties({ rotation: +e.currentTarget.value })} /></label>
+      <label class="check"><input type="checkbox" checked={element.lockRatio} onchange={(e) => setElementProperties({ lockRatio: e.currentTarget.checked })} /> Lock aspect ratio while resizing</label>
+    </section>
+  {/if}
 </aside>
 
 <style>
@@ -193,6 +217,7 @@
   .layer.selected { outline: 1px solid #2f6fba; border-radius: 5px; }
   .layer.hidden { opacity: .5; }
   .layer .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+  .layer-name { width: 58px; padding: 3px; }
   .layer button:not(.name) { padding: 3px 5px; }
   .tag { display: inline-block; color: #8ab4ff; font-size: 9px; margin-right: 5px; text-transform: uppercase; }
   .image-panel { background: #25262d; }

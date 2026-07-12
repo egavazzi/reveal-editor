@@ -19,6 +19,7 @@ import {
 } from './model/slides.js'
 import { snapshot, undo as histUndo, redo as histRedo } from './history/history.js'
 import { cleanElementHtml } from './model/clean.js'
+import { loadSlideTemplates, storeSlideTemplate } from './model/templates.js'
 import { rehydrate } from './model/rehydrate.js'
 import { saveDeck } from './model/save.js'
 import {
@@ -362,6 +363,30 @@ export function slideAddVertical(layout = 'blank') {
   refreshSlideState()
 }
 
+export function saveCurrentSlideTemplate(name) {
+  const section = runtime.bridge?.currentSection
+  const item = section && storeSlideTemplate({ name, html: cleanElementHtml(section) })
+  editor.statusMessage = item ? `Saved slide template “${item.name}”.` : 'Enter a template name first.'
+  return item
+}
+
+export function slideAddTemplate(id) {
+  const item = loadSlideTemplates().find((template) => template.id === id)
+  if (!item) return false
+  snapshotDeck()
+  const section = addSlide(runtime.bridge, editor.slideIndex.h)
+  const holder = runtime.bridge.doc.createElement('div')
+  holder.innerHTML = item.html
+  const fresh = holder.firstElementChild
+  if (!fresh || fresh.tagName !== 'SECTION') return false
+  section.replaceWith(fresh)
+  rehydrate(runtime.bridge, fresh)
+  runtime.bridge.sync()
+  runtime.bridge.goTo(editor.slideIndex.h + 1, 0)
+  refreshSlideState()
+  return true
+}
+
 export function slideMove(direction) {
   snapshotDeck()
   if (moveCurrentSlide(runtime.bridge, editor.slideIndex.h, editor.slideIndex.v ?? 0, direction)) {
@@ -574,6 +599,15 @@ export function moveLayer(el, direction) {
   markDirty()
 }
 
+export function setLayerName(el, name) {
+  if (!el) return
+  snapshotSlide()
+  const value = String(name || '').trim()
+  if (value) el.setAttribute('aria-label', value)
+  else el.removeAttribute('aria-label')
+  markDirty()
+}
+
 // --- alignment and distribution ---
 
 export function arrangeSelection(mode) {
@@ -585,6 +619,86 @@ export function arrangeSelection(mode) {
   runtime.overlay.refresh()
   markDirty()
   bumpSelection()
+  return true
+}
+
+export function selectedElementInfo() {
+  const selection = runtime.overlay?.getSelection() ?? []
+  if (selection.length !== 1) return null
+  const el = selection[0]
+  const rect = el.getBoundingClientRect()
+  const rotation = el.style.transform.match(/rotate\((-?[\d.]+)deg\)/)?.[1] || 0
+  return {
+    el,
+    x: Math.round(parseFloat(el.style.left) || 0),
+    y: Math.round(parseFloat(el.style.top) || 0),
+    width: Math.round(parseFloat(el.style.width) || rect.width),
+    height: Math.round(parseFloat(el.style.height) || rect.height),
+    rotation: Number(rotation),
+    lockRatio: el.hasAttribute('data-re-lock-ratio'),
+    group: el.classList.contains('re-group')
+  }
+}
+
+export function setElementProperties(values) {
+  const info = selectedElementInfo()
+  if (!info) return
+  snapshotSlide()
+  const { el } = info
+  if (values.x != null) el.style.left = `${Number(values.x) || 0}px`
+  if (values.y != null) el.style.top = `${Number(values.y) || 0}px`
+  if (values.width != null) el.style.width = `${Math.max(1, Number(values.width) || 1)}px`
+  if (values.height != null) el.style.height = `${Math.max(1, Number(values.height) || 1)}px`
+  if (values.rotation != null) el.style.transform = `rotate(${Number(values.rotation) || 0}deg)`
+  if (values.lockRatio != null) el.toggleAttribute('data-re-lock-ratio', Boolean(values.lockRatio))
+  runtime.overlay.reconfigure()
+  markDirty()
+  bumpSelection()
+}
+
+export function groupSelection() {
+  const selection = runtime.overlay?.getSelection() ?? []
+  if (selection.length < 2 || selection.some((el) => el.parentElement !== selection[0].parentElement)) return false
+  snapshotSlide()
+  const doc = selection[0].ownerDocument
+  const left = Math.min(...selection.map((el) => parseFloat(el.style.left) || 0))
+  const top = Math.min(...selection.map((el) => parseFloat(el.style.top) || 0))
+  const right = Math.max(...selection.map((el) => (parseFloat(el.style.left) || 0) + (parseFloat(el.style.width) || el.offsetWidth)))
+  const bottom = Math.max(...selection.map((el) => (parseFloat(el.style.top) || 0) + (parseFloat(el.style.height) || el.offsetHeight)))
+  const group = doc.createElement('div')
+  group.className = 're-el re-group'
+  Object.assign(group.style, { position: 'absolute', left: `${left}px`, top: `${top}px`, width: `${right - left}px`, height: `${bottom - top}px` })
+  selection[0].before(group)
+  for (const el of selection) {
+    el.style.left = `${(parseFloat(el.style.left) || 0) - left}px`
+    el.style.top = `${(parseFloat(el.style.top) || 0) - top}px`
+    el.classList.remove('re-el')
+    el.setAttribute('data-re-group-child', '')
+    group.appendChild(el)
+  }
+  runtime.overlay.setSelection([group])
+  markDirty()
+  return true
+}
+
+export function ungroupSelection() {
+  const selection = runtime.overlay?.getSelection() ?? []
+  const group = selection.length === 1 && selection[0].classList.contains('re-group') ? selection[0] : null
+  if (!group) return false
+  snapshotSlide()
+  const left = parseFloat(group.style.left) || 0
+  const top = parseFloat(group.style.top) || 0
+  const children = [...group.children]
+  for (const child of children) {
+    child.style.left = `${left + (parseFloat(child.style.left) || 0)}px`
+    child.style.top = `${top + (parseFloat(child.style.top) || 0)}px`
+    child.classList.add('re-el')
+    child.removeAttribute('data-re-group-child')
+    group.before(child)
+  }
+  group.remove()
+  runtime.overlay.setSelection(children)
+  markDirty()
   return true
 }
 

@@ -88,7 +88,8 @@
           editor.selectionTag = targets[0]?.tagName.toLowerCase() ?? ''
           editor.selectionVersion++
           if (targets.length === 1 && editor.selectionTag === 'img') editor.sidePanel = 'image'
-          else if (editor.sidePanel === 'image') editor.sidePanel = null
+          else if (targets.length === 1) editor.sidePanel = 'element'
+          else if (editor.sidePanel === 'image' || editor.sidePanel === 'element') editor.sidePanel = null
         },
         onBeforeEdit() {
           snapshotSlide()

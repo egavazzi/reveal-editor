@@ -96,6 +96,11 @@ this editor.
 - **Layers**: open the Layers panel to select, reorder, show/hide, and
   lock/unlock objects; quick bring-to-front/send-to-back buttons remain in
   the context bar
+- **Composition**: align/distribute multi-selections, group/ungroup elements,
+  edit exact geometry and rotation, lock resize aspect ratios, and give layers
+  accessible names
+- **Layouts/templates**: create slides from built-in layouts or save the
+  current slide as a reusable browser-local template
 - **Images**: select an image to set exact dimensions, crop position,
   border, corner radius, shadow, and a presentation link
 - **Deck setup**: the Deck panel controls the reveal theme, canvas format/size

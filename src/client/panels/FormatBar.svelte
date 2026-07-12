@@ -4,7 +4,7 @@
     applyFormat, setFontSize, setTextColor,
     toggleFragment, setFragmentIndex, bringToFront, sendToBack,
     currentSlideTransition, setCurrentSlideTransition,
-    slideBackground, selectionInfo, arrangeSelection
+    slideBackground, selectionInfo, arrangeSelection, groupSelection, ungroupSelection
   } from '../lib/actions.js'
 
   // Prevent toolbar clicks from stealing focus/selection from the
@@ -86,6 +86,10 @@
         <button title="Align top" onclick={() => arrangeSelection('top')}>⤒</button>
         <button title="Align vertical centers" onclick={() => arrangeSelection('middle')}>↕</button>
         <button title="Align bottom" onclick={() => arrangeSelection('bottom')}>⤓</button>
+        <button title="Group selected elements" onclick={groupSelection}>Group</button>
+      {/if}
+      {#if editor.selectionCount === 1 && editor.selectionTag === 'div'}
+        <button title="Ungroup selected group" onclick={ungroupSelection}>Ungroup</button>
       {/if}
       {#if editor.selectionCount > 2}
         <button title="Distribute horizontally" onclick={() => arrangeSelection('distribute-horizontal')}>⇹</button>

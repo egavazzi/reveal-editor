@@ -44,10 +44,10 @@ should not grow a second source model or attempt to rewrite QMD.
 ### 3. Strengthen visual composition
 
 - [x] Add multi-selection alignment and distribution.
-- [ ] Add aspect-ratio locking and numeric position/rotation controls.
-- [ ] Add grouping without introducing opaque saved markup.
-- [ ] Add reusable user-defined slide templates.
-- [ ] Improve layer naming and accessibility labels.
+- [x] Add aspect-ratio locking and numeric position/rotation controls.
+- [x] Add grouping without introducing opaque saved markup.
+- [x] Add reusable user-defined slide templates.
+- [x] Improve layer naming and accessibility labels.
 
 ### 4. Interoperate without becoming Quarto
 

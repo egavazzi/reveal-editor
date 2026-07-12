@@ -3,13 +3,18 @@
   import { editor, runtime } from '../stores/editor.svelte.js'
   import {
     slideSummaries, slideAdd, slideAddVertical, slideApplyLayout, slideDuplicate,
-    slideDelete, slideDemote, slideGoTo, slideMove, slidePromote, slideReorder
+    slideAddTemplate, slideDelete, slideDemote, slideGoTo, slideMove, slidePromote,
+    slideReorder, saveCurrentSlideTemplate
   } from '../lib/actions.js'
   import { getCanvasSize } from '../lib/overlay/editmode.js'
   import { isSlideEmpty, SLIDE_LAYOUTS } from '../lib/model/layouts.js'
+  import { loadSlideTemplates } from '../lib/model/templates.js'
 
   let items = $state([])
   let layout = $state('blank')
+  let templateName = $state('')
+  let templateId = $state('')
+  let templates = $state(loadSlideTemplates())
   const currentEmpty = $derived.by(() => {
     void editor.docVersion
     void editor.slideIndex.h
@@ -37,6 +42,14 @@
       return
     }
     slideReorder(items.map((it) => it.index))
+  }
+
+  function saveTemplate() {
+    if (saveCurrentSlideTemplate(templateName)) {
+      templates = loadSlideTemplates()
+      templateId = templates.at(-1)?.id || ''
+      templateName = ''
+    }
   }
 </script>
 
@@ -92,6 +105,17 @@
       onclick={slideDelete}
       disabled={!editor.ready || editor.slideCount <= 1}
     >🗑</button>
+  </div>
+  <div class="templates">
+    <input aria-label="New template name" placeholder="Template name" bind:value={templateName} />
+    <button title="Save current slide as template" onclick={saveTemplate} disabled={!editor.ready}>Save template</button>
+    {#if templates.length}
+      <select aria-label="Saved slide template" bind:value={templateId}>
+        <option value="">Saved templates…</option>
+        {#each templates as template}<option value={template.id}>{template.name}</option>{/each}
+      </select>
+      <button title="Add slide from saved template" onclick={() => slideAddTemplate(templateId)} disabled={!templateId}>Add template</button>
+    {/if}
   </div>
 </aside>
 
@@ -195,4 +219,7 @@
     opacity: 0.4;
     cursor: default;
   }
+  .templates { display: grid; grid-template-columns: 1fr; gap: 5px; padding: 8px 10px; border-top: 1px solid #131418; }
+  .templates input, .templates select { min-width: 0; background: #34353d; color: #d6d7dc; border: 1px solid #45464f; border-radius: 5px; padding: 4px; }
+  .templates button { background: #34353d; color: #d6d7dc; border: 1px solid #45464f; border-radius: 5px; padding: 4px; }
 </style>
