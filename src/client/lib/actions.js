@@ -18,7 +18,9 @@ import { snapshot, undo as histUndo, redo as histRedo } from './history/history.
 import { cleanElementHtml } from './model/clean.js'
 import { rehydrate } from './model/rehydrate.js'
 import { saveDeck } from './model/save.js'
-import { updateSettings as updateSettingsModel } from './model/settings.js'
+import {
+  initializeSettings, updateSettings as updateSettingsModel, writeSettings
+} from './model/settings.js'
 export { saveDeck } from './model/save.js'
 export { slideSummaries } from './model/slides.js'
 
@@ -31,14 +33,17 @@ export function snapshotDeck() {
 }
 
 export function undoAction() {
-  if (histUndo(runtime.bridge)) afterHistory()
+  const entry = histUndo(runtime.bridge)
+  if (entry) afterHistory(entry)
 }
 
 export function redoAction() {
-  if (histRedo(runtime.bridge)) afterHistory()
+  const entry = histRedo(runtime.bridge)
+  if (entry) afterHistory(entry)
 }
 
-function afterHistory() {
+function afterHistory(entry) {
+  if (entry.scope.type === 'deck') initializeSettings(runtime.bridge, entry.settings)
   runtime.overlay.setSelection([])
   editor.slideCount = runtime.bridge.getSections().length
   editor.slideIndex = runtime.bridge.getIndex()
@@ -57,6 +62,7 @@ export function markDirty() {
 }
 
 export function updateDeckSettings(patch) {
+  snapshotDeck()
   updateSettingsModel(patch)
   markDirty()
 }
@@ -449,8 +455,8 @@ export function selectedImageInfo() {
     width: Math.round(parseFloat(el.style.width) || el.getBoundingClientRect().width),
     height: Math.round(parseFloat(el.style.height) || el.getBoundingClientRect().height),
     crop: el.style.objectFit === 'cover',
-    cropX: parseFloat(position[0]) || 50,
-    cropY: parseFloat(position[1]) || 50,
+    cropX: Number.isFinite(parseFloat(position[0])) ? parseFloat(position[0]) : 50,
+    cropY: Number.isFinite(parseFloat(position[1])) ? parseFloat(position[1]) : 50,
     borderWidth: parseFloat(el.style.borderWidth) || 0,
     borderColor: el.style.borderColor || '#000000',
     radius: parseFloat(el.style.borderRadius) || 0,
@@ -462,7 +468,15 @@ export function selectedImageInfo() {
 export function setImageProperties(values) {
   const info = selectedImageInfo()
   if (!info) return
-  snapshotSlide()
+  let href = null
+  if (values.href != null) {
+    href = String(values.href).trim()
+    if (/^(?:javascript|data|vbscript):/i.test(href)) href = ''
+  }
+  // A saved image link needs the deck-level click runtime. Capture the whole
+  // deck so undo can also remove support nodes added by the first link.
+  if (href) snapshotDeck()
+  else snapshotSlide()
   const { el } = info
   if (values.width != null) el.style.width = `${Math.max(1, Number(values.width))}px`
   if (values.height != null) el.style.height = `${Math.max(1, Number(values.height))}px`
@@ -476,10 +490,9 @@ export function setImageProperties(values) {
   if (values.radius != null) el.style.borderRadius = `${Math.max(0, Number(values.radius))}px`
   if (values.shadow != null) el.style.boxShadow = values.shadow ? '0 8px 24px rgba(0,0,0,.35)' : ''
   if (values.href != null) {
-    let href = String(values.href).trim()
-    if (/^(?:javascript|data|vbscript):/i.test(href)) href = ''
     if (href) el.setAttribute('data-re-href', href)
     else el.removeAttribute('data-re-href')
+    if (href) writeSettings(runtime.bridge.slidesEl, editor.settings)
   }
   runtime.overlay.refresh()
   markDirty()

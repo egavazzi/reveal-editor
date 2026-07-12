@@ -83,19 +83,10 @@
       <label>Grid spacing (px)<input type="number" min="2" max="200" value={editor.settings.gridSize} onchange={(e) => updateSettings({ gridSize: +e.currentTarget.value })} /></label>
 
       <h3>Navigation arrows</h3>
-      <label class="check"><input type="checkbox" checked={editor.settings.controls} onchange={(e) => updateSettings({ controls: e.currentTarget.checked })} /> Show in presentation</label>
-      <div class="row">
-        <label>Arrow<input type="color" value={editor.settings.navColor} onchange={(e) => updateSettings({ navColor: e.currentTarget.value })} /></label>
-        <label>Background<input type="color" value={editor.settings.navBackground} onchange={(e) => updateSettings({ navBackground: e.currentTarget.value })} /></label>
-      </div>
-      <div class="row">
-        <label>Size<input type="number" min="20" max="100" value={editor.settings.navSize} onchange={(e) => updateSettings({ navSize: +e.currentTarget.value })} /></label>
-        <label>Radius<input type="number" min="0" max="50" value={editor.settings.navRadius} onchange={(e) => updateSettings({ navRadius: +e.currentTarget.value })} /></label>
-      </div>
-      <label>Opacity<input type="range" min="0.1" max="1" step="0.05" value={editor.settings.navOpacity} onchange={(e) => updateSettings({ navOpacity: +e.currentTarget.value })} /></label>
+      <label class="check"><input type="checkbox" checked={editor.settings.controls} onchange={(e) => updateSettings({ controls: e.currentTarget.checked })} /> Show navigation arrows</label>
 
       <h3>Slide numbers</h3>
-      <label class="check"><input type="checkbox" checked={editor.settings.slideNumbers} onchange={(e) => updateSettings({ slideNumbers: e.currentTarget.checked })} /> Show in presentation</label>
+      <label class="check"><input type="checkbox" checked={editor.settings.slideNumbers} onchange={(e) => updateSettings({ slideNumbers: e.currentTarget.checked })} /> Show slide numbers</label>
       <label>Format<select value={editor.settings.slideNumberFormat} onchange={(e) => updateSettings({ slideNumberFormat: e.currentTarget.value })}>
         <option value="c">Current</option><option value="c/t">Current / total</option><option value="h.v">Horizontal.vertical</option>
       </select></label>

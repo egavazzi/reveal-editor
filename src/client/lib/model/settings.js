@@ -11,11 +11,6 @@ export const DEFAULT_SETTINGS = Object.freeze({
   snapGrid: false,
   gridSize: 20,
   controls: true,
-  navColor: '#2f6fba',
-  navBackground: '#ffffff',
-  navSize: 40,
-  navRadius: 8,
-  navOpacity: 0.85,
   slideNumbers: false,
   slideNumberFormat: 'c/t',
   slideNumberPosition: 'bottom-right'
@@ -24,12 +19,41 @@ export const DEFAULT_SETTINGS = Object.freeze({
 const TEMPLATE_SELECTOR = 'template[data-re-settings]'
 const STYLE_SELECTOR = 'style[data-re-settings-style]'
 const SCRIPT_SELECTOR = 'script[data-re-settings-runtime]'
+const PREVIEW_STYLE_ID = 're-settings-preview-style'
+
+export function hasStoredSettings(slidesEl) {
+  return Boolean(slidesEl?.querySelector(TEMPLATE_SELECTOR))
+}
+
+export function settingsFromRevealConfig(config = {}) {
+  return {
+    ...DEFAULT_SETTINGS,
+    width: Number(config.width) || DEFAULT_SETTINGS.width,
+    height: Number(config.height) || DEFAULT_SETTINGS.height,
+    margin: Number.isFinite(Number(config.margin))
+      ? Number(config.margin) * 100
+      : DEFAULT_SETTINGS.margin,
+    controls: config.controls !== false,
+    slideNumbers: Boolean(config.slideNumber),
+    slideNumberFormat: typeof config.slideNumber === 'string'
+      ? config.slideNumber
+      : DEFAULT_SETTINGS.slideNumberFormat
+  }
+}
 
 export function readSettings(slidesEl) {
   const template = slidesEl?.querySelector(TEMPLATE_SELECTOR)
   if (!template) return { ...DEFAULT_SETTINGS }
   try {
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(template.innerHTML) }
+    const settings = { ...DEFAULT_SETTINGS, ...JSON.parse(template.innerHTML) }
+    // Drop navigation appearance fields written by older builds. Reveal's
+    // native controls automatically adapt to light and dark backgrounds.
+    delete settings.navColor
+    delete settings.navBackground
+    delete settings.navSize
+    delete settings.navRadius
+    delete settings.navOpacity
+    return settings
   } catch {
     return { ...DEFAULT_SETTINGS }
   }
@@ -38,11 +62,11 @@ export function readSettings(slidesEl) {
 function settingsCss(s) {
   const [vertical, horizontal] = s.slideNumberPosition.split('-')
   const v = vertical === 'top' ? 'top: 12px; bottom: auto' : 'bottom: 12px; top: auto'
-  const h = horizontal === 'left' ? 'left: 12px; right: auto' : 'right: 12px; left: auto'
+  const right = s.controls && vertical !== 'top' ? 100 : 12
+  const h = horizontal === 'left' ? 'left: 12px; right: auto' : `right: ${right}px; left: auto`
   return `
-body:not(.re-edit-mode) .reveal .controls { display: ${s.controls ? 'block' : 'none'} !important; opacity: ${s.navOpacity}; }
-body:not(.re-edit-mode) .reveal .controls button { color: ${s.navColor}; width: ${s.navSize}px; height: ${s.navSize}px; border-radius: ${s.navRadius}px; background: ${s.navBackground}; }
-body:not(.re-edit-mode) .reveal .slide-number { ${v}; ${h}; }
+${s.controls ? '' : '.reveal .controls { display: none !important; }'}
+.reveal .slide-number { ${v}; ${h}; }
 .reveal [data-re-href] { cursor: pointer; }
 `.trim()
 }
@@ -56,7 +80,10 @@ const RUNTIME_SCRIPT = `(() => {
     let s = {}; try { s = JSON.parse(node.innerHTML); } catch {}
     Reveal.configure({ width: s.width || 960, height: s.height || 700,
       margin: (s.margin ?? 4) / 100, controls: s.controls !== false,
-      slideNumber: s.slideNumbers ? (s.slideNumberFormat || 'c/t') : false });
+      slideNumber: s.slideNumbers ? (s.slideNumberFormat || 'c/t') : false,
+      showSlideNumber: 'all' });
+    const controls = document.querySelector('.reveal .controls');
+    if (controls && s.controls === false) controls.style.setProperty('display', 'none', 'important');
     Reveal.layout();
     if (!location.search.includes('editmode=1')) {
       document.addEventListener('click', e => {
@@ -94,8 +121,14 @@ export function writeSettings(slidesEl, settings) {
   script.textContent = RUNTIME_SCRIPT
 }
 
-export function initializeSettings(bridge) {
-  editor.settings = readSettings(bridge.slidesEl)
+export function initializeSettings(bridge, fallbackSettings = null) {
+  const stored = hasStoredSettings(bridge.slidesEl)
+  editor.settings = stored
+    ? readSettings(bridge.slidesEl)
+    : { ...(fallbackSettings || settingsFromRevealConfig(bridge.config())) }
+  // Refresh derived support nodes for managed decks. This also removes
+  // obsolete navigation styling produced by older editor builds.
+  if (stored) writeSettings(bridge.slidesEl, editor.settings)
   applySettings(bridge)
 }
 
@@ -109,14 +142,24 @@ export function updateSettings(patch) {
 export function applySettings(bridge) {
   if (!bridge) return
   const s = editor.settings
+  const controls = bridge.doc.querySelector('.reveal .controls')
+  if (s.controls) controls?.style.removeProperty('display')
   bridge.Reveal.configure({
     width: Number(s.width) || 960,
     height: Number(s.height) || 700,
     margin: Math.max(0, Number(s.margin) || 0) / 100,
-    controls: false, // editor chrome always hides presentation controls
-    slideNumber: false
+    controls: Boolean(s.controls),
+    slideNumber: s.slideNumbers ? (s.slideNumberFormat || 'c/t') : false,
+    showSlideNumber: 'all'
   })
-  writeSettings(bridge.slidesEl, s)
+  if (!s.controls) controls?.style.setProperty('display', 'none', 'important')
+  let previewStyle = bridge.doc.getElementById(PREVIEW_STYLE_ID)
+  if (!previewStyle) {
+    previewStyle = bridge.doc.createElement('style')
+    previewStyle.id = PREVIEW_STYLE_ID
+    bridge.doc.head.appendChild(previewStyle)
+  }
+  previewStyle.textContent = settingsCss(s)
   bridge.doc.documentElement.style.setProperty('--re-grid-size', `${s.gridSize}px`)
   bridge.doc.documentElement.style.setProperty('--re-safe-margin', `${s.margin}%`)
   bridge.doc.body.classList.toggle('re-show-grid', Boolean(s.showGrid))

@@ -5,7 +5,7 @@
   import { stashPristineState } from './lib/model/stash.js'
   import { saveDeck } from './lib/model/save.js'
   import { enterEditMode } from './lib/overlay/editmode.js'
-  import { initializeSettings } from './lib/model/settings.js'
+  import { initializeSettings, settingsFromRevealConfig } from './lib/model/settings.js'
   import { createOverlay } from './lib/overlay/overlay.js'
   import {
     editElement, handlePaste, snapshotSlide, undoAction, redoAction,
@@ -73,8 +73,9 @@
       const bridge = await connectDeck(node)
       runtime.bridge = bridge
       stashPristineState(bridge.slidesEl, pristineHtml)
+      const initialSettings = settingsFromRevealConfig(bridge.config())
       runtime.editMode = enterEditMode(bridge)
-      initializeSettings(bridge)
+      initializeSettings(bridge, initialSettings)
       runtime.overlay = createOverlay(bridge, {
         onSelectionChange(targets) {
           editor.selectionCount = targets.length

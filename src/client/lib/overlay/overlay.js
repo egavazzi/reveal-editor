@@ -154,7 +154,7 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
       // don't start rubber band from an element or the moveable box
       const section = currentSection()
       if (
-        e.inputEvent.target.closest?.('.moveable-control-box, .re-moveable') ||
+        e.inputEvent.target.closest?.('.moveable-control-box, .re-moveable, .controls, .slide-number') ||
         (section && resolveEditable(e.inputEvent.target, section))
       ) {
         e.stop()

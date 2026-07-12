@@ -96,7 +96,7 @@ this editor.
 - **Images**: select an image to set exact dimensions, crop position,
   border, corner radius, shadow, and a presentation link
 - **Deck setup**: the Deck panel controls canvas format/size and margins,
-  editor grid display/snapping, navigation-arrow appearance, and slide
+  editor grid display/snapping, navigation-arrow visibility, and slide
   number format/position
 - **Save**: Ctrl+S or the Save button; optional autosave toggle
 - **Undo/redo**: Ctrl+Z / Ctrl+Shift+Z, ~100 steps
