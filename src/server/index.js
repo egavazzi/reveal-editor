@@ -1,0 +1,98 @@
+import express from 'express'
+import { readFile, stat } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
+import { loadDeck, saveDeck } from './deck.js'
+import { assetsRouter } from './assets.js'
+import { scaffoldDeck } from './scaffold.js'
+import { watchDeck } from './watch.js'
+
+export async function createServer({ deckPath, port = 3737, dev = false, repoRoot }) {
+  const app = express()
+  const deckDir = dirname(deckPath)
+  const deckFile = basename(deckPath)
+
+  app.use(express.json({ limit: '50mb' }))
+
+  // --- API ---
+  app.get('/api/deck', async (req, res) => {
+    try {
+      const { html, mtimeMs } = await loadDeck(deckPath)
+      res.json({ file: deckFile, html, mtimeMs })
+    } catch (err) {
+      res.status(500).json({ error: String(err.message ?? err) })
+    }
+  })
+
+  app.put('/api/deck', async (req, res) => {
+    const { slidesHtml, baseMtimeMs } = req.body ?? {}
+    if (typeof slidesHtml !== 'string') {
+      return res.status(400).json({ error: 'missing slidesHtml' })
+    }
+    try {
+      const current = await stat(deckPath)
+      if (baseMtimeMs != null && Math.abs(current.mtimeMs - baseMtimeMs) > 1) {
+        return res.status(409).json({ error: 'deck changed on disk', mtimeMs: current.mtimeMs })
+      }
+      const { mtimeMs } = await saveDeck(deckPath, slidesHtml)
+      res.json({ ok: true, mtimeMs })
+    } catch (err) {
+      res.status(500).json({ error: String(err.message ?? err) })
+    }
+  })
+
+  app.use('/api/assets', assetsRouter(deckDir))
+
+  app.post('/api/deck/new', async (req, res) => {
+    try {
+      const created = await scaffoldDeck(join(deckDir, req.body?.dir ?? 'new-deck'))
+      res.json({ ok: true, path: created })
+    } catch (err) {
+      res.status(500).json({ error: String(err.message ?? err) })
+    }
+  })
+
+  app.get('/api/events', (req, res) => {
+    res.set({
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive'
+    })
+    res.flushHeaders()
+    const unsubscribe = watchDeck(deckPath, (event) => {
+      res.write(`data: ${JSON.stringify(event)}\n\n`)
+    })
+    req.on('close', unsubscribe)
+  })
+
+  // --- Deck folder (same-origin iframe source) ---
+  app.use('/deck', express.static(deckDir, { fallthrough: false, index: false }))
+
+  // --- Editor UI ---
+  if (dev) {
+    const { createServer: createViteServer } = await import('vite')
+    const vite = await createViteServer({
+      configFile: join(repoRoot, 'vite.config.js'),
+      server: { middlewareMode: true },
+      appType: 'spa'
+    })
+    app.use(vite.middlewares)
+  } else {
+    const dist = join(repoRoot, 'dist')
+    if (!existsSync(join(dist, 'index.html'))) {
+      throw new Error(`Editor UI not built (${dist} missing). Run: npm run build — or use --dev.`)
+    }
+    app.use(express.static(dist))
+    app.get('/{*any}', async (req, res) => {
+      res.type('html').send(await readFile(join(dist, 'index.html'), 'utf8'))
+    })
+  }
+
+  const server = await new Promise((resolvePromise, reject) => {
+    const s = app.listen(port, '127.0.0.1', () => resolvePromise(s))
+    s.on('error', reject)
+  })
+
+  const url = `http://127.0.0.1:${server.address().port}/`
+  return { app, server, url }
+}

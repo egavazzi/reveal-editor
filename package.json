@@ -1,0 +1,46 @@
+{
+  "name": "reveal-editor",
+  "version": "0.1.0",
+  "description": "Local WYSIWYG editor for reveal.js presentations. Decks stay plain, hand-editable HTML.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "reveal-editor": "bin/reveal-editor.js"
+  },
+  "scripts": {
+    "edit": "node bin/reveal-editor.js",
+    "new": "node bin/reveal-editor.js new",
+    "dev": "node bin/reveal-editor.js --dev",
+    "build": "vite build",
+    "vendor": "node scripts/vendor.js",
+    "test": "vitest run",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "chokidar": "^4.0.3",
+    "express": "^5.1.0",
+    "open": "^10.1.0",
+    "parse5": "^7.2.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.53.0",
+    "@sveltejs/vite-plugin-svelte": "^5.0.3",
+    "@tiptap/core": "^2.11.5",
+    "@tiptap/extension-color": "^2.11.5",
+    "@tiptap/extension-text-style": "^2.11.5",
+    "@tiptap/extension-underline": "^2.11.5",
+    "@tiptap/starter-kit": "^2.11.5",
+    "happy-dom": "^17.4.4",
+    "katex": "^0.16.21",
+    "moveable": "^0.53.0",
+    "reveal.js": "^5.2.1",
+    "selecto": "^1.26.3",
+    "svelte": "^5.20.0",
+    "svelte-dnd-action": "^0.9.61",
+    "vite": "^6.2.0",
+    "vitest": "^3.0.8"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
