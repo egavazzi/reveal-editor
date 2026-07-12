@@ -15,7 +15,9 @@ export const editor = $state({
   selectionCount: 0,
   selectionTag: '',
   textEditing: false,
-  popover: null // { type: 'math' | 'code', value, lang }
+  popover: null, // { type: 'math' | 'code', value, lang }
+  // bumped whenever slide content changes; sidebar re-derives thumbnails
+  docVersion: 0
 })
 
 // Non-reactive handles to live DOM machinery (never proxied by Svelte).

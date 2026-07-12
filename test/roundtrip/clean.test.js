@@ -22,6 +22,14 @@ describe('cleanSlides', () => {
     expect(out).toBe('<section><h2>t</h2></section>')
   })
 
+  it('strips reveal background helper classes but keeps the background attrs', () => {
+    const slides = makeSlides(
+      '<section class="re-slide has-light-background present" data-background-color="#eef4fb"></section>'
+    )
+    const out = cleanSlides(slides)
+    expect(out).toBe('<section class="re-slide" data-background-color="#eef4fb"></section>')
+  })
+
   it('keeps authored section classes and styles', () => {
     const slides = makeSlides(
       '<section class="re-slide past" data-background-color="#001122" style="display: block; filter: blur(1px)"><h2>t</h2></section>'

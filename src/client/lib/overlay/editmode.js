@@ -58,6 +58,19 @@ export function applyStageScale(bridge) {
   slides.style.top = '50%'
   slides.style.transform = `translate(-50%, -50%) scale(${scale})`
   slides.style.transformOrigin = 'center'
+
+  // Pin reveal's background layer (a sibling of .slides) to the same
+  // canvas geometry so slide backgrounds don't flood the whole stage.
+  const backgrounds = bridge.doc.querySelector('.reveal .backgrounds')
+  if (backgrounds) {
+    backgrounds.style.width = `${width}px`
+    backgrounds.style.height = `${height}px`
+    backgrounds.style.position = 'absolute'
+    backgrounds.style.left = '50%'
+    backgrounds.style.top = '50%'
+    backgrounds.style.transform = `translate(-50%, -50%) scale(${scale})`
+    backgrounds.style.transformOrigin = 'center'
+  }
 }
 
 function injectEditStyles(doc) {

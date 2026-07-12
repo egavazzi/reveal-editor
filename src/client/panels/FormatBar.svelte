@@ -1,6 +1,10 @@
 <script>
   import { editor } from '../stores/editor.svelte.js'
-  import { applyFormat, setFontSize, setTextColor } from '../lib/actions.js'
+  import {
+    applyFormat, setFontSize, setTextColor,
+    toggleFragment, setFragmentIndex, bringToFront, sendToBack,
+    slideBackground, selectionInfo
+  } from '../lib/actions.js'
 
   // Prevent toolbar clicks from stealing focus/selection from the
   // contenteditable element inside the iframe.
@@ -8,10 +12,14 @@
     e.preventDefault()
   }
 
-  const visible = $derived(editor.textEditing || editor.selectionCount > 0)
+  const info = $derived.by(() => {
+    void editor.selectionCount
+    void editor.docVersion
+    return selectionInfo()
+  })
 </script>
 
-{#if visible}
+{#if editor.ready}
   <div class="formatbar" role="toolbar" tabindex="-1" onmousedown={keepFocus}>
     {#if editor.textEditing}
       <button title="Bold (Ctrl+B)" onclick={() => applyFormat('bold')}><b>B</b></button>
@@ -22,20 +30,55 @@
       <button title="Clear formatting" onclick={() => applyFormat('removeFormat')}>⌫fmt</button>
       <span class="sep"></span>
     {/if}
-    <label>
-      size
-      <input
-        type="number"
-        min="8"
-        max="200"
-        placeholder="px"
-        onchange={(e) => setFontSize(Number(e.currentTarget.value))}
-      />
-    </label>
-    <label>
-      color
-      <input type="color" onchange={(e) => setTextColor(e.currentTarget.value)} />
-    </label>
+
+    {#if editor.textEditing || editor.selectionCount > 0}
+      <label>
+        size
+        <input
+          type="number"
+          min="8"
+          max="200"
+          placeholder="px"
+          onchange={(e) => setFontSize(Number(e.currentTarget.value))}
+        />
+      </label>
+      <label>
+        color
+        <input type="color" onchange={(e) => setTextColor(e.currentTarget.value)} />
+      </label>
+    {/if}
+
+    {#if editor.selectionCount > 0 && !editor.textEditing}
+      <span class="sep"></span>
+      <label class="check">
+        <input type="checkbox" checked={info.isFragment} onchange={toggleFragment} />
+        fragment
+      </label>
+      {#if info.isFragment}
+        <label>
+          order
+          <input
+            type="number"
+            min="0"
+            placeholder="auto"
+            value={info.fragmentIndex}
+            onchange={(e) =>
+              setFragmentIndex(e.currentTarget.value === '' ? null : Number(e.currentTarget.value))}
+          />
+        </label>
+      {/if}
+      <span class="sep"></span>
+      <button title="Bring to front" onclick={bringToFront}>⬆ front</button>
+      <button title="Send to back" onclick={sendToBack}>⬇ back</button>
+    {/if}
+
+    {#if editor.selectionCount === 0 && !editor.textEditing}
+      <label>
+        slide background
+        <input type="color" onchange={(e) => slideBackground(e.currentTarget.value)} />
+      </label>
+      <button title="Clear background" onclick={() => slideBackground('')}>clear</button>
+    {/if}
   </div>
 {/if}
 
@@ -47,6 +90,7 @@
     padding: 6px 14px;
     background: #2b2c33;
     border-bottom: 1px solid #131418;
+    min-height: 26px;
   }
   button {
     background: #34353d;
@@ -72,6 +116,9 @@
     gap: 4px;
     color: #9a9ba3;
     font-size: 12px;
+  }
+  label.check {
+    cursor: pointer;
   }
   input[type='number'] {
     width: 60px;

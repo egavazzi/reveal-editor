@@ -11,6 +11,7 @@
   import Toolbar from './panels/Toolbar.svelte'
   import FormatBar from './panels/FormatBar.svelte'
   import PopoverEditor from './panels/PopoverEditor.svelte'
+  import Sidebar from './panels/Sidebar.svelte'
 
   let iframeSrc = $state('')
   let pristineHtml = ''
@@ -79,13 +80,16 @@
   <Toolbar />
   <FormatBar />
 
-  <main class="stage">
-    {#if editor.error}
-      <div class="error-banner">{editor.error}</div>
-    {:else if iframeSrc}
-      <iframe src={iframeSrc} title="presentation" use:onIframeSrcSet></iframe>
-    {/if}
-  </main>
+  <div class="body">
+    <Sidebar />
+    <main class="stage">
+      {#if editor.error}
+        <div class="error-banner">{editor.error}</div>
+      {:else if iframeSrc}
+        <iframe src={iframeSrc} title="presentation" use:onIframeSrcSet></iframe>
+      {/if}
+    </main>
+  </div>
 
   <PopoverEditor />
 
@@ -118,6 +122,11 @@
     color: #d6d7dc;
     font-family: system-ui, sans-serif;
     font-size: 14px;
+  }
+  .body {
+    flex: 1;
+    display: flex;
+    min-height: 0;
   }
   .stage {
     flex: 1;

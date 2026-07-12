@@ -5,7 +5,10 @@
 import { CODE_SRC_ATTR, FRAG_AUTO_ATTR } from './stash.js'
 
 // Classes reveal.js adds to sections/fragments at runtime.
-const RUNTIME_SECTION_CLASSES = ['past', 'present', 'future', 'stack', 'overflowing']
+const RUNTIME_SECTION_CLASSES = [
+  'past', 'present', 'future', 'stack', 'overflowing',
+  'has-light-background', 'has-dark-background'
+]
 const RUNTIME_FRAGMENT_CLASSES = ['visible', 'current-fragment']
 // Classes highlight.js adds to code elements at runtime.
 const RUNTIME_CODE_CLASSES = ['hljs']
