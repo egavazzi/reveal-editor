@@ -8,6 +8,23 @@ export const REVEAL_THEMES = Object.freeze([
   'solarized', 'moon', 'dracula', 'blood', 'black-contrast', 'white-contrast'
 ])
 
+export const TYPOGRAPHY_PRESETS = Object.freeze([
+  { id: '', label: 'Theme default' },
+  { id: 'system', label: 'Modern system' },
+  { id: 'serif', label: 'Classic serif' },
+  { id: 'geometric', label: 'Geometric sans' },
+  { id: 'mono', label: 'Technical mono' }
+])
+
+const TYPOGRAPHY_CSS = {
+  system: ['system-ui, sans-serif', 'system-ui, sans-serif', 'ui-monospace, monospace'],
+  serif: ['Georgia, serif', 'Georgia, serif', 'ui-monospace, monospace'],
+  geometric: ['Avenir Next, Avenir, Century Gothic, system-ui, sans-serif',
+    'Avenir Next, Avenir, Century Gothic, system-ui, sans-serif', 'ui-monospace, monospace'],
+  mono: ['ui-monospace, SFMono-Regular, Consolas, monospace',
+    'ui-monospace, SFMono-Regular, Consolas, monospace', 'ui-monospace, monospace']
+}
+
 export const DEFAULT_SETTINGS = Object.freeze({
   width: 960,
   height: 700,
@@ -19,7 +36,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   slideNumbers: false,
   slideNumberFormat: 'c/t',
   slideNumberPosition: 'bottom-right',
-  theme: ''
+  theme: '',
+  typography: ''
 })
 
 const TEMPLATE_SELECTOR = 'template[data-re-settings]'
@@ -94,10 +112,15 @@ function settingsCss(s) {
   const v = vertical === 'top' ? 'top: 12px; bottom: auto' : 'bottom: 12px; top: auto'
   const right = s.controls && vertical !== 'top' ? 100 : 12
   const h = horizontal === 'left' ? 'left: 12px; right: auto' : `right: ${right}px; left: auto`
+  const fonts = TYPOGRAPHY_CSS[s.typography]
+  const typography = fonts
+    ? `.reveal { --r-main-font: ${fonts[0]}; --r-heading-font: ${fonts[1]}; --r-code-font: ${fonts[2]}; }`
+    : ''
   return `
 ${s.controls ? '' : '.reveal .controls { display: none !important; }'}
 .reveal .slide-number { ${v}; ${h}; }
 .reveal [data-re-href] { cursor: pointer; }
+${typography}
 `.trim()
 }
 

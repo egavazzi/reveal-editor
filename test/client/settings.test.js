@@ -115,4 +115,15 @@ describe('deck settings', () => {
     expect(document.getElementById('re-settings-preview-style').textContent)
       .toContain('.reveal .controls { display: none !important; }')
   })
+
+  it('persists a typography preset as reveal CSS variables', () => {
+    document.body.innerHTML = '<div class="slides"><section></section></div>'
+    const slides = document.querySelector('.slides')
+    writeSettings(slides, { ...DEFAULT_SETTINGS, typography: 'serif' })
+
+    const css = slides.querySelector('style[data-re-settings-style]').textContent
+    expect(css).toContain('--r-main-font: Georgia, serif')
+    expect(css).toContain('--r-heading-font: Georgia, serif')
+    expect(readSettings(slides).typography).toBe('serif')
+  })
 })

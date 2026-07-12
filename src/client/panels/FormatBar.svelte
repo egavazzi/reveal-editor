@@ -3,7 +3,7 @@
   import {
     applyFormat, setFontSize, setTextColor,
     toggleFragment, setFragmentIndex, bringToFront, sendToBack,
-    slideBackground, selectionInfo
+    slideBackground, selectionInfo, arrangeSelection
   } from '../lib/actions.js'
 
   // Prevent toolbar clicks from stealing focus/selection from the
@@ -71,6 +71,19 @@
       <span class="sep"></span>
       <button title="Bring to front" onclick={bringToFront}>⬆ front</button>
       <button title="Send to back" onclick={sendToBack}>⬇ back</button>
+      {#if editor.selectionCount > 1}
+        <span class="sep"></span>
+        <button title="Align left" onclick={() => arrangeSelection('left')}>⇤</button>
+        <button title="Align horizontal centers" onclick={() => arrangeSelection('center')}>↔</button>
+        <button title="Align right" onclick={() => arrangeSelection('right')}>⇥</button>
+        <button title="Align top" onclick={() => arrangeSelection('top')}>⤒</button>
+        <button title="Align vertical centers" onclick={() => arrangeSelection('middle')}>↕</button>
+        <button title="Align bottom" onclick={() => arrangeSelection('bottom')}>⤓</button>
+      {/if}
+      {#if editor.selectionCount > 2}
+        <button title="Distribute horizontally" onclick={() => arrangeSelection('distribute-horizontal')}>⇹</button>
+        <button title="Distribute vertically" onclick={() => arrangeSelection('distribute-vertical')}>⇳</button>
+      {/if}
     {/if}
 
     {#if editor.selectionCount === 0 && !editor.textEditing}

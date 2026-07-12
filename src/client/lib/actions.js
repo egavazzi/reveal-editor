@@ -8,6 +8,8 @@ import {
 } from './model/insert.js'
 import { startTextEdit, formatText, isEditingText, activeElement } from './editors/text.js'
 import { ensurePositioned } from './model/position.js'
+import { arrangeElements } from './model/alignment.js'
+import { applyLayout, isSlideEmpty } from './model/layouts.js'
 import {
   renderMath, getMathSource, commitMath, getCodeState, commitCode, isMathOnly
 } from './editors/mathcode.js'
@@ -83,8 +85,19 @@ export function addShape(kind) {
 
 export async function addImageBlob(blob, name) {
   try {
+    const selection = runtime.overlay?.getSelection() ?? []
+    const placeholder = selection.length === 1 && selection[0].classList.contains('re-image-placeholder')
+      ? selection[0]
+      : null
     snapshotSlide()
     const el = await insertImageBlob(runtime.bridge, blob, name)
+    if (placeholder?.isConnected) {
+      for (const prop of ['left', 'top', 'width', 'height']) {
+        if (placeholder.style[prop]) el.style[prop] = placeholder.style[prop]
+      }
+      el.style.objectFit = 'contain'
+      placeholder.remove()
+    }
     runtime.overlay.setSelection([el])
     markDirty()
   } catch (err) {
@@ -288,10 +301,25 @@ export function setTextColor(color) {
 
 // --- slides ---
 
-export function slideAdd() {
+export function slideAdd(layout = 'blank') {
   snapshotDeck()
-  addSlide(runtime.bridge, editor.slideIndex.h)
+  const section = addSlide(runtime.bridge, editor.slideIndex.h)
+  applyLayout(section, layout, editor.settings)
   refreshSlideState()
+}
+
+export function slideApplyLayout(layout) {
+  const section = runtime.bridge.currentSection
+  if (!isSlideEmpty(section)) {
+    editor.statusMessage = 'Layout presets can only be applied to an empty slide.'
+    return false
+  }
+  snapshotSlide()
+  const elements = applyLayout(section, layout, editor.settings)
+  runtime.bridge.sync()
+  runtime.overlay.setSelection(elements.filter((el) => !el.classList.contains('re-transient')))
+  markDirty()
+  return true
 }
 
 export function slideDuplicate() {
@@ -441,6 +469,20 @@ export function moveLayer(el, direction) {
   if (direction === 'down' && el.previousElementSibling) el.previousElementSibling.before(el)
   runtime.overlay.refresh()
   markDirty()
+}
+
+// --- alignment and distribution ---
+
+export function arrangeSelection(mode) {
+  const selection = runtime.overlay?.getSelection() ?? []
+  if (selection.length < 2) return false
+  snapshotSlide()
+  for (const el of selection) ensurePositioned(el, runtime.bridge)
+  if (!arrangeElements(selection, mode)) return false
+  runtime.overlay.refresh()
+  markDirty()
+  bumpSelection()
+  return true
 }
 
 // --- image properties ---

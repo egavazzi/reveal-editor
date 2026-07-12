@@ -1,6 +1,6 @@
 <script>
   import { editor } from '../stores/editor.svelte.js'
-  import { REVEAL_THEMES } from '../lib/model/settings.js'
+  import { REVEAL_THEMES, TYPOGRAPHY_PRESETS } from '../lib/model/settings.js'
   import {
     currentLayers, selectLayer, toggleLayerHidden, toggleLayerLocked, moveLayer,
     selectedImageInfo, setImageProperties, updateDeckSettings as updateSettings
@@ -71,6 +71,13 @@
           {/if}
           {#each REVEAL_THEMES as theme}
             <option value={theme}>{theme.replaceAll('-', ' ')}</option>
+          {/each}
+        </select>
+      </label>
+      <label>Typography
+        <select value={editor.settings.typography} onchange={(e) => updateSettings({ typography: e.currentTarget.value })}>
+          {#each TYPOGRAPHY_PRESETS as preset}
+            <option value={preset.id}>{preset.label}</option>
           {/each}
         </select>
       </label>

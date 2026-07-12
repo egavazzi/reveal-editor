@@ -2,11 +2,18 @@
   import { dndzone } from 'svelte-dnd-action'
   import { editor, runtime } from '../stores/editor.svelte.js'
   import {
-    slideSummaries, slideAdd, slideDuplicate, slideDelete, slideGoTo, slideReorder
+    slideSummaries, slideAdd, slideApplyLayout, slideDuplicate, slideDelete, slideGoTo, slideReorder
   } from '../lib/actions.js'
   import { getCanvasSize } from '../lib/overlay/editmode.js'
+  import { isSlideEmpty, SLIDE_LAYOUTS } from '../lib/model/layouts.js'
 
   let items = $state([])
+  let layout = $state('blank')
+  const currentEmpty = $derived.by(() => {
+    void editor.docVersion
+    void editor.slideIndex.h
+    return Boolean(runtime.bridge?.currentSection && isSlideEmpty(runtime.bridge.currentSection))
+  })
 
   $effect(() => {
     // re-derive whenever content or structure changes
@@ -60,7 +67,13 @@
     {/each}
   </div>
   <div class="actions">
-    <button title="Add slide" onclick={slideAdd} disabled={!editor.ready}>+</button>
+    <select title="New slide layout" bind:value={layout} disabled={!editor.ready}>
+      {#each SLIDE_LAYOUTS as item}
+        <option value={item.id}>{item.label}</option>
+      {/each}
+    </select>
+    <button title="Add slide with selected layout" onclick={() => slideAdd(layout)} disabled={!editor.ready}>+</button>
+    <button title="Apply layout to current empty slide" onclick={() => slideApplyLayout(layout)} disabled={!editor.ready || !currentEmpty}>▦</button>
     <button title="Duplicate slide" onclick={slideDuplicate} disabled={!editor.ready}>⧉</button>
     <button
       title="Delete slide"
@@ -138,19 +151,29 @@
     pointer-events: none;
   }
   .actions {
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 6px;
     padding: 8px 10px;
     border-top: 1px solid #131418;
   }
   .actions button {
-    flex: 1;
     background: #34353d;
     color: #d6d7dc;
     border: 1px solid #45464f;
     border-radius: 6px;
     padding: 3px 0;
     cursor: pointer;
+  }
+  .actions select {
+    grid-column: 1 / -1;
+    min-width: 0;
+    width: 100%;
+    background: #34353d;
+    color: #d6d7dc;
+    border: 1px solid #45464f;
+    border-radius: 5px;
+    padding: 3px;
   }
   .actions button:hover:not(:disabled) {
     background: #3f4049;

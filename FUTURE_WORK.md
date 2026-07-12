@@ -26,11 +26,11 @@ should not grow a second source model or attempt to rewrite QMD.
 ### 1. Make reveal.js approachable
 
 - [x] Select and preview the vendored reveal.js themes.
-- [ ] Add deck typography controls with conservative system-font presets.
-- [ ] Add a small set of useful slide layouts: title, title-and-body,
+- [x] Add deck typography controls with conservative system-font presets.
+- [x] Add a small set of useful slide layouts: title, title-and-body,
       two-column, image-focus, and blank.
-- [ ] Add alignment and equal-spacing actions for selected elements.
-- [ ] Improve first-run guidance and empty-slide affordances.
+- [x] Add alignment and equal-spacing actions for selected elements.
+- [x] Improve first-run guidance and empty-slide affordances.
 
 ### 2. Complete core reveal.js authoring
 
@@ -43,7 +43,7 @@ should not grow a second source model or attempt to rewrite QMD.
 
 ### 3. Strengthen visual composition
 
-- [ ] Add multi-selection alignment and distribution.
+- [x] Add multi-selection alignment and distribution.
 - [ ] Add aspect-ratio locking and numeric position/rotation controls.
 - [ ] Add grouping without introducing opaque saved markup.
 - [ ] Add reusable user-defined slide templates.
