@@ -73,7 +73,7 @@
       const bridge = await connectDeck(node)
       runtime.bridge = bridge
       stashPristineState(bridge.slidesEl, pristineHtml)
-      const initialSettings = settingsFromRevealConfig(bridge.config())
+      const initialSettings = settingsFromRevealConfig(bridge.config(), bridge.doc)
       runtime.editMode = enterEditMode(bridge)
       initializeSettings(bridge, initialSettings)
       runtime.overlay = createOverlay(bridge, {

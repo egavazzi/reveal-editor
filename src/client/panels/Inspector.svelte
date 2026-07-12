@@ -1,5 +1,6 @@
 <script>
   import { editor } from '../stores/editor.svelte.js'
+  import { REVEAL_THEMES } from '../lib/model/settings.js'
   import {
     currentLayers, selectLayer, toggleLayerHidden, toggleLayerLocked, moveLayer,
     selectedImageInfo, setImageProperties, updateDeckSettings as updateSettings
@@ -60,6 +61,20 @@
     </section>
   {:else if editor.sidePanel === 'settings'}
     <section class="panel">
+      <h3>Appearance</h3>
+      <label>Theme
+        <select value={editor.settings.theme} onchange={(e) => updateSettings({ theme: e.currentTarget.value })}>
+          {#if !editor.settings.theme}
+            <option value="">Current deck stylesheet</option>
+          {:else if !REVEAL_THEMES.includes(editor.settings.theme)}
+            <option value={editor.settings.theme}>Custom ({editor.settings.theme})</option>
+          {/if}
+          {#each REVEAL_THEMES as theme}
+            <option value={theme}>{theme.replaceAll('-', ' ')}</option>
+          {/each}
+        </select>
+      </label>
+
       <h3>Canvas</h3>
       <label>Format
         <select onchange={setPreset}>

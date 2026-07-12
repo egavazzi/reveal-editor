@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest'
 import {
-  DEFAULT_SETTINGS, initializeSettings, readSettings,
-  settingsFromRevealConfig, writeSettings
+  DEFAULT_SETTINGS, applyTheme, initializeSettings, readSettings,
+  settingsFromRevealConfig, themeFromDocument, writeSettings
 } from '../../src/client/lib/model/settings.js'
 import { cleanSlides } from '../../src/client/lib/model/clean.js'
 
@@ -28,6 +28,20 @@ describe('deck settings', () => {
   it('falls back safely when settings JSON is malformed', () => {
     document.body.innerHTML = '<div class="slides"><template data-re-settings>{bad</template></div>'
     expect(readSettings(document.querySelector('.slides'))).toEqual({ ...DEFAULT_SETTINGS })
+  })
+
+  it('detects and previews a vendored reveal theme without changing its path', () => {
+    const link = document.createElement('link')
+    link.setAttribute('rel', 'stylesheet')
+    link.setAttribute('href', 'reveal/dist/theme/black.css?v=5')
+    const doc = { querySelector: () => link }
+
+    expect(themeFromDocument(doc)).toBe('black')
+    expect(settingsFromRevealConfig({}, doc).theme).toBe('black')
+    expect(applyTheme(doc, 'solarized')).toBe(true)
+    expect(link.getAttribute('href')).toBe('reveal/dist/theme/solarized.css?v=5')
+    expect(applyTheme(doc, '../unsafe')).toBe(false)
+    expect(link.getAttribute('href')).toBe('reveal/dist/theme/solarized.css?v=5')
   })
 
   it('preserves a foreign deck config without adding saved settings nodes', () => {

@@ -56,6 +56,23 @@ describe('settings actions', () => {
     expect(editor.settings.width).toBe(1280)
   })
 
+  it('undoes a theme change and restores the previous stylesheet', () => {
+    const link = document.createElement('link')
+    link.rel = 'stylesheet'
+    // A data URL exercises the theme-path replacement without making
+    // happy-dom fetch a nonexistent localhost stylesheet.
+    link.href = 'data:text/css,/theme/white.css'
+    document.head.appendChild(link)
+    editor.settings.theme = 'white'
+
+    updateDeckSettings({ theme: 'moon' })
+    expect(link.getAttribute('href')).toContain('/theme/moon.css')
+
+    undoAction()
+    expect(editor.settings.theme).toBe('white')
+    expect(link.getAttribute('href')).toContain('/theme/white.css')
+  })
+
   it('keeps valid zero-percent crop positions', () => {
     const image = document.createElement('img')
     image.style.objectPosition = '0% 0%'

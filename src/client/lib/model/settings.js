@@ -3,6 +3,11 @@
 // path and remain easy to inspect or edit by hand.
 import { editor, runtime } from '../../stores/editor.svelte.js'
 
+export const REVEAL_THEMES = Object.freeze([
+  'black', 'white', 'league', 'beige', 'sky', 'night', 'serif', 'simple',
+  'solarized', 'moon', 'dracula', 'blood', 'black-contrast', 'white-contrast'
+])
+
 export const DEFAULT_SETTINGS = Object.freeze({
   width: 960,
   height: 700,
@@ -13,7 +18,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   controls: true,
   slideNumbers: false,
   slideNumberFormat: 'c/t',
-  slideNumberPosition: 'bottom-right'
+  slideNumberPosition: 'bottom-right',
+  theme: ''
 })
 
 const TEMPLATE_SELECTOR = 'template[data-re-settings]'
@@ -25,7 +31,30 @@ export function hasStoredSettings(slidesEl) {
   return Boolean(slidesEl?.querySelector(TEMPLATE_SELECTOR))
 }
 
-export function settingsFromRevealConfig(config = {}) {
+export function themeFromDocument(doc) {
+  const href = doc?.querySelector(
+    'link[rel~="stylesheet"][href*="/theme/"], link[rel~="stylesheet"][href^="theme/"]'
+  )?.getAttribute('href') || ''
+  return href.match(/(?:^|\/theme\/)([^/?#]+)\.css(?:[?#].*)?$/)?.[1] || ''
+}
+
+export function applyTheme(doc, theme) {
+  if (!doc || !/^[a-z0-9_-]+$/i.test(theme || '')) return false
+  const link = doc.querySelector(
+    'link[rel~="stylesheet"][href*="/theme/"], link[rel~="stylesheet"][href^="theme/"]'
+  )
+  if (!link) return false
+  const href = link.getAttribute('href') || ''
+  const next = href.replace(
+    /(^|.*\/theme\/)[^/?#]+(\.css(?:[?#].*)?)$/,
+    `$1${theme}$2`
+  )
+  if (next === href || next === '') return next !== ''
+  link.setAttribute('href', next)
+  return true
+}
+
+export function settingsFromRevealConfig(config = {}, doc = null) {
   return {
     ...DEFAULT_SETTINGS,
     width: Number(config.width) || DEFAULT_SETTINGS.width,
@@ -37,7 +66,8 @@ export function settingsFromRevealConfig(config = {}) {
     slideNumbers: Boolean(config.slideNumber),
     slideNumberFormat: typeof config.slideNumber === 'string'
       ? config.slideNumber
-      : DEFAULT_SETTINGS.slideNumberFormat
+      : DEFAULT_SETTINGS.slideNumberFormat,
+    theme: themeFromDocument(doc)
   }
 }
 
@@ -82,6 +112,17 @@ const RUNTIME_SCRIPT = `(() => {
       margin: (s.margin ?? 4) / 100, controls: s.controls !== false,
       slideNumber: s.slideNumbers ? (s.slideNumberFormat || 'c/t') : false,
       showSlideNumber: 'all' });
+    if (/^[a-z0-9_-]+$/i.test(s.theme || '')) {
+      const link = document.querySelector('link[rel~="stylesheet"][href*="/theme/"], link[rel~="stylesheet"][href^="theme/"]');
+      if (link) {
+        const href = link.getAttribute('href') || '';
+        const next = href.replace(/(^|.*\\/theme\\/)[^/?#]+(\\.css(?:[?#].*)?)$/, '$1' + s.theme + '$2');
+        if (next && next !== href) {
+          link.addEventListener('load', () => Reveal.layout(), { once: true });
+          link.setAttribute('href', next);
+        }
+      }
+    }
     const controls = document.querySelector('.reveal .controls');
     if (controls && s.controls === false) controls.style.setProperty('display', 'none', 'important');
     Reveal.layout();
@@ -142,6 +183,7 @@ export function updateSettings(patch) {
 export function applySettings(bridge) {
   if (!bridge) return
   const s = editor.settings
+  applyTheme(bridge.doc, s.theme)
   const controls = bridge.doc.querySelector('.reveal .controls')
   if (s.controls) controls?.style.removeProperty('display')
   bridge.Reveal.configure({

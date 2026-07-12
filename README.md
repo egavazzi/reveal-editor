@@ -95,9 +95,9 @@ this editor.
   the context bar
 - **Images**: select an image to set exact dimensions, crop position,
   border, corner radius, shadow, and a presentation link
-- **Deck setup**: the Deck panel controls canvas format/size and margins,
-  editor grid display/snapping, navigation-arrow visibility, and slide
-  number format/position
+- **Deck setup**: the Deck panel controls the reveal theme, canvas format/size
+  and margins, editor grid display/snapping, navigation-arrow visibility, and
+  slide number format/position
 - **Save**: Ctrl+S or the Save button; optional autosave toggle
 - **Undo/redo**: Ctrl+Z / Ctrl+Shift+Z, ~100 steps
 - **Copy/paste/duplicate elements**: Ctrl+C / Ctrl+V / Ctrl+D
@@ -129,8 +129,8 @@ KaTeX markup or highlight spans.
 - Horizontal slides only in the sidebar; vertical stacks render but aren't
   managed visually
 - One deck per editor instance; localhost only (that's the security model)
-- Speaker-notes editing, themes, and PDF export: use reveal's own
-  facilities (`?print-pdf`, editing the theme `<link>` by hand)
+- Speaker-notes editing and PDF export: use reveal's own facilities
+  (`?print-pdf`) for now
 - Markdown-source decks (`data-markdown`) are not supported: reveal replaces
   the markdown source with rendered HTML at load time, so the editor refuses
   to open them rather than overwrite the source with that HTML on save
