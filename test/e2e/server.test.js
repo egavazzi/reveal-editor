@@ -165,3 +165,12 @@ describe('server e2e', () => {
     expect(res.status).toBe(404)
   })
 })
+
+describe('port conflicts', () => {
+  it('rejects with EADDRINUSE when the port is taken (Express 5 error-callback)', async () => {
+    const port = server.address().port
+    await expect(
+      createServer({ deckPath, port, dev: false, repoRoot })
+    ).rejects.toMatchObject({ code: 'EADDRINUSE' })
+  })
+})
