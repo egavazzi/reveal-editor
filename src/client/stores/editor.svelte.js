@@ -11,10 +11,14 @@ export const editor = $state({
   slideCount: 0,
   dirty: false,
   saving: false,
-  statusMessage: ''
+  statusMessage: '',
+  selectionCount: 0,
+  selectionTag: ''
 })
 
-// Non-reactive handle to the iframe bridge (holds live DOM references).
+// Non-reactive handles to live DOM machinery (never proxied by Svelte).
 export const runtime = {
-  bridge: null
+  bridge: null,
+  overlay: null,
+  editMode: null
 }

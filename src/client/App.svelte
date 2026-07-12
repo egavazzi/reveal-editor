@@ -4,6 +4,8 @@
   import { connectDeck } from './lib/iframe/bridge.js'
   import { stashPristineState } from './lib/model/stash.js'
   import { saveDeck } from './lib/model/save.js'
+  import { enterEditMode } from './lib/overlay/editmode.js'
+  import { createOverlay } from './lib/overlay/overlay.js'
   import { editor, runtime } from './stores/editor.svelte.js'
 
   let iframeEl
@@ -29,6 +31,16 @@
       const bridge = await connectDeck(node)
       runtime.bridge = bridge
       stashPristineState(bridge.slidesEl, pristineHtml)
+      runtime.editMode = enterEditMode(bridge)
+      runtime.overlay = createOverlay(bridge, {
+        onSelectionChange(targets) {
+          editor.selectionCount = targets.length
+          editor.selectionTag = targets[0]?.tagName.toLowerCase() ?? ''
+        },
+        onEdit() {
+          editor.dirty = true
+        }
+      })
       editor.ready = true
       editor.slideCount = bridge.getSections().length
       editor.slideIndex = bridge.getIndex()
@@ -60,7 +72,7 @@
 <div class="editor">
   <header class="toolbar">
     <span class="brand">reveal-editor</span>
-    <span class="deck-name">{editor.deckFile ?? '…'}</span>
+    <span class="deck-name">{editor.deckFile ?? '…'}{editor.dirty ? ' •' : ''}</span>
     <div class="spacer"></div>
     <button onclick={() => saveDeck()} disabled={!editor.ready || editor.saving}>
       {editor.saving ? 'Saving…' : 'Save'}
@@ -87,6 +99,14 @@
 
   <footer class="statusbar">
     <span>{editor.statusMessage}</span>
+    <span class="spacer"></span>
+    <span>
+      {editor.selectionCount === 0
+        ? ''
+        : editor.selectionCount === 1
+          ? `<${editor.selectionTag}> selected`
+          : `${editor.selectionCount} elements selected`}
+    </span>
   </footer>
 </div>
 
@@ -166,6 +186,8 @@
     border-radius: 8px;
   }
   .statusbar {
+    display: flex;
+    gap: 10px;
     padding: 4px 14px;
     background: #26272e;
     border-top: 1px solid #131418;
