@@ -1,6 +1,14 @@
 <script>
   import { editor, runtime } from '../stores/editor.svelte.js'
-  import { addText, addShape, addMath, addCode, pickImage, saveDeck } from '../lib/actions.js'
+  import {
+    addText, addShape, addMath, addCode, pickImage, saveDeck,
+    undoAction, redoAction
+  } from '../lib/actions.js'
+
+  function toggleAutosave(e) {
+    editor.autosave = e.currentTarget.checked
+    localStorage.setItem('reveal-editor:autosave', editor.autosave ? '1' : '0')
+  }
 
   const shapes = [
     { kind: 'rect', label: '▭', title: 'Rectangle' },
@@ -24,8 +32,17 @@
     <button title="Code block" onclick={addCode}>{'{}'}</button>
   </div>
 
+  <div class="group" class:disabled={!editor.ready}>
+    <button title="Undo (Ctrl+Z)" onclick={undoAction}>↶</button>
+    <button title="Redo (Ctrl+Shift+Z)" onclick={redoAction}>↷</button>
+  </div>
+
   <div class="spacer"></div>
 
+  <label class="autosave">
+    <input type="checkbox" checked={editor.autosave} onchange={toggleAutosave} />
+    autosave
+  </label>
   <button onclick={() => saveDeck()} disabled={!editor.ready || editor.saving}>
     {editor.saving ? 'Saving…' : 'Save'}
   </button>
@@ -70,6 +87,14 @@
   .slide-indicator {
     min-width: 60px;
     text-align: center;
+  }
+  .autosave {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: #9a9ba3;
+    font-size: 12px;
+    cursor: pointer;
   }
   button {
     background: #34353d;

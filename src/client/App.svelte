@@ -6,7 +6,13 @@
   import { saveDeck } from './lib/model/save.js'
   import { enterEditMode } from './lib/overlay/editmode.js'
   import { createOverlay } from './lib/overlay/overlay.js'
-  import { editElement, handlePaste } from './lib/actions.js'
+  import {
+    editElement, handlePaste, snapshotSlide, undoAction, redoAction,
+    deleteSelection, copySelection, pasteElements, duplicateSelection,
+    nudgeSelection, clearSelection
+  } from './lib/actions.js'
+  import { isEditingText } from './lib/editors/text.js'
+  import { subscribeEvents } from './lib/api.js'
   import { editor, runtime } from './stores/editor.svelte.js'
   import Toolbar from './panels/Toolbar.svelte'
   import FormatBar from './panels/FormatBar.svelte'
@@ -30,11 +36,27 @@
     })()
     window.addEventListener('keydown', onKeydown)
     window.addEventListener('paste', handlePaste)
+    window.addEventListener('beforeunload', onBeforeUnload)
+    const unsubscribe = subscribeEvents((ev) => {
+      if (ev.type !== 'deck-changed') return
+      if (!editor.dirty) {
+        window.location.reload()
+      } else {
+        editor.statusMessage =
+          'Deck changed on disk. Your unsaved edits differ — saving now will fail until you reload.'
+      }
+    })
     return () => {
       window.removeEventListener('keydown', onKeydown)
       window.removeEventListener('paste', handlePaste)
+      window.removeEventListener('beforeunload', onBeforeUnload)
+      unsubscribe()
     }
   })
+
+  function onBeforeUnload(e) {
+    if (editor.dirty) e.preventDefault()
+  }
 
   async function onIframeSrcSet(node) {
     try {
@@ -47,8 +69,12 @@
           editor.selectionCount = targets.length
           editor.selectionTag = targets[0]?.tagName.toLowerCase() ?? ''
         },
+        onBeforeEdit() {
+          snapshotSlide()
+        },
         onEdit() {
           editor.dirty = true
+          editor.docVersion++
         },
         onDblClick(el) {
           editElement(el)
@@ -69,9 +95,44 @@
   }
 
   function onKeydown(e) {
-    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    const mod = e.ctrlKey || e.metaKey
+    if (mod && e.key === 's') {
       e.preventDefault()
       saveDeck()
+      return
+    }
+    // Never hijack typing in chrome inputs or contenteditable text.
+    const t = e.target
+    if (/^(input|textarea|select)$/i.test(t.tagName) || t.isContentEditable || isEditingText()) return
+    if (!editor.ready || editor.popover) return
+
+    if (mod && !e.shiftKey && e.key === 'z') {
+      e.preventDefault()
+      undoAction()
+    } else if ((mod && e.key === 'y') || (mod && e.shiftKey && e.key.toLowerCase() === 'z')) {
+      e.preventDefault()
+      redoAction()
+    } else if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault()
+      deleteSelection()
+    } else if (mod && e.key === 'c') {
+      copySelection()
+    } else if (mod && e.key === 'v') {
+      // element paste; if the editor clipboard is empty, the paste event
+      // may still deliver an image
+      if (pasteElements()) e.preventDefault()
+    } else if (mod && e.key === 'd') {
+      e.preventDefault()
+      duplicateSelection()
+    } else if (e.key.startsWith('Arrow')) {
+      const step = e.shiftKey ? 10 : 1
+      const moved = nudgeSelection(
+        e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0,
+        e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0
+      )
+      if (moved) e.preventDefault()
+    } else if (e.key === 'Escape') {
+      clearSelection()
     }
   }
 </script>

@@ -7,27 +7,63 @@ import {
   insertMathBox, insertCodeBlock
 } from './model/insert.js'
 import { startTextEdit, formatText, isEditingText, activeElement } from './editors/text.js'
+import { ensurePositioned } from './model/position.js'
 import {
   renderMath, getMathSource, commitMath, getCodeState, commitCode
 } from './editors/mathcode.js'
 import {
   addSlide, duplicateSlide, deleteSlide, moveSlide, setSlideBackground
 } from './model/slides.js'
+import { snapshot, undo as histUndo, redo as histRedo } from './history/history.js'
+import { cleanElementHtml } from './model/clean.js'
+import { rehydrate } from './model/rehydrate.js'
+import { saveDeck } from './model/save.js'
 export { saveDeck } from './model/save.js'
 export { slideSummaries } from './model/slides.js'
+
+export function snapshotSlide() {
+  snapshot(runtime.bridge, { type: 'slide', h: editor.slideIndex.h })
+}
+
+export function snapshotDeck() {
+  snapshot(runtime.bridge, { type: 'deck', h: editor.slideIndex.h })
+}
+
+export function undoAction() {
+  if (histUndo(runtime.bridge)) afterHistory()
+}
+
+export function redoAction() {
+  if (histRedo(runtime.bridge)) afterHistory()
+}
+
+function afterHistory() {
+  runtime.overlay.setSelection([])
+  editor.slideCount = runtime.bridge.getSections().length
+  editor.slideIndex = runtime.bridge.getIndex()
+  markDirty()
+}
+
+let autosaveTimer = null
 
 export function markDirty() {
   editor.dirty = true
   editor.docVersion++
+  if (editor.autosave) {
+    clearTimeout(autosaveTimer)
+    autosaveTimer = setTimeout(() => saveDeck(), 1500)
+  }
 }
 
 export function addText() {
+  snapshotSlide()
   const el = insertTextBox(runtime.bridge)
   markDirty()
   beginTextEdit(el, { selectAll: true })
 }
 
 export function addShape(kind) {
+  snapshotSlide()
   const el = insertShape(runtime.bridge, kind)
   runtime.overlay.setSelection([el])
   markDirty()
@@ -35,6 +71,7 @@ export function addShape(kind) {
 
 export async function addImageBlob(blob, name) {
   try {
+    snapshotSlide()
     const el = await insertImageBlob(runtime.bridge, blob, name)
     runtime.overlay.setSelection([el])
     markDirty()
@@ -65,6 +102,7 @@ export function handlePaste(event) {
 }
 
 export function beginTextEdit(el, { selectAll = false } = {}) {
+  snapshotSlide()
   runtime.overlay.setSelection([])
   editor.textEditing = true
   startTextEdit(el, runtime.bridge, {
@@ -100,6 +138,7 @@ export function editElement(el) {
 // --- math ---
 
 export function addMath() {
+  snapshotSlide()
   const el = insertMathBox(runtime.bridge)
   renderMath(runtime.bridge, el)
   runtime.overlay.setSelection([el])
@@ -108,6 +147,7 @@ export function addMath() {
 }
 
 export function openMathEditor(el) {
+  snapshotSlide()
   runtime.popoverEl = el
   runtime.popoverOriginal = el.innerHTML
   editor.popover = { type: 'math', value: getMathSource(el), lang: '' }
@@ -116,6 +156,7 @@ export function openMathEditor(el) {
 // --- code ---
 
 export function addCode() {
+  snapshotSlide()
   const el = insertCodeBlock(runtime.bridge)
   commitCode(runtime.bridge, el, el.querySelector('code').textContent, 'julia')
   runtime.overlay.setSelection([el])
@@ -124,6 +165,7 @@ export function addCode() {
 }
 
 export function openCodeEditor(el) {
+  snapshotSlide()
   const target = el.tagName.toLowerCase() === 'pre' ? el : el.querySelector('pre')
   const { source, lang } = getCodeState(target)
   runtime.popoverEl = target
@@ -203,16 +245,19 @@ export function setTextColor(color) {
 // --- slides ---
 
 export function slideAdd() {
+  snapshotDeck()
   addSlide(runtime.bridge, editor.slideIndex.h)
   refreshSlideState()
 }
 
 export function slideDuplicate() {
+  snapshotDeck()
   duplicateSlide(runtime.bridge, editor.slideIndex.h)
   refreshSlideState()
 }
 
 export function slideDelete() {
+  snapshotDeck()
   if (deleteSlide(runtime.bridge, editor.slideIndex.h)) refreshSlideState()
 }
 
@@ -223,6 +268,7 @@ export function slideMove(from, to) {
 
 /** Apply a full slide permutation (order = old indices in new sequence). */
 export function slideReorder(order) {
+  snapshotDeck()
   const bridge = runtime.bridge
   const sections = bridge.getSections()
   if (order.length !== sections.length) return
@@ -238,6 +284,7 @@ export function slideGoTo(index) {
 }
 
 export function slideBackground(color) {
+  snapshotSlide()
   setSlideBackground(runtime.bridge, editor.slideIndex.h, { color })
   markDirty()
 }
@@ -252,6 +299,7 @@ function refreshSlideState() {
 // --- fragments ---
 
 export function toggleFragment() {
+  snapshotSlide()
   for (const el of runtime.overlay.getSelection()) {
     if (el.classList.contains('fragment')) {
       el.classList.remove('fragment')
@@ -288,6 +336,7 @@ export function setFragmentIndex(n) {
 // --- z-order ---
 
 export function bringToFront() {
+  snapshotSlide()
   for (const el of runtime.overlay.getSelection()) {
     const section = el.closest('section')
     section.appendChild(el)
@@ -297,12 +346,82 @@ export function bringToFront() {
 }
 
 export function sendToBack() {
+  snapshotSlide()
   for (const el of runtime.overlay.getSelection()) {
     const section = el.closest('section')
     section.insertBefore(el, section.firstChild)
   }
   runtime.overlay.refresh()
   markDirty()
+}
+
+// --- element clipboard / delete / nudge ---
+
+let elementClipboard = []
+
+export function deleteSelection() {
+  const sel = runtime.overlay.getSelection()
+  if (!sel.length) return
+  snapshotSlide()
+  for (const el of sel) el.remove()
+  runtime.overlay.setSelection([])
+  markDirty()
+}
+
+export function copySelection() {
+  const sel = runtime.overlay.getSelection()
+  if (sel.length) elementClipboard = sel.map(cleanElementHtml)
+}
+
+export function pasteElements() {
+  if (!elementClipboard.length) return false
+  snapshotSlide()
+  const bridge = runtime.bridge
+  const section = bridge.currentSection
+  const pasted = []
+  for (const html of elementClipboard) {
+    const tmp = bridge.doc.createElement('div')
+    tmp.innerHTML = html
+    const el = tmp.firstElementChild
+    if (!el) continue
+    for (const prop of ['left', 'top']) {
+      const v = parseFloat(el.style[prop])
+      if (!Number.isNaN(v)) el.style[prop] = `${v + 24}px`
+    }
+    section.appendChild(el)
+    rehydrate(bridge, section)
+    pasted.push(el)
+  }
+  runtime.overlay.setSelection(pasted)
+  markDirty()
+  return true
+}
+
+export function duplicateSelection() {
+  copySelection()
+  pasteElements()
+}
+
+let lastNudge = 0
+
+export function nudgeSelection(dx, dy) {
+  const sel = runtime.overlay.getSelection()
+  if (!sel.length) return false
+  const now = Date.now()
+  if (now - lastNudge > 800) snapshotSlide()
+  lastNudge = now
+  for (const el of sel) {
+    ensurePositioned(el, runtime.bridge)
+    el.style.left = `${Math.round(parseFloat(el.style.left) + dx)}px`
+    el.style.top = `${Math.round(parseFloat(el.style.top) + dy)}px`
+  }
+  runtime.overlay.refresh()
+  markDirty()
+  return true
+}
+
+export function clearSelection() {
+  runtime.overlay.setSelection([])
 }
 
 /** Selection metadata for the context bar (fragment state etc.). */

@@ -19,7 +19,7 @@ export function resolveEditable(target, section) {
   return el.parentElement === section ? el : null
 }
 
-export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick }) {
+export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, onBeforeEdit }) {
   const doc = bridge.doc
   let targets = []
   let moveable = null
@@ -53,13 +53,19 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick })
     })
 
     moveable
-      .on('dragStart', (e) => ensurePositioned(e.target, bridge))
+      .on('dragStart', (e) => {
+        onBeforeEdit?.()
+        ensurePositioned(e.target, bridge)
+      })
       .on('drag', (e) => {
         e.target.style.left = `${e.left}px`
         e.target.style.top = `${e.top}px`
       })
       .on('dragEnd', (e) => commit(e.target, e.isDrag))
-      .on('dragGroupStart', (e) => e.targets.forEach((t) => ensurePositioned(t, bridge)))
+      .on('dragGroupStart', (e) => {
+        onBeforeEdit?.()
+        e.targets.forEach((t) => ensurePositioned(t, bridge))
+      })
       .on('dragGroup', (e) => {
         for (const ev of e.events) {
           ev.target.style.left = `${ev.left}px`
@@ -69,7 +75,10 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick })
       .on('dragGroupEnd', (e) => {
         e.targets.forEach((t) => commit(t, true))
       })
-      .on('resizeStart', (e) => ensurePositioned(e.target, bridge))
+      .on('resizeStart', (e) => {
+        onBeforeEdit?.()
+        ensurePositioned(e.target, bridge)
+      })
       .on('resize', (e) => {
         e.target.style.width = `${e.width}px`
         e.target.style.height = `${e.height}px`
@@ -78,7 +87,10 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick })
         syncShapeGeometry(e.target)
       })
       .on('resizeEnd', (e) => commit(e.target, true))
-      .on('rotateStart', (e) => ensurePositioned(e.target, bridge))
+      .on('rotateStart', (e) => {
+        onBeforeEdit?.()
+        ensurePositioned(e.target, bridge)
+      })
       .on('rotate', (e) => {
         e.target.style.transform = e.transform
       })

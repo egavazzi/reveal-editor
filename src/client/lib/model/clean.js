@@ -81,23 +81,33 @@ function stripLazyLoading(root) {
   }
 }
 
+function cleanContainer(container) {
+  for (const el of container.querySelectorAll(EDITOR_ELEMENT_SELECTOR)) el.remove()
+
+  for (const section of container.querySelectorAll('section')) cleanSection(section)
+  cleanFragments(container)
+  restoreCode(container)
+  restoreMath(container)
+  stripLazyLoading(container)
+
+  for (const el of container.querySelectorAll('*')) {
+    for (const attr of TRANSIENT_ATTRS) el.removeAttribute(attr)
+  }
+}
+
 /**
  * Produce the clean innerHTML for the deck file from the live .slides element.
  */
 export function cleanSlides(liveSlidesEl) {
   const clone = liveSlidesEl.cloneNode(true)
-
-  for (const el of clone.querySelectorAll(EDITOR_ELEMENT_SELECTOR)) el.remove()
-
-  for (const section of clone.querySelectorAll('section')) cleanSection(section)
-  cleanFragments(clone)
-  restoreCode(clone)
-  restoreMath(clone)
-  stripLazyLoading(clone)
-
-  for (const el of clone.querySelectorAll('*')) {
-    for (const attr of TRANSIENT_ATTRS) el.removeAttribute(attr)
-  }
-
+  cleanContainer(clone)
   return clone.innerHTML
+}
+
+/** Clean outerHTML of a single live element (history snapshots, clipboard). */
+export function cleanElementHtml(el) {
+  const container = el.ownerDocument.createElement('div')
+  container.appendChild(el.cloneNode(true))
+  cleanContainer(container)
+  return container.innerHTML
 }

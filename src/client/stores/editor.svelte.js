@@ -17,7 +17,8 @@ export const editor = $state({
   textEditing: false,
   popover: null, // { type: 'math' | 'code', value, lang }
   // bumped whenever slide content changes; sidebar re-derives thumbnails
-  docVersion: 0
+  docVersion: 0,
+  autosave: localStorage.getItem('reveal-editor:autosave') === '1'
 })
 
 // Non-reactive handles to live DOM machinery (never proxied by Svelte).
