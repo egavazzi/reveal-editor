@@ -60,6 +60,18 @@ export function restoreMath(root) {
     const tex = inline.querySelector('annotation[encoding="application/x-tex"]')?.textContent
     if (tex != null) inline.replaceWith(root.ownerDocument.createTextNode(`\\(${tex}\\)`))
   }
+
+  // KaTeX auto-render surrounds rendered expressions with anonymous spans.
+  // Editor-managed math boxes have a plain-text source contract, so remove
+  // those renderer wrappers after restoring their delimiters.
+  const managed = [...root.querySelectorAll('.re-math')]
+  if (root.matches?.('.re-math')) managed.unshift(root)
+  for (const box of managed) {
+    const descendants = [...box.querySelectorAll('*')]
+    if (descendants.length && descendants.every((el) => el.tagName === 'SPAN' && el.attributes.length === 0)) {
+      box.textContent = box.textContent
+    }
+  }
 }
 
 function restoreCode(root) {

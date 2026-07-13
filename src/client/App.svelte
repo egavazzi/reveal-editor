@@ -82,7 +82,8 @@
           editor.selectionTag = targets[0]?.tagName.toLowerCase() ?? ''
           editor.selectionVersion++
           if (targets.length === 1 && editor.selectionTag === 'img') editor.sidePanel = 'image'
-          else if (editor.sidePanel === 'image') editor.sidePanel = null
+          else if (targets.length === 1 && targets[0].hasAttribute('data-shape')) editor.sidePanel = 'shape'
+          else if (editor.sidePanel === 'image' || editor.sidePanel === 'shape') editor.sidePanel = null
         },
         onBeforeEdit() {
           snapshotSlide()

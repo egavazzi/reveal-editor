@@ -6,9 +6,14 @@
 
 const EDIT_STYLE_ID = 're-edit-style'
 
+import { editor } from '../../stores/editor.svelte.js'
+
 export function getCanvasSize(bridge) {
   const config = bridge.config()
-  return { width: config.width || 960, height: config.height || 700 }
+  return {
+    width: Number(editor.settings.width) || config.width || 960,
+    height: Number(editor.settings.height) || config.height || 700
+  }
 }
 
 export function enterEditMode(bridge) {

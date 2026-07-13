@@ -20,6 +20,11 @@
     { kind: 'line', label: '—', title: 'Line' },
     { kind: 'arrow', label: '→', title: 'Arrow' }
   ]
+
+  function insertShape(kind, details) {
+    addShape(kind)
+    details.open = false
+  }
 </script>
 
 <header class="toolbar">
@@ -30,9 +35,16 @@
     <button title="Text box" onclick={addText}>T</button>
     <button title="Image (or paste with Ctrl+V)" onclick={pickImage}>🖼</button>
     <button title="Video (MP4 or WebM; files can also be dropped)" onclick={pickVideo}>▶</button>
-    {#each shapes as s (s.kind)}
-      <button title={s.title} onclick={() => addShape(s.kind)}>{s.label}</button>
-    {/each}
+    <details class="shape-menu">
+      <summary title="Insert a shape">Shapes ▾</summary>
+      <div class="shape-options">
+        {#each shapes as s (s.kind)}
+          <button title={`Insert ${s.title.toLowerCase()}`} onclick={(e) => insertShape(s.kind, e.currentTarget.closest('details'))}>
+            <span>{s.label}</span>{s.title}
+          </button>
+        {/each}
+      </div>
+    </details>
     <button title="LaTeX math" onclick={addMath}>∑</button>
     <button title="Code block" onclick={addCode}>{'{}'}</button>
   </div>
@@ -122,4 +134,29 @@
     opacity: 0.4;
     cursor: default;
   }
+  .shape-menu { position: relative; }
+  .shape-menu summary {
+    list-style: none;
+    background: #34353d;
+    color: #d6d7dc;
+    border: 1px solid #45464f;
+    border-radius: 6px;
+    padding: 4px 12px;
+    cursor: pointer;
+  }
+  .shape-menu summary::-webkit-details-marker { display: none; }
+  .shape-options {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 5px);
+    left: 0;
+    width: 145px;
+    padding: 5px;
+    background: #26272e;
+    border: 1px solid #45464f;
+    border-radius: 7px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  }
+  .shape-options button { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; }
+  .shape-options button span { width: 22px; text-align: center; font-size: 18px; }
 </style>

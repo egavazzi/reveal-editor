@@ -44,7 +44,11 @@
         tabindex="0"
       >
         <span class="num">{item.index + 1}</span>
-        <div class="thumb" style:background={item.background ?? '#fff'}>
+        <div
+          class="thumb"
+          style:background={item.background ?? '#fff'}
+          style:aspect-ratio={`${editor.settings.width || 960} / ${editor.settings.height || 700}`}
+        >
           {#each item.boxes as box, i (i)}
             <div
               class="box {box.kind}"
@@ -104,7 +108,6 @@
   .thumb {
     position: relative;
     flex: 1;
-    aspect-ratio: 960 / 700;
     border: 2px solid #3a3b42;
     border-radius: 4px;
     overflow: hidden;

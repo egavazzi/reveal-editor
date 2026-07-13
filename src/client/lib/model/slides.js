@@ -29,7 +29,10 @@ export function duplicateSlide(bridge, index) {
   const sections = bridge.getSections()
   const clone = sections[index].cloneNode(true)
   scrubRuntimeState(clone)
-  clone.removeAttribute('id') // ids must stay unique
+  // A duplicate is new content. Strip ids at every depth so document
+  // queries and authored links never become ambiguous.
+  clone.removeAttribute('id')
+  for (const identified of clone.querySelectorAll('[id]')) identified.removeAttribute('id')
   sections[index].after(clone)
   bridge.sync()
   bridge.goTo(index + 1)
