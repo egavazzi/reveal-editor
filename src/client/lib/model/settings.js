@@ -206,6 +206,9 @@ const RUNTIME_SCRIPT = `(() => {
           for (const el of [document.documentElement, document.body, reveal]) el.style.background = '#000';
           const viewport = document.querySelector('.reveal-viewport');
           if (viewport) viewport.style.background = '#000';
+          // slides without their own background color must show the theme
+          // background, not the black letterbox behind them
+          backgrounds.style.background = 'var(--r-background-color, #fff)';
           const fit = () => {
             const rr = reveal.getBoundingClientRect();
             const sr = slides.getBoundingClientRect();
