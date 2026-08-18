@@ -67,6 +67,24 @@ describe('vertical slide stacks', () => {
       .toEqual(['s0-0', 's0-1', 's1-0'])
   })
 
+  it('numbers summaries in presentation order, skipping hidden slides', () => {
+    const bridge = bridgeFixture()
+    addVerticalSlide(bridge, 0, 0).textContent = 'B'
+
+    expect(slideSummaries(bridge, { width: 960, height: 700 }).map((item) => item.num))
+      .toEqual(['1.1', '1.2', '2'])
+
+    // hiding one slide of the stack collapses its numbering to a plain slide
+    bridge.getSlide(0, 0).setAttribute('data-visibility', 'hidden')
+    expect(slideSummaries(bridge, { width: 960, height: 700 }).map((item) => item.num))
+      .toEqual(['', '1', '2'])
+
+    // a fully hidden column doesn't advance the count for later slides
+    bridge.getSlide(0, 1).setAttribute('data-visibility', 'hidden')
+    expect(slideSummaries(bridge, { width: 960, height: 700 }).map((item) => item.num))
+      .toEqual(['', '', '1'])
+  })
+
   it('demotes horizontal slides into stacks and promotes them out again', () => {
     const bridge = bridgeFixture()
     expect(demoteHorizontalSlide(bridge, 1)).toBe(true)

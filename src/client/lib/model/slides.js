@@ -215,7 +215,7 @@ export function slideSummaries(bridge, canvas) {
       return url
     }
   }
-  return entries.map(({ section, h, v, vertical }, index) => {
+  const summaries = entries.map(({ section, h, v, vertical }, index) => {
     const title =
       section.querySelector('h1, h2, h3, p, li')?.textContent.trim().slice(0, 60) ?? ''
     const background = section.getAttribute('data-background-color') ?? null
@@ -270,4 +270,27 @@ export function slideSummaries(bridge, canvas) {
     const hidden = section.getAttribute('data-visibility') === 'hidden'
     return { id: `s${h}-${v}`, index, h, v, vertical, hidden, title, background, backgroundImage, deckBackground, boxes }
   })
+  numberSummaries(summaries)
+  return summaries
+}
+
+/**
+ * Assign each summary the slide number it will have when presented, where
+ * hidden slides don't exist: they get num '' and don't advance the count,
+ * and a stack reduced to one visible slide loses its .v suffix.
+ */
+function numberSummaries(summaries) {
+  let hNum = 0
+  for (let i = 0; i < summaries.length; ) {
+    const column = []
+    const h = summaries[i].h
+    while (i < summaries.length && summaries[i].h === h) column.push(summaries[i++])
+    const visible = column.filter((summary) => !summary.hidden)
+    if (visible.length) hNum++
+    let vNum = 0
+    for (const summary of column) {
+      summary.num = summary.hidden ? ''
+        : visible.length > 1 ? `${hNum}.${++vNum}` : `${hNum}`
+    }
+  }
 }

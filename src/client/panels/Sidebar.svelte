@@ -79,7 +79,7 @@
         role="button"
         tabindex="0"
       >
-        <span class="num">{item.h + 1}{item.vertical ? `.${item.v + 1}` : ''}</span>
+        <span class="num" title={item.hidden ? 'Not shown when presenting' : null}>{item.num || '–'}</span>
         <div class="thumb-holder">
           <SlideThumb
             summary={item}

@@ -83,6 +83,25 @@
     scheduleCommit()
   }
 
+  // Presentation-order numbering over the live board: hidden slides show a
+  // dash and don't advance the count, fully hidden columns get no number.
+  function columnNumber(ci) {
+    let n = 0
+    for (let i = 0; i <= ci; i++) {
+      if (columns[i].items.some((item) => !item.summary?.hidden)) n++
+    }
+    return columns[ci].items.some((item) => !item.summary?.hidden) ? n : 0
+  }
+
+  function cardNumber(ci, vi) {
+    const items = columns[ci].items
+    if (items[vi].summary?.hidden) return '–'
+    const visible = items.filter((item) => !item.summary?.hidden)
+    const h = columnNumber(ci)
+    if (visible.length <= 1) return `${h}`
+    return `${h}.${visible.indexOf(items[vi]) + 1}`
+  }
+
   function toggleHidden(item) {
     if (slideToggleHidden(item.summary.h, item.summary.v)) build()
   }
@@ -114,7 +133,7 @@
     {#each columns as column, ci (column.id)}
       <div class="column" class:stacked={column.items.length > 1} class:placeholder={column.items.length === 0}>
         <div class="col-head">
-          {#if column.items.length === 0}new{:else}{ci + 1}{#if column.items.length > 1}<span class="stack-badge">stack</span>{/if}{/if}
+          {#if column.items.length === 0}new{:else}{columnNumber(ci) || 'hidden'}{#if column.items.length > 1}<span class="stack-badge">stack</span>{/if}{/if}
         </div>
         <div
           class="stack"
@@ -131,7 +150,7 @@
               ondblclick={() => jumpTo(item.section)}
               onkeydown={(e) => e.key === 'Enter' && jumpTo(item.section)}
             >
-              <span class="num">{ci + 1}{column.items.length > 1 ? `.${vi + 1}` : ''}</span>
+              <span class="num">{cardNumber(ci, vi)}</span>
               <button
                 class="hide-toggle"
                 class:on={item.summary.hidden}
