@@ -17,7 +17,7 @@ export const editor = $state({
   selectionVersion: 0,
   textEditing: false,
   popover: null, // { type: 'math' | 'code', value, lang }
-  sidePanel: null, // 'layers' | 'settings'
+  sidePanel: null, // 'layers' | 'settings' | 'image' | 'shape'
   settings: {},
   // bumped whenever slide content changes; sidebar re-derives thumbnails
   docVersion: 0,

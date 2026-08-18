@@ -81,6 +81,21 @@ describe('cleanSlides', () => {
     expect(out).not.toContain('katex')
   })
 
+  it('removes KaTeX auto-render wrappers from editor-managed math boxes', () => {
+    document.body.innerHTML = `<div class="slides"><section>
+      <div class="re-el re-math"><span><span><span class="katex">
+        <span class="katex-mathml"><annotation encoding="application/x-tex">x^2</annotation></span>
+        <span class="katex-html">rendered</span>
+      </span></span></span></div>
+    </section></div>`
+
+    const cleaned = cleanSlides(document.querySelector('.slides'))
+
+    expect(cleaned).toContain('<div class="re-el re-math">\\(x^2\\)</div>')
+    expect(cleaned).not.toContain('<span>')
+    expect(cleaned).not.toContain('class="katex"')
+  })
+
   it('removes editor overlay elements', () => {
     const slides = makeSlides(
       '<section><h2>t</h2></section><div class="moveable-control-box">handles</div>'

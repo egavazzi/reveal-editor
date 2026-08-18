@@ -21,6 +21,7 @@ import { saveDeck } from './model/save.js'
 import {
   initializeSettings, updateSettings as updateSettingsModel, writeSettings
 } from './model/settings.js'
+import { setShapeColors, shapeColors, syncShapeGeometry } from './model/shapes.js'
 export { saveDeck } from './model/save.js'
 export { slideSummaries } from './model/slides.js'
 
@@ -268,6 +269,7 @@ export function applyFormat(command, value) {
 export function setFontSize(px) {
   if (!(Number.isFinite(px) && px > 0)) return
   const targets = isEditingText() ? [activeElement()] : runtime.overlay.getSelection()
+  if (!isEditingText() && targets.length) snapshotSlide()
   for (const el of targets.filter(Boolean)) {
     el.style.fontSize = `${px}px`
   }
@@ -279,11 +281,55 @@ export function setTextColor(color) {
   if (isEditingText()) {
     formatText('foreColor', color)
   } else {
-    for (const el of runtime.overlay.getSelection()) {
-      el.style.color = color
+    const targets = runtime.overlay.getSelection()
+    if (targets.length) snapshotSlide()
+    for (const el of targets) {
+      if (el.hasAttribute('data-shape')) setShapeColors(el, { stroke: color })
+      else el.style.color = color
     }
   }
   markDirty()
+}
+
+// --- shape properties ---
+
+export function selectedShapeInfo() {
+  const sel = runtime.overlay?.getSelection() ?? []
+  const el = sel.length === 1 && sel[0].hasAttribute('data-shape') ? sel[0] : null
+  if (!el) return null
+  ensurePositioned(el, runtime.bridge)
+  const colors = shapeColors(el)
+  const rotate = el.style.transform.match(/rotate\((-?[\d.]+)deg\)/)
+  return {
+    el,
+    kind: el.getAttribute('data-shape'),
+    x: Math.round(parseFloat(el.style.left) || 0),
+    y: Math.round(parseFloat(el.style.top) || 0),
+    width: Math.round(parseFloat(el.style.width) || el.getBoundingClientRect().width),
+    height: Math.round(parseFloat(el.style.height) || el.getBoundingClientRect().height),
+    rotation: rotate ? Number(rotate[1]) : 0,
+    ...colors
+  }
+}
+
+export function setShapeProperties(values) {
+  const info = selectedShapeInfo()
+  if (!info) return
+  snapshotSlide()
+  const { el } = info
+  if (values.x != null) el.style.left = `${Number(values.x) || 0}px`
+  if (values.y != null) el.style.top = `${Number(values.y) || 0}px`
+  if (values.width != null) el.style.width = `${Math.max(1, Number(values.width))}px`
+  if (values.height != null) el.style.height = `${Math.max(1, Number(values.height))}px`
+  if (values.rotation != null) {
+    const rotation = Number(values.rotation) || 0
+    el.style.transform = rotation ? `rotate(${rotation}deg)` : ''
+  }
+  setShapeColors(el, values)
+  syncShapeGeometry(el)
+  runtime.overlay.refresh()
+  markDirty()
+  bumpSelection()
 }
 
 // --- slides ---
@@ -358,8 +404,10 @@ export function toggleFragment() {
 }
 
 export function setFragmentIndex(n) {
-  for (const el of runtime.overlay.getSelection()) {
-    if (!el.classList.contains('fragment')) continue
+  const targets = runtime.overlay.getSelection().filter((el) => el.classList.contains('fragment'))
+  if (!targets.length) return
+  snapshotSlide()
+  for (const el of targets) {
     if (Number.isFinite(n)) {
       el.setAttribute('data-fragment-index', String(n))
       el.removeAttribute('data-re-frag-auto')
@@ -370,6 +418,7 @@ export function setFragmentIndex(n) {
   }
   runtime.bridge.sync()
   markDirty()
+  bumpSelection()
 }
 
 // --- z-order ---
