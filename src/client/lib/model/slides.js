@@ -3,7 +3,7 @@
 
 const RUNTIME_CLASSES = ['past', 'present', 'future', 'stack', 'overflowing']
 
-function scrubRuntimeState(section) {
+export function scrubRuntimeState(section) {
   section.classList.remove(...RUNTIME_CLASSES)
   if (!section.classList.length) section.removeAttribute('class')
   section.removeAttribute('hidden')

@@ -4,9 +4,10 @@
   import {
     currentLayers, selectLayer, toggleLayerHidden, toggleLayerLocked, moveLayer, setLayerName,
     currentSpeakerNotes, selectedElementInfo, selectedImageInfo, setElementProperties,
-    selectedShapeInfo, setShapeProperties,
+    selectedShapeInfo, setShapeProperties, resizeDeck,
     setImageProperties, setSpeakerNotes, updateDeckSettings as updateSettings
   } from '../lib/actions.js'
+  import { icon } from '../lib/icons.js'
 
   const presets = {
     'standard': [960, 700],
@@ -52,10 +53,27 @@
     )?.[0] ?? ''
   )
 
+  let scaleContent = $state(true)
+
   function setPreset(e) {
     const size = presets[e.currentTarget.value]
-    if (size) updateSettings({ width: size[0], height: size[1] })
+    if (size) resizeDeck({ width: size[0], height: size[1] }, { scaleContent })
   }
+
+  function togglePin() {
+    editor.panelPinned = !editor.panelPinned
+    localStorage.setItem('reveal-editor:panel-pinned', editor.panelPinned ? '1' : '0')
+  }
+
+  // which layer is being renamed (double-click a row)
+  let renaming = $state(null)
+
+  function commitRename(el, value) {
+    renaming = null
+    setLayerName(el, value)
+  }
+
+  const KIND_GLYPHS = { math: '∑', code: '{ }', html: '</>', video: '▶', group: '▣' }
 </script>
 
 <aside class="inspector">
@@ -66,24 +84,64 @@
     {#if image}<button class:active={editor.sidePanel === 'image'} onclick={() => editor.sidePanel = 'image'}>Image</button>{/if}
     {#if shape}<button class:active={editor.sidePanel === 'shape'} onclick={() => editor.sidePanel = 'shape'}>Shape</button>{/if}
     {#if element && !shape}<button class:active={editor.sidePanel === 'element'} onclick={() => editor.sidePanel = 'element'}>Element</button>{/if}
-    <button class="close" title="Close panel" onclick={() => editor.sidePanel = null}>×</button>
+    <button
+      class="pin"
+      class:active={editor.panelPinned}
+      title={editor.panelPinned ? 'Unpin panel (follow selection again)' : 'Pin panel (stop it from following the selection)'}
+      onclick={togglePin}
+    >{@html icon('pin')}</button>
+    <button class="close" title="Close panel" onclick={() => editor.sidePanel = null}>{@html icon('close')}</button>
   </header>
 
   {#if editor.sidePanel === 'layers'}
     <section class="panel layers">
       <h3>Slide layers</h3>
-      <p class="hint">Frontmost objects are listed first.</p>
+      <p class="hint">Frontmost objects are listed first. Double-click a layer to rename it.</p>
       {#if layers.length === 0}<p class="empty">This slide is empty.</p>{/if}
       {#each layers as layer (layer.el)}
-        <div class:selected={layer.selected} class:hidden={layer.hidden} class="layer">
-          <button class="name" title={layer.label} onclick={() => selectLayer(layer.el)}>
-            <span class="tag">{layer.tag}</span>{layer.label}
+        <div class:selected={layer.selected} class:hidden={layer.hidden} class:locked={layer.locked} class="layer">
+          <button
+            class="row"
+            title={layer.label}
+            onclick={() => selectLayer(layer.el)}
+            ondblclick={() => (renaming = layer.el)}
+          >
+            <span class="icon {layer.kind}">
+              {#if layer.kind === 'text'}
+                <span class="t-glyph">T</span>
+              {:else if layer.kind === 'image' && layer.src}
+                <img src={layer.src} alt="" />
+              {:else if layer.kind === 'shape' && layer.svg}
+                <span class="shape-ico">{@html layer.svg}</span>
+              {:else}
+                <span class="glyph">{KIND_GLYPHS[layer.kind] ?? 'T'}</span>
+              {/if}
+            </span>
+            {#if renaming === layer.el}
+              <!-- svelte-ignore a11y_autofocus -->
+              <input
+                class="rename"
+                autofocus
+                value={layer.name}
+                placeholder={layer.label}
+                onclick={(e) => e.stopPropagation()}
+                onkeydown={(e) => {
+                  e.stopPropagation()
+                  if (e.key === 'Enter') commitRename(layer.el, e.currentTarget.value)
+                  if (e.key === 'Escape') renaming = null
+                }}
+                onblur={(e) => commitRename(layer.el, e.currentTarget.value)}
+              />
+            {:else}
+              <span class="label" class:preview={!layer.name && layer.preview}>{layer.label}</span>
+            {/if}
           </button>
-          <input class="layer-name" aria-label="Layer name" value={layer.el.getAttribute('aria-label') || ''} placeholder="name" onchange={(e) => setLayerName(layer.el, e.currentTarget.value)} />
-          <button title="Move forward one level" onclick={() => moveLayer(layer.el, 'up')}>↑</button>
-          <button title="Move backward one level" onclick={() => moveLayer(layer.el, 'down')}>↓</button>
-          <button title={layer.hidden ? 'Show layer' : 'Hide layer'} onclick={() => toggleLayerHidden(layer.el)}>{layer.hidden ? '◌' : '◉'}</button>
-          <button title={layer.locked ? 'Unlock layer' : 'Lock layer'} onclick={() => toggleLayerLocked(layer.el)}>{layer.locked ? '🔒' : '🔓'}</button>
+          <span class="controls">
+            <button class="ctl move" title="Move forward one level" onclick={() => moveLayer(layer.el, 'up')}>{@html icon('chevronUp')}</button>
+            <button class="ctl move" title="Move backward one level" onclick={() => moveLayer(layer.el, 'down')}>{@html icon('chevronDown')}</button>
+            <button class="ctl" class:on={layer.locked} title={layer.locked ? 'Unlock layer' : 'Lock layer'} onclick={() => toggleLayerLocked(layer.el)}>{@html icon(layer.locked ? 'lock' : 'unlock')}</button>
+            <button class="ctl" class:on={layer.hidden} title={layer.hidden ? 'Show layer' : 'Hide layer'} onclick={() => toggleLayerHidden(layer.el)}>{@html icon(layer.hidden ? 'eyeOff' : 'eye')}</button>
+          </span>
         </div>
       {/each}
     </section>
@@ -133,9 +191,11 @@
         </select>
       </label>
       <div class="row">
-        <label>Width<input type="number" min="100" value={editor.settings.width} onchange={(e) => updateSettings({ width: +e.currentTarget.value })} /></label>
-        <label>Height<input type="number" min="100" value={editor.settings.height} onchange={(e) => updateSettings({ height: +e.currentTarget.value })} /></label>
+        <label>Width<input type="number" min="100" value={editor.settings.width} onchange={(e) => resizeDeck({ width: +e.currentTarget.value }, { scaleContent })} /></label>
+        <label>Height<input type="number" min="100" value={editor.settings.height} onchange={(e) => resizeDeck({ height: +e.currentTarget.value }, { scaleContent })} /></label>
       </div>
+      <label class="check"><input type="checkbox" bind:checked={scaleContent} /> Scale slide content to the new size</label>
+      <p class="hint">When enabled, changing the canvas size proportionally moves and resizes everything on every slide.</p>
       <label>Presentation margin (%)<input type="number" min="0" max="30" value={editor.settings.margin} onchange={(e) => updateSettings({ margin: +e.currentTarget.value })} /></label>
 
       <h3>Grid</h3>
@@ -241,27 +301,48 @@
 </aside>
 
 <style>
-  .inspector { width: 290px; background: #222329; border-left: 1px solid #131418; overflow-y: auto; color: #d6d7dc; }
-  header { display: flex; gap: 4px; position: sticky; top: 0; z-index: 2; padding: 8px; background: #26272e; border-bottom: 1px solid #131418; }
-  button { background: #34353d; color: #d6d7dc; border: 1px solid #45464f; border-radius: 5px; padding: 4px 8px; cursor: pointer; }
-  header button.active { background: #2f6fba; color: white; }
-  header .close { margin-left: auto; }
-  .panel { padding: 10px 12px 16px; border-bottom: 1px solid #3a3b42; }
-  h3 { margin: 8px 0; color: #8ab4ff; font-size: 14px; }
+  .inspector { width: 290px; background: var(--ui-surface); border-left: 1px solid var(--ui-border-strong); overflow-y: auto; color: var(--ui-text); }
+  header { display: flex; gap: 4px; position: sticky; top: 0; z-index: 2; padding: 8px; background: var(--ui-surface-raised); border-bottom: 1px solid var(--ui-border-strong); }
+  button { background: var(--ui-control); color: var(--ui-text); border: 1px solid var(--ui-border); border-radius: 5px; padding: 4px 8px; cursor: pointer; font-family: inherit; font-size: 12px; }
+  button:hover { background: var(--ui-control-hover); }
+  header button.active { background: var(--ui-primary); border-color: transparent; color: white; }
+  header .pin { margin-left: auto; }
+  header .pin, header .close { display: flex; align-items: center; justify-content: center; width: 26px; padding: 4px 0; }
+  header .pin.active { background: var(--ui-primary); border-color: transparent; color: white; }
+  .inspector :global(svg) { width: 13px; height: 13px; display: block; flex: none; }
+  .panel { padding: 10px 12px 16px; border-bottom: 1px solid var(--ui-border); }
+  h3 { margin: 8px 0; color: var(--ui-accent); font-size: 14px; }
   h3:not(:first-child) { margin-top: 20px; }
-  label { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; color: #9a9ba3; font-size: 12px; }
-  label.check { flex-direction: row; align-items: center; color: #d6d7dc; }
-  input, select, textarea { min-width: 0; box-sizing: border-box; width: 100%; background: #34353d; color: #d6d7dc; border: 1px solid #45464f; border-radius: 4px; padding: 4px 6px; }
+  label { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; color: var(--ui-muted); font-size: 12px; }
+  label.check { flex-direction: row; align-items: center; color: var(--ui-text); }
+  input, select, textarea { min-width: 0; box-sizing: border-box; width: 100%; background: var(--ui-control); color: var(--ui-text); border: 1px solid var(--ui-border); border-radius: 4px; padding: 4px 6px; font-family: inherit; }
   textarea { resize: vertical; font: inherit; line-height: 1.4; }
-  input[type='checkbox'] { width: auto; } input[type='color'] { height: 30px; padding: 1px; }
+  input[type='checkbox'] { width: auto; accent-color: var(--ui-primary); } input[type='color'] { height: 30px; padding: 1px; }
   .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .hint, .empty { margin: 4px 0 10px; color: #777983; font-size: 11px; }
-  .layer { display: flex; gap: 3px; margin: 4px 0; opacity: .95; }
-  .layer.selected { outline: 1px solid #2f6fba; border-radius: 5px; }
-  .layer.hidden { opacity: .5; }
-  .layer .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
-  .layer-name { width: 58px; padding: 3px; }
-  .layer button:not(.name) { padding: 3px 5px; }
-  .tag { display: inline-block; color: #8ab4ff; font-size: 9px; margin-right: 5px; text-transform: uppercase; }
-  .image-panel, .shape-panel { background: #25262d; }
+  .hint, .empty { margin: 4px 0 10px; color: var(--ui-faint); font-size: 11px; }
+
+  /* layers */
+  .layer { display: flex; align-items: center; gap: 2px; margin: 2px 0; border-radius: 6px; padding: 2px; }
+  .layer:hover { background: var(--ui-control); }
+  .layer.selected { background: var(--ui-control); outline: 1px solid var(--ui-primary); }
+  .layer.hidden .label, .layer.hidden .icon { opacity: .45; }
+  .layer .row { display: flex; flex: 1; min-width: 0; align-items: center; gap: 9px; background: none; border: none; padding: 3px 4px; text-align: left; cursor: pointer; }
+  .layer .row:hover { background: none; }
+  .icon { flex: none; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border-radius: 4px; overflow: hidden; }
+  .icon img { width: 22px; height: 22px; object-fit: cover; border-radius: 4px; display: block; }
+  .icon .t-glyph { font-family: Georgia, serif; font-size: 15px; color: var(--ui-text); }
+  .icon .glyph { font-size: 10px; font-weight: 600; color: var(--ui-muted); letter-spacing: -0.5px; }
+  .shape-ico { display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; }
+  .shape-ico :global(svg) { width: 18px !important; height: 14px !important; overflow: visible; }
+  .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--ui-text); }
+  .label.preview { font-style: italic; color: var(--ui-muted); }
+  .rename { flex: 1; min-width: 0; padding: 2px 5px; font-size: 12px; }
+  .controls { display: flex; align-items: center; gap: 1px; }
+  .ctl { display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; background: none; border: none; color: var(--ui-faint); border-radius: 4px; }
+  .ctl:hover { background: var(--ui-control-hover); color: var(--ui-text); }
+  .ctl.on { color: var(--ui-accent); }
+  .ctl.move { visibility: hidden; }
+  .layer:hover .ctl.move { visibility: visible; }
+
+  .image-panel, .shape-panel { background: var(--ui-surface); }
 </style>

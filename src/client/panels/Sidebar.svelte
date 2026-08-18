@@ -9,6 +9,7 @@
   import { getCanvasSize } from '../lib/overlay/editmode.js'
   import { isSlideEmpty, SLIDE_LAYOUTS } from '../lib/model/layouts.js'
   import { loadSlideTemplates } from '../lib/model/templates.js'
+  import SlideThumb from './SlideThumb.svelte'
 
   let items = $state([])
   let layout = $state('blank')
@@ -37,7 +38,8 @@
   function handleFinalize(e) {
     items = e.detail.items
     if (items.some((item) => item.vertical)) {
-      editor.statusMessage = 'Use the up/down buttons to reorder slides while vertical stacks are present.'
+      editor.statusMessage = 'This deck has vertical stacks — use the Arrange view (grid button in the toolbar) to reorder slides.'
+      editor.arrangeOpen = true
       items = slideSummaries(runtime.bridge, getCanvasSize(runtime.bridge))
       return
     }
@@ -71,21 +73,11 @@
         tabindex="0"
       >
         <span class="num">{item.h + 1}{item.vertical ? `.${item.v + 1}` : ''}</span>
-        <div
-          class="thumb"
-          style:background={item.background ?? '#fff'}
-          style:aspect-ratio={`${editor.settings.width || 960} / ${editor.settings.height || 700}`}
-        >
-          {#each item.boxes as box, i (i)}
-            <div
-              class="box {box.kind}"
-              style:left="{box.x}%"
-              style:top="{box.y}%"
-              style:width="{box.w}%"
-              style:height="{box.h}%"
-            ></div>
-          {/each}
-          <span class="title">{item.title}</span>
+        <div class="thumb-holder">
+          <SlideThumb
+            summary={item}
+            current={item.h === editor.slideIndex.h && item.v === (editor.slideIndex.v ?? 0)}
+          />
         </div>
       </div>
     {/each}
@@ -128,8 +120,8 @@
     width: 168px;
     display: flex;
     flex-direction: column;
-    background: #222329;
-    border-right: 1px solid #131418;
+    background: var(--ui-surface);
+    border-right: 1px solid var(--ui-border-strong);
     min-height: 0;
   }
   .list {
@@ -147,82 +139,54 @@
     gap: 6px;
     align-items: flex-start;
   }
+  .thumb-holder {
+    flex: 1;
+    min-width: 0;
+  }
   .num {
-    color: #6f7077;
+    color: var(--ui-faint);
     font-size: 11px;
     min-width: 14px;
     text-align: right;
     padding-top: 2px;
   }
-  .thumb {
-    position: relative;
-    flex: 1;
-    border: 2px solid #3a3b42;
-    border-radius: 4px;
-    overflow: hidden;
-  }
-  .thumb-wrap.current .thumb {
-    border-color: #2f6fba;
-  }
   .thumb-wrap.vertical { margin-left: 14px; }
-  .box {
-    position: absolute;
-    border-radius: 1px;
-  }
-  .box.text {
-    background: #b9c2cf;
-  }
-  .box.img {
-    background: #8fb6e8;
-  }
-  .box.shape {
-    background: #cfd8b9;
-  }
-  .title {
-    position: absolute;
-    left: 3px;
-    bottom: 1px;
-    right: 3px;
-    font-size: 8px;
-    color: #555;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    pointer-events: none;
-  }
   .actions {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
-    gap: 6px;
+    gap: 5px;
     padding: 8px 10px;
-    border-top: 1px solid #131418;
+    border-top: 1px solid var(--ui-border-strong);
   }
   .actions button {
-    background: #34353d;
-    color: #d6d7dc;
-    border: 1px solid #45464f;
-    border-radius: 6px;
+    background: var(--ui-control);
+    color: var(--ui-text);
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius);
     padding: 3px 0;
     cursor: pointer;
+    font-family: inherit;
   }
   .actions select {
     grid-column: 1 / -1;
     min-width: 0;
     width: 100%;
-    background: #34353d;
-    color: #d6d7dc;
-    border: 1px solid #45464f;
+    background: var(--ui-control);
+    color: var(--ui-text);
+    border: 1px solid var(--ui-border);
     border-radius: 5px;
     padding: 3px;
+    font-family: inherit;
   }
   .actions button:hover:not(:disabled) {
-    background: #3f4049;
+    background: var(--ui-control-hover);
   }
   .actions button:disabled {
     opacity: 0.4;
     cursor: default;
   }
-  .templates { display: grid; grid-template-columns: 1fr; gap: 5px; padding: 8px 10px; border-top: 1px solid #131418; }
-  .templates input, .templates select { min-width: 0; background: #34353d; color: #d6d7dc; border: 1px solid #45464f; border-radius: 5px; padding: 4px; }
-  .templates button { background: #34353d; color: #d6d7dc; border: 1px solid #45464f; border-radius: 5px; padding: 4px; }
+  .templates { display: grid; grid-template-columns: 1fr; gap: 5px; padding: 8px 10px; border-top: 1px solid var(--ui-border-strong); }
+  .templates input, .templates select { min-width: 0; background: var(--ui-control); color: var(--ui-text); border: 1px solid var(--ui-border); border-radius: 5px; padding: 4px; font-family: inherit; }
+  .templates button { background: var(--ui-control); color: var(--ui-text); border: 1px solid var(--ui-border); border-radius: 5px; padding: 4px; cursor: pointer; font-family: inherit; }
+  .templates button:hover { background: var(--ui-control-hover); }
 </style>
