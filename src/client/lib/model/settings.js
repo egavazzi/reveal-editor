@@ -176,7 +176,8 @@ const RUNTIME_SCRIPT = `(() => {
         document.body.appendChild(dot);
         let laserOn = false;
         document.addEventListener('keydown', e => {
-          if (e.key !== 'l' && e.key !== 'L') return;
+          // Q: not bound by reveal (L/H/J/K navigate, A pauses auto-slide…)
+          if (e.key !== 'q' && e.key !== 'Q') return;
           if (e.ctrlKey || e.metaKey || e.altKey) return;
           if (/^(input|textarea|select)$/i.test(e.target.tagName) || e.target.isContentEditable) return;
           laserOn = !laserOn;
