@@ -77,7 +77,7 @@ export function stopTextEdit() {
 
 // Commands whose semantic-tag output is deprecated markup (<font>, align="")
 // use CSS styling instead; everything else stays plain tags (<b>, <ul>…).
-const CSS_COMMANDS = ['foreColor', 'fontSize', 'justifyLeft', 'justifyCenter', 'justifyRight', 'justifyFull']
+const CSS_COMMANDS = ['foreColor', 'fontSize', 'fontName', 'justifyLeft', 'justifyCenter', 'justifyRight', 'justifyFull']
 
 /** Apply a formatting command to the current text selection. */
 export function formatText(command, value = null) {
@@ -102,9 +102,11 @@ export function queryFormatState() {
   const sizeEl = (anchor && active.el.contains(anchor)
     ? (anchor.nodeType === 1 ? anchor : anchor.parentElement)
     : active.el)
-  const fontSize = Math.round(parseFloat(win.getComputedStyle(sizeEl).fontSize)) || null
+  const computed = win.getComputedStyle(sizeEl)
+  const fontSize = Math.round(parseFloat(computed.fontSize)) || null
   return {
     fontSize,
+    fontFamily: computed.fontFamily || '',
     bold: read('bold'),
     italic: read('italic'),
     underline: read('underline'),

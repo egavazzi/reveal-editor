@@ -53,6 +53,25 @@
     fmt = queryFormatState() ?? fmt
   }
 
+  // Font families offered while editing text. 'inherit' hands the selection
+  // back to the theme's font. Detection matches the caret's computed family.
+  const FONT_OPTIONS = [
+    { id: 'inherit', label: 'Theme font', match: null },
+    { id: "'Open Sans', 'Segoe UI', sans-serif", label: 'Open Sans', match: 'open sans' },
+    { id: 'system-ui, sans-serif', label: 'System sans', match: 'system-ui' },
+    { id: "Georgia, 'Times New Roman', serif", label: 'Serif', match: 'georgia' },
+    { id: "'Times New Roman', Times, serif", label: 'Serif (Times)', match: 'times' },
+    { id: "ui-monospace, 'Courier New', monospace", label: 'Monospace', match: 'monospace' }
+  ]
+  const fontValue = $derived.by(() => {
+    const family = (fmt?.fontFamily || '').toLowerCase()
+    return FONT_OPTIONS.find((option) => option.match && family.includes(option.match))?.id ?? 'inherit'
+  })
+  function setFont(value) {
+    applyFormat('fontName', value)
+    fmt = queryFormatState() ?? fmt
+  }
+
   // Link editing: remember the text selection before the URL input takes focus.
   let linkOpen = $state(false)
   let linkUrl = $state('')
@@ -99,6 +118,17 @@
         <option value="h2">Heading 2</option>
         <option value="h3">Heading 3</option>
         <option value="blockquote">Quote</option>
+      </select>
+      <select
+        class="font"
+        title="Font family"
+        value={fontValue}
+        onmousedown={stopFocus}
+        onchange={(e) => setFont(e.currentTarget.value)}
+      >
+        {#each FONT_OPTIONS as option (option.id)}
+          <option value={option.id}>{option.label}</option>
+        {/each}
       </select>
       <span class="sep"></span>
       <button class:active={fmt?.bold} title="Bold (Ctrl+B)" onclick={() => applyFormat('bold')}><b>B</b></button>
@@ -300,6 +330,9 @@
   }
   select.block {
     min-width: 96px;
+  }
+  select.font {
+    min-width: 104px;
   }
   .link-url {
     width: 200px;
