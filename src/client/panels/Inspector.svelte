@@ -1,9 +1,11 @@
 <script>
   import { editor } from '../stores/editor.svelte.js'
+  import { REVEAL_THEMES, TYPOGRAPHY_PRESETS } from '../lib/model/settings.js'
   import {
-    currentLayers, selectLayer, toggleLayerHidden, toggleLayerLocked, moveLayer,
-    selectedImageInfo, setImageProperties, selectedShapeInfo, setShapeProperties,
-    updateDeckSettings as updateSettings
+    currentLayers, selectLayer, toggleLayerHidden, toggleLayerLocked, moveLayer, setLayerName,
+    currentSpeakerNotes, selectedElementInfo, selectedImageInfo, setElementProperties,
+    selectedShapeInfo, setShapeProperties,
+    setImageProperties, setSpeakerNotes, updateDeckSettings as updateSettings
   } from '../lib/actions.js'
 
   const presets = {
@@ -27,6 +29,17 @@
     void editor.selectionVersion
     return selectedImageInfo()
   })
+  const element = $derived.by(() => {
+    void editor.docVersion
+    void editor.selectionCount
+    void editor.selectionVersion
+    return selectedElementInfo()
+  })
+  const notes = $derived.by(() => {
+    void editor.docVersion
+    void editor.slideIndex.h
+    return currentSpeakerNotes()
+  })
   const shape = $derived.by(() => {
     void editor.docVersion
     void editor.selectionCount
@@ -49,8 +62,10 @@
   <header>
     <button class:active={editor.sidePanel === 'layers'} onclick={() => editor.sidePanel = 'layers'}>Layers</button>
     <button class:active={editor.sidePanel === 'settings'} onclick={() => editor.sidePanel = 'settings'}>Deck</button>
+    <button class:active={editor.sidePanel === 'notes'} onclick={() => editor.sidePanel = 'notes'}>Notes</button>
     {#if image}<button class:active={editor.sidePanel === 'image'} onclick={() => editor.sidePanel = 'image'}>Image</button>{/if}
     {#if shape}<button class:active={editor.sidePanel === 'shape'} onclick={() => editor.sidePanel = 'shape'}>Shape</button>{/if}
+    {#if element && !shape}<button class:active={editor.sidePanel === 'element'} onclick={() => editor.sidePanel = 'element'}>Element</button>{/if}
     <button class="close" title="Close panel" onclick={() => editor.sidePanel = null}>×</button>
   </header>
 
@@ -64,6 +79,7 @@
           <button class="name" title={layer.label} onclick={() => selectLayer(layer.el)}>
             <span class="tag">{layer.tag}</span>{layer.label}
           </button>
+          <input class="layer-name" aria-label="Layer name" value={layer.el.getAttribute('aria-label') || ''} placeholder="name" onchange={(e) => setLayerName(layer.el, e.currentTarget.value)} />
           <button title="Move forward one level" onclick={() => moveLayer(layer.el, 'up')}>↑</button>
           <button title="Move backward one level" onclick={() => moveLayer(layer.el, 'down')}>↓</button>
           <button title={layer.hidden ? 'Show layer' : 'Hide layer'} onclick={() => toggleLayerHidden(layer.el)}>{layer.hidden ? '◌' : '◉'}</button>
@@ -73,6 +89,38 @@
     </section>
   {:else if editor.sidePanel === 'settings'}
     <section class="panel">
+      <h3>Appearance</h3>
+      <label>Theme
+        <select value={editor.settings.theme} onchange={(e) => updateSettings({ theme: e.currentTarget.value })}>
+          {#if !editor.settings.theme}
+            <option value="">Current deck stylesheet</option>
+          {:else if !REVEAL_THEMES.includes(editor.settings.theme)}
+            <option value={editor.settings.theme}>Custom ({editor.settings.theme})</option>
+          {/if}
+          {#each REVEAL_THEMES as theme}
+            <option value={theme}>{theme.replaceAll('-', ' ')}</option>
+          {/each}
+        </select>
+      </label>
+      <label>Typography
+        <select value={editor.settings.typography} onchange={(e) => updateSettings({ typography: e.currentTarget.value })}>
+          {#each TYPOGRAPHY_PRESETS as preset}
+            <option value={preset.id}>{preset.label}</option>
+          {/each}
+        </select>
+      </label>
+      <label>Transition
+        <select value={editor.settings.transition} onchange={(e) => updateSettings({ transition: e.currentTarget.value })}>
+          <option value="none">None</option><option value="fade">Fade</option><option value="slide">Slide</option>
+          <option value="convex">Convex</option><option value="concave">Concave</option><option value="zoom">Zoom</option>
+        </select>
+      </label>
+      <label>Transition speed
+        <select value={editor.settings.transitionSpeed} onchange={(e) => updateSettings({ transitionSpeed: e.currentTarget.value })}>
+          <option value="default">Default</option><option value="fast">Fast</option><option value="slow">Slow</option>
+        </select>
+      </label>
+
       <h3>Canvas</h3>
       <label>Format
         <select value={selectedPreset} onchange={setPreset}>
@@ -110,6 +158,20 @@
     </section>
   {/if}
 
+  {#if editor.sidePanel === 'notes'}
+    <section class="panel notes-panel">
+      <h3>Speaker notes</h3>
+      <p class="hint">Saved as native reveal.js notes for the current slide. Press S while presenting to open speaker view.</p>
+      <textarea
+        rows="12"
+        placeholder="Private notes for this slide…"
+        value={notes}
+        onchange={(e) => setSpeakerNotes(e.currentTarget.value)}
+      ></textarea>
+      {#if notes}<button onclick={() => setSpeakerNotes('')}>Clear notes</button>{/if}
+    </section>
+  {/if}
+
   {#if image && editor.sidePanel === 'image'}
     <section class="panel image-panel">
       <h3>Image</h3>
@@ -129,6 +191,22 @@
       <label>Corner radius<input type="number" min="0" max="500" value={image.radius} onchange={(e) => setImageProperties({ radius: +e.currentTarget.value })} /></label>
       <label class="check"><input type="checkbox" checked={image.shadow} onchange={(e) => setImageProperties({ shadow: e.currentTarget.checked })} /> Drop shadow</label>
       <label>Link URL<input type="url" placeholder="https://…" value={image.href} onchange={(e) => setImageProperties({ href: e.currentTarget.value })} /></label>
+    </section>
+  {/if}
+
+  {#if element && editor.sidePanel === 'element'}
+    <section class="panel element-panel">
+      <h3>{element.group ? 'Group' : 'Element'} geometry</h3>
+      <div class="row">
+        <label>X<input type="number" value={element.x} onchange={(e) => setElementProperties({ x: +e.currentTarget.value })} /></label>
+        <label>Y<input type="number" value={element.y} onchange={(e) => setElementProperties({ y: +e.currentTarget.value })} /></label>
+      </div>
+      <div class="row">
+        <label>Width<input type="number" min="1" value={element.width} onchange={(e) => setElementProperties({ width: +e.currentTarget.value })} /></label>
+        <label>Height<input type="number" min="1" value={element.height} onchange={(e) => setElementProperties({ height: +e.currentTarget.value })} /></label>
+      </div>
+      <label>Rotation (°)<input type="number" step="1" value={element.rotation} onchange={(e) => setElementProperties({ rotation: +e.currentTarget.value })} /></label>
+      <label class="check"><input type="checkbox" checked={element.lockRatio} onchange={(e) => setElementProperties({ lockRatio: e.currentTarget.checked })} /> Lock aspect ratio while resizing</label>
     </section>
   {/if}
 
@@ -173,7 +251,8 @@
   h3:not(:first-child) { margin-top: 20px; }
   label { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; color: #9a9ba3; font-size: 12px; }
   label.check { flex-direction: row; align-items: center; color: #d6d7dc; }
-  input, select { min-width: 0; box-sizing: border-box; width: 100%; background: #34353d; color: #d6d7dc; border: 1px solid #45464f; border-radius: 4px; padding: 4px 6px; }
+  input, select, textarea { min-width: 0; box-sizing: border-box; width: 100%; background: #34353d; color: #d6d7dc; border: 1px solid #45464f; border-radius: 4px; padding: 4px 6px; }
+  textarea { resize: vertical; font: inherit; line-height: 1.4; }
   input[type='checkbox'] { width: auto; } input[type='color'] { height: 30px; padding: 1px; }
   .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .hint, .empty { margin: 4px 0 10px; color: #777983; font-size: 11px; }
@@ -181,6 +260,7 @@
   .layer.selected { outline: 1px solid #2f6fba; border-radius: 5px; }
   .layer.hidden { opacity: .5; }
   .layer .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+  .layer-name { width: 58px; padding: 3px; }
   .layer button:not(.name) { padding: 3px 5px; }
   .tag { display: inline-block; color: #8ab4ff; font-size: 9px; margin-right: 5px; text-transform: uppercase; }
   .image-panel, .shape-panel { background: #25262d; }

@@ -36,6 +36,12 @@
     var settingsNode = document.querySelector('.slides template[data-re-settings]');
     var deckSettings = {};
     try { deckSettings = settingsNode ? JSON.parse(settingsNode.innerHTML) : {}; } catch (_) {}
+    if (/^[a-z0-9_-]+$/i.test(deckSettings.theme || '')) {
+      var themeLink = document.querySelector('link[rel~="stylesheet"][href*="/theme/"], link[rel~="stylesheet"][href^="theme/"]');
+      if (themeLink) {
+        themeLink.href = themeLink.href.replace(/(^|.*\/theme\/)[^/?#]+(\.css(?:[?#].*)?)$/, '$1' + deckSettings.theme + '$2');
+      }
+    }
     Reveal.initialize({
       width: deckSettings.width || 960,
       height: deckSettings.height || 700,
@@ -47,7 +53,8 @@
       controls: !editMode && deckSettings.controls !== false,
       progress: !editMode,
       slideNumber: !editMode && deckSettings.slideNumbers ? (deckSettings.slideNumberFormat || 'c/t') : false,
-      transition: editMode ? 'none' : 'slide',
+      transition: editMode ? 'none' : (deckSettings.transition || 'slide'),
+      transitionSpeed: deckSettings.transitionSpeed || 'default',
       katex: { local: 'reveal/katex' },
       plugins: [RevealHighlight, RevealMath.KaTeX, RevealNotes]
     });

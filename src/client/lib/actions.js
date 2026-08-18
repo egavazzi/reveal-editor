@@ -4,18 +4,22 @@
 import { editor, runtime } from '../stores/editor.svelte.js'
 import {
   insertTextBox, insertShape, insertImageBlob, imageFromClipboard,
-  insertMathBox, insertCodeBlock, insertVideoBlob
+  insertMathBox, insertCodeBlock, insertVideoBlob, insertHtmlBlock
 } from './model/insert.js'
 import { startTextEdit, formatText, isEditingText, activeElement } from './editors/text.js'
 import { ensurePositioned } from './model/position.js'
+import { arrangeElements } from './model/alignment.js'
+import { applyLayout, isSlideEmpty } from './model/layouts.js'
 import {
   renderMath, getMathSource, commitMath, getCodeState, commitCode, isMathOnly
 } from './editors/mathcode.js'
 import {
-  addSlide, duplicateSlide, deleteSlide, setSlideBackground
+  addSlide, addVerticalSlide, deleteCurrentSlide, duplicateCurrentSlide,
+  demoteHorizontalSlide, moveCurrentSlide, promoteVerticalSlide, setSlideBackground
 } from './model/slides.js'
 import { snapshot, undo as histUndo, redo as histRedo } from './history/history.js'
 import { cleanElementHtml } from './model/clean.js'
+import { loadSlideTemplates, storeSlideTemplate } from './model/templates.js'
 import { rehydrate } from './model/rehydrate.js'
 import { saveDeck } from './model/save.js'
 import {
@@ -26,11 +30,11 @@ export { saveDeck } from './model/save.js'
 export { slideSummaries } from './model/slides.js'
 
 export function snapshotSlide() {
-  snapshot(runtime.bridge, { type: 'slide', h: editor.slideIndex.h })
+  snapshot(runtime.bridge, { type: 'slide', h: editor.slideIndex.h, v: editor.slideIndex.v ?? 0 })
 }
 
 export function snapshotDeck() {
-  snapshot(runtime.bridge, { type: 'deck', h: editor.slideIndex.h })
+  snapshot(runtime.bridge, { type: 'deck', h: editor.slideIndex.h, v: editor.slideIndex.v ?? 0 })
 }
 
 export function undoAction() {
@@ -46,7 +50,7 @@ export function redoAction() {
 function afterHistory(entry) {
   if (entry.scope.type === 'deck') initializeSettings(runtime.bridge, entry.settings)
   runtime.overlay.setSelection([])
-  editor.slideCount = runtime.bridge.getSections().length
+  editor.slideCount = runtime.bridge.getSlideEntries?.().length ?? runtime.bridge.getSections().length
   editor.slideIndex = runtime.bridge.getIndex()
   markDirty()
 }
@@ -84,8 +88,19 @@ export function addShape(kind) {
 
 export async function addImageBlob(blob, name) {
   try {
+    const selection = runtime.overlay?.getSelection() ?? []
+    const placeholder = selection.length === 1 && selection[0].classList.contains('re-image-placeholder')
+      ? selection[0]
+      : null
     snapshotSlide()
     const el = await insertImageBlob(runtime.bridge, blob, name)
+    if (placeholder?.isConnected) {
+      for (const prop of ['left', 'top', 'width', 'height']) {
+        if (placeholder.style[prop]) el.style[prop] = placeholder.style[prop]
+      }
+      el.style.objectFit = 'contain'
+      placeholder.remove()
+    }
     runtime.overlay.setSelection([el])
     markDirty()
   } catch (err) {
@@ -170,7 +185,9 @@ export function beginTextEdit(el, { selectAll = false } = {}) {
 export function editElement(el) {
   const tag = el.tagName.toLowerCase()
   if (tag === 'img' || tag === 'svg' || tag === 'video') return
-  if (el.classList.contains('re-math') || (el.querySelector('.katex') && isMathOnly(el))) {
+  if (el.classList.contains('re-html')) {
+    openHtmlEditor(el)
+  } else if (el.classList.contains('re-math') || (el.querySelector('.katex') && isMathOnly(el))) {
     openMathEditor(el)
   } else if (tag === 'pre' || el.querySelector('pre > code')) {
     openCodeEditor(el)
@@ -208,6 +225,21 @@ export function addCode() {
   openCodeEditor(el)
 }
 
+export function addHtml() {
+  snapshotSlide()
+  const el = insertHtmlBlock(runtime.bridge)
+  runtime.overlay.setSelection([el])
+  markDirty()
+  openHtmlEditor(el)
+}
+
+export function openHtmlEditor(el) {
+  snapshotSlide()
+  runtime.popoverEl = el
+  runtime.popoverOriginal = el.innerHTML
+  editor.popover = { type: 'html', value: el.innerHTML, lang: '' }
+}
+
 export function openCodeEditor(el) {
   snapshotSlide()
   const target = el.tagName.toLowerCase() === 'pre' ? el : el.querySelector('pre')
@@ -232,6 +264,8 @@ export function updatePopover(value, lang) {
     if (!el || !editor.popover) return
     if (editor.popover.type === 'math') {
       commitMath(runtime.bridge, el, editor.popover.value)
+    } else if (editor.popover.type === 'html') {
+      el.innerHTML = editor.popover.value
     } else {
       commitCode(runtime.bridge, el, editor.popover.value, editor.popover.lang)
     }
@@ -249,6 +283,8 @@ export function closePopover(keep) {
     // flush the last debounced edit synchronously
     if (editor.popover.type === 'math') {
       commitMath(runtime.bridge, el, editor.popover.value)
+    } else if (editor.popover.type === 'html') {
+      el.innerHTML = editor.popover.value
     } else {
       commitCode(runtime.bridge, el, editor.popover.value, editor.popover.lang)
     }
@@ -334,21 +370,95 @@ export function setShapeProperties(values) {
 
 // --- slides ---
 
-export function slideAdd() {
+export function slideAdd(layout = 'blank') {
   snapshotDeck()
-  addSlide(runtime.bridge, editor.slideIndex.h)
+  const section = addSlide(runtime.bridge, editor.slideIndex.h)
+  applyLayout(section, layout, editor.settings)
   refreshSlideState()
+}
+
+export function slideApplyLayout(layout) {
+  const section = runtime.bridge.currentSection
+  if (!isSlideEmpty(section)) {
+    editor.statusMessage = 'Layout presets can only be applied to an empty slide.'
+    return false
+  }
+  snapshotSlide()
+  const elements = applyLayout(section, layout, editor.settings)
+  runtime.bridge.sync()
+  runtime.overlay.setSelection(elements.filter((el) => !el.classList.contains('re-transient')))
+  markDirty()
+  return true
 }
 
 export function slideDuplicate() {
   snapshotDeck()
-  duplicateSlide(runtime.bridge, editor.slideIndex.h)
+  duplicateCurrentSlide(runtime.bridge, editor.slideIndex.h, editor.slideIndex.v ?? 0)
   refreshSlideState()
 }
 
 export function slideDelete() {
   snapshotDeck()
-  if (deleteSlide(runtime.bridge, editor.slideIndex.h)) refreshSlideState()
+  if (deleteCurrentSlide(runtime.bridge, editor.slideIndex.h, editor.slideIndex.v ?? 0)) refreshSlideState()
+}
+
+export function slideAddVertical(layout = 'blank') {
+  snapshotDeck()
+  const section = addVerticalSlide(runtime.bridge, editor.slideIndex.h, editor.slideIndex.v ?? 0)
+  applyLayout(section, layout, editor.settings)
+  refreshSlideState()
+}
+
+export function saveCurrentSlideTemplate(name) {
+  const section = runtime.bridge?.currentSection
+  const item = section && storeSlideTemplate({ name, html: cleanElementHtml(section) })
+  editor.statusMessage = item ? `Saved slide template “${item.name}”.` : 'Enter a template name first.'
+  return item
+}
+
+export function slideAddTemplate(id) {
+  const item = loadSlideTemplates().find((template) => template.id === id)
+  if (!item) return false
+  snapshotDeck()
+  const section = addSlide(runtime.bridge, editor.slideIndex.h)
+  const holder = runtime.bridge.doc.createElement('div')
+  holder.innerHTML = item.html
+  const fresh = holder.firstElementChild
+  if (!fresh || fresh.tagName !== 'SECTION') return false
+  section.replaceWith(fresh)
+  rehydrate(runtime.bridge, fresh)
+  runtime.bridge.sync()
+  runtime.bridge.goTo(editor.slideIndex.h + 1, 0)
+  refreshSlideState()
+  return true
+}
+
+export function slideMove(direction) {
+  snapshotDeck()
+  if (moveCurrentSlide(runtime.bridge, editor.slideIndex.h, editor.slideIndex.v ?? 0, direction)) {
+    refreshSlideState()
+    return true
+  }
+  return false
+}
+
+export function slidePromote() {
+  snapshotDeck()
+  if (promoteVerticalSlide(runtime.bridge, editor.slideIndex.h, editor.slideIndex.v ?? 0)) {
+    refreshSlideState()
+    return true
+  }
+  return false
+}
+
+export function slideDemote() {
+  snapshotDeck()
+  if ((editor.slideIndex.v ?? 0) !== 0) return false
+  if (demoteHorizontalSlide(runtime.bridge, editor.slideIndex.h)) {
+    refreshSlideState()
+    return true
+  }
+  return false
 }
 
 /** Apply a full slide permutation (order = old indices in new sequence). */
@@ -364,19 +474,64 @@ export function slideReorder(order) {
   refreshSlideState()
 }
 
-export function slideGoTo(index) {
-  runtime.bridge.goTo(index)
+export function slideGoTo(h, v = 0) {
+  runtime.bridge.goTo(h, v)
 }
 
 export function slideBackground(color) {
   snapshotSlide()
-  setSlideBackground(runtime.bridge, editor.slideIndex.h, { color })
+  setSlideBackground(runtime.bridge, editor.slideIndex.h, editor.slideIndex.v ?? 0, { color })
   markDirty()
+}
+
+export function currentSlideTransition() {
+  return runtime.bridge?.currentSection?.getAttribute('data-transition') || ''
+}
+
+export function setCurrentSlideTransition(transition) {
+  const section = runtime.bridge?.currentSection
+  if (!section) return
+  snapshotSlide()
+  if (transition) section.setAttribute('data-transition', transition)
+  else section.removeAttribute('data-transition')
+  runtime.bridge.sync()
+  markDirty()
+}
+
+export function currentSpeakerNotes() {
+  const section = runtime.bridge?.currentSection
+  return [...(section?.children || [])].find((el) => el.matches('aside.notes'))?.textContent || ''
+}
+
+export function setSpeakerNotes(notes) {
+  const section = runtime.bridge?.currentSection
+  if (!section) return
+  snapshotSlide()
+  let aside = [...section.children].find((el) => el.matches('aside.notes'))
+  if (notes) {
+    if (!aside) {
+      aside = section.ownerDocument.createElement('aside')
+      aside.className = 'notes'
+      section.appendChild(aside)
+    }
+    aside.textContent = notes
+  } else {
+    aside?.remove()
+  }
+  runtime.bridge.sync()
+  markDirty()
+}
+
+export function openPresentation({ pdf = false } = {}) {
+  if (!editor.deckFile) return
+  const file = encodeURIComponent(editor.deckFile)
+  const suffix = pdf ? '?print-pdf' : ''
+  window.open(`/deck/${file}${suffix}`, '_blank', 'noopener')
 }
 
 function refreshSlideState() {
   runtime.overlay.setSelection([])
-  editor.slideCount = runtime.bridge.getSections().length
+  editor.slideCount = runtime.bridge.getSlideEntries?.().length ?? runtime.bridge.getSections().length
   editor.slideIndex = runtime.bridge.getIndex()
   markDirty()
 }
@@ -446,9 +601,10 @@ export function sendToBack() {
 export function currentLayers() {
   const section = runtime.bridge?.currentSection
   if (!section) return []
-  return [...section.children].reverse().map((el, reverseIndex) => ({
+  const children = [...section.children].filter((el) => !el.matches('aside.notes, .re-transient'))
+  return children.reverse().map((el, reverseIndex) => ({
     el,
-    index: section.children.length - reverseIndex - 1,
+    index: children.length - reverseIndex - 1,
     label: el.getAttribute('aria-label') || el.getAttribute('alt') ||
       el.textContent?.trim().replace(/\s+/g, ' ').slice(0, 32) || `<${el.tagName.toLowerCase()}>`,
     tag: el.tagName.toLowerCase(),
@@ -490,6 +646,109 @@ export function moveLayer(el, direction) {
   if (direction === 'down' && el.previousElementSibling) el.previousElementSibling.before(el)
   runtime.overlay.refresh()
   markDirty()
+}
+
+export function setLayerName(el, name) {
+  if (!el) return
+  snapshotSlide()
+  const value = String(name || '').trim()
+  if (value) el.setAttribute('aria-label', value)
+  else el.removeAttribute('aria-label')
+  markDirty()
+}
+
+// --- alignment and distribution ---
+
+export function arrangeSelection(mode) {
+  const selection = runtime.overlay?.getSelection() ?? []
+  if (selection.length < 2) return false
+  snapshotSlide()
+  for (const el of selection) ensurePositioned(el, runtime.bridge)
+  if (!arrangeElements(selection, mode)) return false
+  runtime.overlay.refresh()
+  markDirty()
+  bumpSelection()
+  return true
+}
+
+export function selectedElementInfo() {
+  const selection = runtime.overlay?.getSelection() ?? []
+  if (selection.length !== 1) return null
+  const el = selection[0]
+  const rect = el.getBoundingClientRect()
+  const rotation = el.style.transform.match(/rotate\((-?[\d.]+)deg\)/)?.[1] || 0
+  return {
+    el,
+    x: Math.round(parseFloat(el.style.left) || 0),
+    y: Math.round(parseFloat(el.style.top) || 0),
+    width: Math.round(parseFloat(el.style.width) || rect.width),
+    height: Math.round(parseFloat(el.style.height) || rect.height),
+    rotation: Number(rotation),
+    lockRatio: el.hasAttribute('data-re-lock-ratio'),
+    group: el.classList.contains('re-group')
+  }
+}
+
+export function setElementProperties(values) {
+  const info = selectedElementInfo()
+  if (!info) return
+  snapshotSlide()
+  const { el } = info
+  if (values.x != null) el.style.left = `${Number(values.x) || 0}px`
+  if (values.y != null) el.style.top = `${Number(values.y) || 0}px`
+  if (values.width != null) el.style.width = `${Math.max(1, Number(values.width) || 1)}px`
+  if (values.height != null) el.style.height = `${Math.max(1, Number(values.height) || 1)}px`
+  if (values.rotation != null) el.style.transform = `rotate(${Number(values.rotation) || 0}deg)`
+  if (values.lockRatio != null) el.toggleAttribute('data-re-lock-ratio', Boolean(values.lockRatio))
+  runtime.overlay.reconfigure()
+  markDirty()
+  bumpSelection()
+}
+
+export function groupSelection() {
+  const selection = runtime.overlay?.getSelection() ?? []
+  if (selection.length < 2 || selection.some((el) => el.parentElement !== selection[0].parentElement)) return false
+  snapshotSlide()
+  const doc = selection[0].ownerDocument
+  const left = Math.min(...selection.map((el) => parseFloat(el.style.left) || 0))
+  const top = Math.min(...selection.map((el) => parseFloat(el.style.top) || 0))
+  const right = Math.max(...selection.map((el) => (parseFloat(el.style.left) || 0) + (parseFloat(el.style.width) || el.offsetWidth)))
+  const bottom = Math.max(...selection.map((el) => (parseFloat(el.style.top) || 0) + (parseFloat(el.style.height) || el.offsetHeight)))
+  const group = doc.createElement('div')
+  group.className = 're-el re-group'
+  Object.assign(group.style, { position: 'absolute', left: `${left}px`, top: `${top}px`, width: `${right - left}px`, height: `${bottom - top}px` })
+  selection[0].before(group)
+  for (const el of selection) {
+    el.style.left = `${(parseFloat(el.style.left) || 0) - left}px`
+    el.style.top = `${(parseFloat(el.style.top) || 0) - top}px`
+    el.classList.remove('re-el')
+    el.setAttribute('data-re-group-child', '')
+    group.appendChild(el)
+  }
+  runtime.overlay.setSelection([group])
+  markDirty()
+  return true
+}
+
+export function ungroupSelection() {
+  const selection = runtime.overlay?.getSelection() ?? []
+  const group = selection.length === 1 && selection[0].classList.contains('re-group') ? selection[0] : null
+  if (!group) return false
+  snapshotSlide()
+  const left = parseFloat(group.style.left) || 0
+  const top = parseFloat(group.style.top) || 0
+  const children = [...group.children]
+  for (const child of children) {
+    child.style.left = `${left + (parseFloat(child.style.left) || 0)}px`
+    child.style.top = `${top + (parseFloat(child.style.top) || 0)}px`
+    child.classList.add('re-el')
+    child.removeAttribute('data-re-group-child')
+    group.before(child)
+  }
+  group.remove()
+  runtime.overlay.setSelection(children)
+  markDirty()
+  return true
 }
 
 // --- image properties ---

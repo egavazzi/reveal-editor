@@ -3,6 +3,28 @@
 // path and remain easy to inspect or edit by hand.
 import { editor, runtime } from '../../stores/editor.svelte.js'
 
+export const REVEAL_THEMES = Object.freeze([
+  'black', 'white', 'league', 'beige', 'sky', 'night', 'serif', 'simple',
+  'solarized', 'moon', 'dracula', 'blood', 'black-contrast', 'white-contrast'
+])
+
+export const TYPOGRAPHY_PRESETS = Object.freeze([
+  { id: '', label: 'Theme default' },
+  { id: 'system', label: 'Modern system' },
+  { id: 'serif', label: 'Classic serif' },
+  { id: 'geometric', label: 'Geometric sans' },
+  { id: 'mono', label: 'Technical mono' }
+])
+
+const TYPOGRAPHY_CSS = {
+  system: ['system-ui, sans-serif', 'system-ui, sans-serif', 'ui-monospace, monospace'],
+  serif: ['Georgia, serif', 'Georgia, serif', 'ui-monospace, monospace'],
+  geometric: ['Avenir Next, Avenir, Century Gothic, system-ui, sans-serif',
+    'Avenir Next, Avenir, Century Gothic, system-ui, sans-serif', 'ui-monospace, monospace'],
+  mono: ['ui-monospace, SFMono-Regular, Consolas, monospace',
+    'ui-monospace, SFMono-Regular, Consolas, monospace', 'ui-monospace, monospace']
+}
+
 export const DEFAULT_SETTINGS = Object.freeze({
   width: 960,
   height: 700,
@@ -13,7 +35,11 @@ export const DEFAULT_SETTINGS = Object.freeze({
   controls: true,
   slideNumbers: false,
   slideNumberFormat: 'c/t',
-  slideNumberPosition: 'bottom-right'
+  slideNumberPosition: 'bottom-right',
+  theme: '',
+  typography: '',
+  transition: 'slide',
+  transitionSpeed: 'default'
 })
 
 const TEMPLATE_SELECTOR = 'template[data-re-settings]'
@@ -25,7 +51,30 @@ export function hasStoredSettings(slidesEl) {
   return Boolean(slidesEl?.querySelector(TEMPLATE_SELECTOR))
 }
 
-export function settingsFromRevealConfig(config = {}) {
+export function themeFromDocument(doc) {
+  const href = doc?.querySelector(
+    'link[rel~="stylesheet"][href*="/theme/"], link[rel~="stylesheet"][href^="theme/"]'
+  )?.getAttribute('href') || ''
+  return href.match(/(?:^|\/theme\/)([^/?#]+)\.css(?:[?#].*)?$/)?.[1] || ''
+}
+
+export function applyTheme(doc, theme) {
+  if (!doc || !/^[a-z0-9_-]+$/i.test(theme || '')) return false
+  const link = doc.querySelector(
+    'link[rel~="stylesheet"][href*="/theme/"], link[rel~="stylesheet"][href^="theme/"]'
+  )
+  if (!link) return false
+  const href = link.getAttribute('href') || ''
+  const next = href.replace(
+    /(^|.*\/theme\/)[^/?#]+(\.css(?:[?#].*)?)$/,
+    `$1${theme}$2`
+  )
+  if (next === href || next === '') return next !== ''
+  link.setAttribute('href', next)
+  return true
+}
+
+export function settingsFromRevealConfig(config = {}, doc = null) {
   return {
     ...DEFAULT_SETTINGS,
     width: Number(config.width) || DEFAULT_SETTINGS.width,
@@ -37,7 +86,10 @@ export function settingsFromRevealConfig(config = {}) {
     slideNumbers: Boolean(config.slideNumber),
     slideNumberFormat: typeof config.slideNumber === 'string'
       ? config.slideNumber
-      : DEFAULT_SETTINGS.slideNumberFormat
+      : DEFAULT_SETTINGS.slideNumberFormat,
+    theme: themeFromDocument(doc),
+    transition: config.transition || DEFAULT_SETTINGS.transition,
+    transitionSpeed: config.transitionSpeed || DEFAULT_SETTINGS.transitionSpeed
   }
 }
 
@@ -64,10 +116,15 @@ function settingsCss(s) {
   const v = vertical === 'top' ? 'top: 12px; bottom: auto' : 'bottom: 12px; top: auto'
   const right = s.controls && vertical !== 'top' ? 100 : 12
   const h = horizontal === 'left' ? 'left: 12px; right: auto' : `right: ${right}px; left: auto`
+  const fonts = TYPOGRAPHY_CSS[s.typography]
+  const typography = fonts
+    ? `.reveal { --r-main-font: ${fonts[0]}; --r-heading-font: ${fonts[1]}; --r-code-font: ${fonts[2]}; }`
+    : ''
   return `
 ${s.controls ? '' : '.reveal .controls { display: none !important; }'}
 .reveal .slide-number { ${v}; ${h}; }
 .reveal [data-re-href] { cursor: pointer; }
+${typography}
 `.trim()
 }
 
@@ -81,7 +138,19 @@ const RUNTIME_SCRIPT = `(() => {
     Reveal.configure({ width: s.width || 960, height: s.height || 700,
       margin: (s.margin ?? 4) / 100, controls: s.controls !== false,
       slideNumber: s.slideNumbers ? (s.slideNumberFormat || 'c/t') : false,
-      showSlideNumber: 'all' });
+      showSlideNumber: 'all', transition: s.transition || 'slide',
+      transitionSpeed: s.transitionSpeed || 'default' });
+    if (/^[a-z0-9_-]+$/i.test(s.theme || '')) {
+      const link = document.querySelector('link[rel~="stylesheet"][href*="/theme/"], link[rel~="stylesheet"][href^="theme/"]');
+      if (link) {
+        const href = link.getAttribute('href') || '';
+        const next = href.replace(/(^|.*\\/theme\\/)[^/?#]+(\\.css(?:[?#].*)?)$/, '$1' + s.theme + '$2');
+        if (next && next !== href) {
+          link.addEventListener('load', () => Reveal.layout(), { once: true });
+          link.setAttribute('href', next);
+        }
+      }
+    }
     const controls = document.querySelector('.reveal .controls');
     if (controls && s.controls === false) controls.style.setProperty('display', 'none', 'important');
     Reveal.layout();
@@ -142,6 +211,7 @@ export function updateSettings(patch) {
 export function applySettings(bridge) {
   if (!bridge) return
   const s = editor.settings
+  applyTheme(bridge.doc, s.theme)
   const controls = bridge.doc.querySelector('.reveal .controls')
   if (s.controls) controls?.style.removeProperty('display')
   bridge.Reveal.configure({
@@ -150,7 +220,9 @@ export function applySettings(bridge) {
     margin: Math.max(0, Number(s.margin) || 0) / 100,
     controls: Boolean(s.controls),
     slideNumber: s.slideNumbers ? (s.slideNumberFormat || 'c/t') : false,
-    showSlideNumber: 'all'
+    showSlideNumber: 'all',
+    transition: 'none',
+    transitionSpeed: s.transitionSpeed || 'default'
   })
   if (!s.controls) controls?.style.setProperty('display', 'none', 'important')
   let previewStyle = bridge.doc.getElementById(PREVIEW_STYLE_ID)

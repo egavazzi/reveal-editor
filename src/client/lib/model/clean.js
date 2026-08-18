@@ -19,7 +19,7 @@ const RUNTIME_PRE_CLASSES = ['code-wrapper']
 // does NOT include contenteditable: the rich-text editor removes its own
 // artifacts on detach, and foreign decks may author contenteditable.
 const TRANSIENT_ATTRS = [
-  CODE_SRC_ATTR, FRAG_AUTO_ATTR, 'data-re-selected', 'data-highlighted'
+  CODE_SRC_ATTR, FRAG_AUTO_ATTR, 'data-re-selected', 'data-highlighted', 'data-re-group-child'
 ]
 
 // Editor-injected elements that must never reach the file.

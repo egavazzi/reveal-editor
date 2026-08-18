@@ -28,6 +28,13 @@ beforeEach(() => {
 })
 
 describe('saveDeck', () => {
+  it('does not rewrite an untouched deck', async () => {
+    editor.dirty = false
+    await saveDeck()
+    expect(putDeck).not.toHaveBeenCalled()
+    expect(editor.statusMessage).toBe('No changes to save.')
+  })
+
   it('queues a follow-up save when the document changes during a request', async () => {
     const first = deferred()
     const second = deferred()

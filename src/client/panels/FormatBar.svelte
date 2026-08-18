@@ -3,7 +3,8 @@
   import {
     applyFormat, setFontSize, setTextColor,
     toggleFragment, setFragmentIndex, bringToFront, sendToBack,
-    slideBackground, selectionInfo
+    currentSlideTransition, setCurrentSlideTransition,
+    slideBackground, selectionInfo, arrangeSelection, groupSelection, ungroupSelection
   } from '../lib/actions.js'
 
   // Prevent toolbar clicks from stealing focus/selection from the
@@ -17,6 +18,12 @@
     void editor.selectionVersion
     void editor.docVersion
     return selectionInfo()
+  })
+  const slideTransition = $derived.by(() => {
+    void editor.slideIndex.h
+    void editor.slideIndex.v
+    void editor.docVersion
+    return currentSlideTransition()
   })
 </script>
 
@@ -71,6 +78,23 @@
       <span class="sep"></span>
       <button title="Bring to front" onclick={bringToFront}>⬆ front</button>
       <button title="Send to back" onclick={sendToBack}>⬇ back</button>
+      {#if editor.selectionCount > 1}
+        <span class="sep"></span>
+        <button title="Align left" onclick={() => arrangeSelection('left')}>⇤</button>
+        <button title="Align horizontal centers" onclick={() => arrangeSelection('center')}>↔</button>
+        <button title="Align right" onclick={() => arrangeSelection('right')}>⇥</button>
+        <button title="Align top" onclick={() => arrangeSelection('top')}>⤒</button>
+        <button title="Align vertical centers" onclick={() => arrangeSelection('middle')}>↕</button>
+        <button title="Align bottom" onclick={() => arrangeSelection('bottom')}>⤓</button>
+        <button title="Group selected elements" onclick={groupSelection}>Group</button>
+      {/if}
+      {#if editor.selectionCount === 1 && editor.selectionTag === 'div'}
+        <button title="Ungroup selected group" onclick={ungroupSelection}>Ungroup</button>
+      {/if}
+      {#if editor.selectionCount > 2}
+        <button title="Distribute horizontally" onclick={() => arrangeSelection('distribute-horizontal')}>⇹</button>
+        <button title="Distribute vertically" onclick={() => arrangeSelection('distribute-vertical')}>⇳</button>
+      {/if}
     {/if}
 
     {#if editor.selectionCount === 0 && !editor.textEditing}
@@ -79,6 +103,14 @@
         <input type="color" onchange={(e) => slideBackground(e.currentTarget.value)} />
       </label>
       <button title="Clear background" onclick={() => slideBackground('')}>clear</button>
+      <label>
+        slide transition
+        <select value={slideTransition} onchange={(e) => setCurrentSlideTransition(e.currentTarget.value)}>
+          <option value="">Deck default</option><option value="none">None</option><option value="fade">Fade</option>
+          <option value="slide">Slide</option><option value="convex">Convex</option><option value="concave">Concave</option>
+          <option value="zoom">Zoom</option>
+        </select>
+      </label>
     {/if}
   </div>
 {/if}
@@ -136,5 +168,12 @@
     border: 1px solid #45464f;
     border-radius: 4px;
     background: #34353d;
+  }
+  select {
+    background: #34353d;
+    color: #d6d7dc;
+    border: 1px solid #45464f;
+    border-radius: 4px;
+    padding: 2px 5px;
   }
 </style>

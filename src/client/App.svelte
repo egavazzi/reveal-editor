@@ -6,6 +6,7 @@
   import { saveDeck } from './lib/model/save.js'
   import { enterEditMode } from './lib/overlay/editmode.js'
   import { initializeSettings, settingsFromRevealConfig } from './lib/model/settings.js'
+  import { isSlideEmpty } from './lib/model/layouts.js'
   import { createOverlay } from './lib/overlay/overlay.js'
   import {
     editElement, handlePaste, snapshotSlide, undoAction, redoAction,
@@ -23,6 +24,11 @@
 
   let iframeSrc = $state('')
   let pristineHtml = ''
+  const emptySlide = $derived.by(() => {
+    void editor.docVersion
+    void editor.slideIndex.h
+    return Boolean(editor.ready && runtime.bridge?.currentSection && isSlideEmpty(runtime.bridge.currentSection))
+  })
 
   onMount(() => {
     ;(async () => {
@@ -73,7 +79,7 @@
       const bridge = await connectDeck(node)
       runtime.bridge = bridge
       stashPristineState(bridge.slidesEl, pristineHtml)
-      const initialSettings = settingsFromRevealConfig(bridge.config())
+      const initialSettings = settingsFromRevealConfig(bridge.config(), bridge.doc)
       runtime.editMode = enterEditMode(bridge)
       initializeSettings(bridge, initialSettings)
       runtime.overlay = createOverlay(bridge, {
@@ -83,7 +89,8 @@
           editor.selectionVersion++
           if (targets.length === 1 && editor.selectionTag === 'img') editor.sidePanel = 'image'
           else if (targets.length === 1 && targets[0].hasAttribute('data-shape')) editor.sidePanel = 'shape'
-          else if (editor.sidePanel === 'image' || editor.sidePanel === 'shape') editor.sidePanel = null
+          else if (targets.length === 1) editor.sidePanel = 'element'
+          else if (['image', 'shape', 'element'].includes(editor.sidePanel)) editor.sidePanel = null
         },
         onBeforeEdit() {
           snapshotSlide()
@@ -96,7 +103,7 @@
         }
       })
       editor.ready = true
-      editor.slideCount = bridge.getSections().length
+      editor.slideCount = bridge.getSlideEntries().length
       editor.slideIndex = bridge.getIndex()
       bridge.Reveal.on('slidechanged', () => {
         editor.slideIndex = runtime.bridge.getIndex()
@@ -167,6 +174,9 @@
         <div class="error-banner">{editor.error}</div>
       {:else if iframeSrc}
         <iframe src={iframeSrc} title="presentation" use:onIframeSrcSet></iframe>
+        {#if emptySlide}
+          <div class="empty-hint">Choose a layout in the lower-left corner, or add content from the toolbar.</div>
+        {/if}
       {/if}
     </main>
     {#if editor.sidePanel}<Inspector />{/if}
@@ -222,6 +232,20 @@
     border-radius: 8px;
     background: #fff;
     box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  }
+  .empty-hint {
+    position: absolute;
+    left: 50%;
+    bottom: 28px;
+    z-index: 2;
+    transform: translateX(-50%);
+    pointer-events: none;
+    padding: 7px 12px;
+    border: 1px solid #555762;
+    border-radius: 7px;
+    background: rgba(38, 39, 46, .92);
+    color: #c8cad1;
+    font-size: 12px;
   }
   .error-banner {
     margin: auto;

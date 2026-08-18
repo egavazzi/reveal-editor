@@ -3,13 +3,14 @@ import { existsSync, statSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createServer } from '../src/server/index.js'
-import { scaffoldDeck } from '../src/server/scaffold.js'
+import { ejectQuartoHtml, scaffoldDeck } from '../src/server/scaffold.js'
 
 const HELP = `reveal-editor — WYSIWYG editor for reveal.js presentations
 
 Usage:
   reveal-editor <deck.html> [options]   Edit an existing deck
   reveal-editor new <dir> [options]     Create a new deck folder, then edit it
+  reveal-editor eject <html> <dir>      Copy rendered Quarto HTML into an independent deck
 
 Options:
   --port <n>    Port to listen on (default: 3737)
@@ -47,6 +48,16 @@ if (args._[0] === 'new') {
   }
   deckPath = await scaffoldDeck(resolve(dir))
   console.log(`Created new deck at ${deckPath}`)
+} else if (args._[0] === 'eject') {
+  const input = args._[1]
+  const dir = args._[2]
+  if (!input || !dir) {
+    console.error('Usage: reveal-editor eject <rendered.html> <dir>')
+    process.exit(1)
+  }
+  deckPath = await ejectQuartoHtml(resolve(input), resolve(dir))
+  console.warn('Ejected one-way from Quarto: future QMD renders will not update this deck.')
+  console.log(`Created independent deck at ${deckPath}`)
 } else {
   deckPath = resolve(args._[0])
   if (!existsSync(deckPath)) {

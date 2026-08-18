@@ -6,6 +6,10 @@ let saveQueued = false
 
 export async function saveDeck() {
   if (!runtime.bridge) return
+  if (!editor.dirty && !editor.saving) {
+    editor.statusMessage = 'No changes to save.'
+    return
+  }
   if (editor.saving) {
     saveQueued = true
     return

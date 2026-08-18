@@ -23,5 +23,9 @@ export function watchDeck(deckPath, onEvent) {
   entry.subscribers.add(onEvent)
   return () => {
     entry.subscribers.delete(onEvent)
+    if (entry.subscribers.size === 0) {
+      watchers.delete(deckPath)
+      void entry.watcher.close()
+    }
   }
 }

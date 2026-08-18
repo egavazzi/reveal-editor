@@ -14,6 +14,7 @@ import { getCanvasSize } from './editmode.js'
  */
 export function resolveEditable(target, section) {
   if (!section.contains(target) || target === section) return null
+  if (target.closest('aside.notes, .re-transient')) return null
   const reEl = target.closest('.re-el')
   if (reEl && section.contains(reEl)) return reEl
   let el = target
@@ -44,10 +45,10 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
       target: targets,
       rootContainer: doc.body,
       draggable: true,
-      resizable: targets.length === 1,
+      resizable: targets.length === 1 && !targets[0]?.classList.contains('re-group'),
       rotatable: targets.length === 1 && !endpointShape,
       renderDirections: endpointShape ? [startCorner, oppositeCorner(startCorner)] : ['n', 'nw', 'ne', 's', 'se', 'sw', 'e', 'w'],
-      keepRatio: false,
+      keepRatio: targets.length === 1 && targets[0]?.hasAttribute('data-re-lock-ratio'),
       origin: false,
       snappable: true,
       elementGuidelines: guidelines,
@@ -218,14 +219,14 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
     const section = currentSection()
     if (!section) return
     const el = resolveEditable(e.target, section)
-    if (el) onDblClick?.(el, e)
+    if (el && !el.hasAttribute('data-re-locked')) onDblClick?.(el, e)
   }
 
   function buildSelecto() {
     selecto = new Selecto({
       container: doc.body,
       rootContainer: doc.body,
-      selectableTargets: ['.reveal .slides section.present > *'],
+      selectableTargets: ['.reveal .slides section.present > :not(aside.notes):not(.re-transient)'],
       hitRate: 0,
       selectByClick: false,
       selectFromInside: false,

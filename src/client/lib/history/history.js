@@ -19,7 +19,7 @@ function capture(bridge, scope) {
       settings: { ...editor.settings }
     }
   }
-  const section = bridge.getSections()[scope.h]
+  const section = bridge.getSlide?.(scope.h, scope.v ?? 0) ?? bridge.getSections()[scope.h]
   return { scope, html: cleanElementHtml(section) }
 }
 
@@ -28,9 +28,9 @@ function restore(bridge, entry) {
     bridge.slidesEl.innerHTML = entry.html
     rehydrate(bridge, bridge.slidesEl)
     bridge.sync()
-    bridge.goTo(Math.min(entry.scope.h ?? 0, bridge.getSections().length - 1))
+    bridge.goTo(Math.min(entry.scope.h ?? 0, bridge.getSections().length - 1), entry.scope.v ?? 0)
   } else {
-    const section = bridge.getSections()[entry.scope.h]
+    const section = bridge.getSlide?.(entry.scope.h, entry.scope.v ?? 0) ?? bridge.getSections()[entry.scope.h]
     if (!section) return
     const tmp = bridge.doc.createElement('div')
     tmp.innerHTML = entry.html
@@ -38,7 +38,7 @@ function restore(bridge, entry) {
     section.replaceWith(fresh)
     rehydrate(bridge, fresh)
     bridge.sync()
-    bridge.goTo(entry.scope.h)
+    bridge.goTo(entry.scope.h, entry.scope.v ?? 0)
   }
 }
 

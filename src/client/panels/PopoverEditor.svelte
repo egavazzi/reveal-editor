@@ -2,7 +2,9 @@
   import { editor } from '../stores/editor.svelte.js'
   import { updatePopover, closePopover } from '../lib/actions.js'
 
-  const title = $derived(editor.popover?.type === 'math' ? 'LaTeX' : 'Code')
+  const title = $derived(
+    editor.popover?.type === 'math' ? 'LaTeX' : editor.popover?.type === 'html' ? 'Custom HTML' : 'Code'
+  )
 
   function onKeydown(e) {
     if (e.key === 'Escape') {
@@ -26,8 +28,10 @@
             oninput={(e) => updatePopover(editor.popover.value, e.currentTarget.value)}
           />
         </label>
-      {:else}
+      {:else if editor.popover.type === 'math'}
         <span class="hint">inline: \( … \) display: $$ … $$</span>
+      {:else}
+        <span class="hint warning">Trusted deck code only; scripts run after presentation reload.</span>
       {/if}
       <span class="spacer"></span>
       <button onclick={() => closePopover(false)}>Cancel</button>
@@ -41,7 +45,11 @@
       oninput={(e) => updatePopover(e.currentTarget.value)}
       onkeydown={onKeydown}
     ></textarea>
-    <div class="foot">changes preview live on the slide</div>
+    <div class="foot">
+      {editor.popover.type === 'html'
+        ? 'HTML and CSS preview live; scripts intentionally wait for presentation reload'
+        : 'changes preview live on the slide'}
+    </div>
   </div>
 {/if}
 
@@ -75,6 +83,7 @@
     color: #9a9ba3;
     font-size: 12px;
   }
+  .warning { color: #e3b76b; }
   .spacer {
     flex: 1;
   }

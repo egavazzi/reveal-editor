@@ -6,6 +6,7 @@ import { locateSlides, spliceSlides } from '../../src/server/deck.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const foreign = readFileSync(join(here, 'fixtures', 'foreign.html'), 'utf8')
+const legacyCustom = readFileSync(join(here, 'fixtures', 'legacy-custom.html'), 'utf8')
 const template = readFileSync(
   join(here, '..', '..', 'templates', 'deck', 'deck.html'),
   'utf8'
@@ -33,6 +34,15 @@ describe('spliceSlides', () => {
 
   it('no-op save of the scaffold template is byte-identical', () => {
     expect(spliceSlides(template, innerSlides(template))).toBe(template)
+  })
+
+  it('canonicalizes a legacy customized vertical deck once without losing content', () => {
+    const once = spliceSlides(legacyCustom, innerSlides(legacyCustom))
+    const twice = spliceSlides(once, innerSlides(once))
+    expect(twice).toBe(once)
+    expect(once).toContain('<my-widget data-config="{&quot;mode&quot;:&quot;live&quot;}"></my-widget>')
+    expect(once).toContain('<aside class="notes">Say A</aside>')
+    expect(once).toContain('<foreignObject')
   })
 
   it('keeps foreign slide content intact (fragments, code, math, comments)', () => {

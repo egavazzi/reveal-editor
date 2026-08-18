@@ -53,6 +53,9 @@ Then, from any directory:
 ```sh
 reveal-editor new ~/talks/egu2026
 reveal-editor ~/talks/egu2026
+
+# one-way copy of rendered Quarto HTML for final visual polishing
+reveal-editor eject talk.html ~/talks/polished-talk
 ```
 
 ## Usage
@@ -64,6 +67,9 @@ npm run edit -- new ~/talks/egu2026
 # edit an existing one
 npm run edit -- ~/talks/egu2026/deck.html
 
+# eject rendered Quarto HTML into an independent deck
+npm run edit -- eject talk.html ~/talks/polished-talk
+
 # options: --port <n>, --no-open, --dev (editor UI from source)
 ```
 
@@ -71,6 +77,9 @@ The browser opens automatically. To **present**, just open `deck.html` in
 any browser — each deck folder vendors its own pinned copy of reveal.js and
 KaTeX (`reveal/`), so decks work offline, forever, with no dependency on
 this editor.
+
+See [Quarto interoperability](docs/QUARTO_INTEROP.md) for reproducible asset
+workflows and the one-way eject tradeoff.
 
 ## Editing
 
@@ -88,16 +97,30 @@ this editor.
   (Julia included), highlighted by the deck's own highlight.js
 - **Slides**: sidebar thumbnails — click to jump, drag to reorder, buttons
   to add/duplicate/delete; slide background color in the context bar
+- **Vertical stacks**: add vertical slides, navigate their numbered sidebar
+  thumbnails, reorder within stacks, or promote/demote between horizontal and
+  vertical structure
 - **Fragments**: select an element → "fragment" checkbox (+ optional
   explicit order) to make it appear step-by-step
 - **Layers**: open the Layers panel to select, reorder, show/hide, and
   lock/unlock objects; quick bring-to-front/send-to-back buttons remain in
   the context bar
+- **Composition**: align/distribute multi-selections, group/ungroup elements,
+  edit exact geometry and rotation, lock resize aspect ratios, and give layers
+  accessible names
+- **Layouts/templates**: create slides from built-in layouts or save the
+  current slide as a reusable browser-local template
 - **Images**: select an image to set exact dimensions, crop position,
   border, corner radius, shadow, and a presentation link
-- **Deck setup**: the Deck panel controls canvas format/size and margins,
-  editor grid display/snapping, navigation-arrow visibility, and slide
-  number format/position
+- **Deck setup**: the Deck panel controls the reveal theme, canvas format/size
+  and margins, editor grid display/snapping, navigation-arrow visibility, and
+  slide number format/position, typography, and transitions
+- **Speaker notes**: the Notes panel writes native `<aside class="notes">`
+  content for Reveal's speaker view
+- **Custom HTML**: insert a trusted HTML/CSS/JS block with `</>`; scripts are
+  preserved but intentionally execute only after opening the saved presentation
+- **Present/PDF**: open the standalone deck or Reveal's `?print-pdf` view from
+  the toolbar
 - **Save**: Ctrl+S or the Save button; optional autosave toggle
 - **Undo/redo**: Ctrl+Z / Ctrl+Shift+Z, ~100 steps
 - **Copy/paste/duplicate elements**: Ctrl+C / Ctrl+V / Ctrl+D
@@ -119,6 +142,8 @@ KaTeX markup or highlight spans.
 ## Maintenance
 
 - `npm test` — round-trip/idempotency suite + server e2e (31+ tests)
+- `npm run test:browser` — headless Firefox smoke test for live settings,
+  save, and standalone reload (requires Firefox + GeckoDriver)
 - `npm run vendor` — refresh `templates/reveal-dist/` after bumping the
   reveal.js/katex versions in package.json
 - `npm run build` — rebuild the editor UI into `dist/` after changing
@@ -126,11 +151,7 @@ KaTeX markup or highlight spans.
 
 ## Limitations (v1)
 
-- Horizontal slides only in the sidebar; vertical stacks render but aren't
-  managed visually
 - One deck per editor instance; localhost only (that's the security model)
-- Speaker-notes editing, themes, and PDF export: use reveal's own
-  facilities (`?print-pdf`, editing the theme `<link>` by hand)
 - Markdown-source decks (`data-markdown`) are not supported: reveal replaces
   the markdown source with rendered HTML at load time, so the editor refuses
   to open them rather than overwrite the source with that HTML on save
