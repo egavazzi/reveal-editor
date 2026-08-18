@@ -163,6 +163,22 @@ export function deleteSlide(bridge, index) {
   return true
 }
 
+/**
+ * Toggle reveal's native data-visibility="hidden" on a slide. Hidden slides
+ * stay editable (the editor initializes reveal with showHiddenSlides: true)
+ * but are removed from the deck when it is presented normally.
+ * Returns the new hidden state, or null if the slide doesn't exist.
+ */
+export function toggleSlideHidden(bridge, h, v = 0) {
+  const section = bridge.getSlide?.(h, v) ?? bridge.getSections()[h]
+  if (!section) return null
+  const hidden = section.getAttribute('data-visibility') !== 'hidden'
+  if (hidden) section.setAttribute('data-visibility', 'hidden')
+  else section.removeAttribute('data-visibility')
+  bridge.sync()
+  return hidden
+}
+
 export function setSlideBackground(bridge, h, v = 0, { color, image } = {}) {
   const section = bridge.getSlide?.(h, v) ?? bridge.getSections()[h]
   if (!section) return
@@ -251,6 +267,7 @@ export function slideSummaries(bridge, canvas) {
           el.hasAttribute('data-re-hidden')) continue
       collect(el, 0, 0)
     }
-    return { id: `s${h}-${v}`, index, h, v, vertical, title, background, backgroundImage, deckBackground, boxes }
+    const hidden = section.getAttribute('data-visibility') === 'hidden'
+    return { id: `s${h}-${v}`, index, h, v, vertical, hidden, title, background, backgroundImage, deckBackground, boxes }
   })
 }

@@ -53,6 +53,8 @@
       controls: !editMode && deckSettings.controls !== false,
       progress: !editMode,
       slideNumber: !editMode && deckSettings.slideNumbers ? (deckSettings.slideNumberFormat || 'c/t') : false,
+      // keep slides hidden with data-visibility="hidden" editable in the editor
+      showHiddenSlides: editMode,
       transition: editMode ? 'none' : (deckSettings.transition || 'slide'),
       transitionSpeed: deckSettings.transitionSpeed || 'default',
       katex: { local: 'reveal/katex' },

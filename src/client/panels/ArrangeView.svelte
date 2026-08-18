@@ -5,7 +5,7 @@
   import { onMount } from 'svelte'
   import { dndzone } from 'svelte-dnd-action'
   import { editor, runtime } from '../stores/editor.svelte.js'
-  import { slideSummaries, slideArrange } from '../lib/actions.js'
+  import { slideSummaries, slideArrange, slideToggleHidden } from '../lib/actions.js'
   import { getCanvasSize } from '../lib/overlay/editmode.js'
   import { icon } from '../lib/icons.js'
   import SlideThumb from './SlideThumb.svelte'
@@ -83,6 +83,10 @@
     scheduleCommit()
   }
 
+  function toggleHidden(item) {
+    if (slideToggleHidden(item.summary.h, item.summary.v)) build()
+  }
+
   function jumpTo(section) {
     const entry = runtime.bridge.getSlideEntries().find((e) => e.section === section)
     if (entry) runtime.bridge.goTo(entry.h, entry.v)
@@ -121,12 +125,19 @@
           {#each column.items as item, vi (item.id)}
             <div
               class="card"
+              class:hidden={item.summary.hidden}
               role="button"
               tabindex="0"
               ondblclick={() => jumpTo(item.section)}
               onkeydown={(e) => e.key === 'Enter' && jumpTo(item.section)}
             >
               <span class="num">{ci + 1}{column.items.length > 1 ? `.${vi + 1}` : ''}</span>
+              <button
+                class="hide-toggle"
+                class:on={item.summary.hidden}
+                title={item.summary.hidden ? 'Hidden when presenting — click to show' : 'Hide this slide when presenting'}
+                onclick={(e) => { e.stopPropagation(); toggleHidden(item) }}
+              >{@html icon(item.summary.hidden ? 'eyeOff' : 'eye')}</button>
               <SlideThumb summary={item.summary} current={item.current} />
             </div>
           {/each}
@@ -247,6 +258,33 @@
   .card {
     position: relative;
     cursor: grab;
+  }
+  .card.hidden :global(.thumb) { opacity: 0.4; }
+  .hide-toggle {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    background: rgba(18, 19, 23, 0.75);
+    color: #d6d7dc;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    opacity: 0;
+  }
+  .card:hover .hide-toggle,
+  .card:focus-within .hide-toggle,
+  .hide-toggle.on { opacity: 1; }
+  .hide-toggle:hover { color: #fff; background: rgba(18, 19, 23, 0.9); }
+  .hide-toggle :global(svg) {
+    width: 13px;
+    height: 13px;
   }
   .num {
     position: absolute;
