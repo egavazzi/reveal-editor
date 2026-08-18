@@ -7,13 +7,18 @@
     slideReorder, saveCurrentSlideTemplate
   } from '../lib/actions.js'
   import { getCanvasSize } from '../lib/overlay/editmode.js'
-  import { isSlideEmpty, SLIDE_LAYOUTS } from '../lib/model/layouts.js'
+  import { isSlideEmpty, slideLayoutsFor } from '../lib/model/layouts.js'
   import { loadSlideTemplates } from '../lib/model/templates.js'
   import SlideThumb from './SlideThumb.svelte'
   import { icon } from '../lib/icons.js'
 
   let items = $state([])
   let layout = $state('blank')
+  const layouts = $derived(slideLayoutsFor(editor.settings))
+  $effect(() => {
+    // a theme switch can retire the selected themed layout
+    if (!layouts.some((item) => item.id === layout)) layout = 'blank'
+  })
   let templateName = $state('')
   let templateId = $state('')
   let templates = $state(loadSlideTemplates())
@@ -85,7 +90,7 @@
   </div>
   <div class="actions">
     <select title="Layout used by the buttons below" bind:value={layout} disabled={!editor.ready}>
-      {#each SLIDE_LAYOUTS as item}
+      {#each layouts as item}
         <option value={item.id}>{item.label}</option>
       {/each}
     </select>

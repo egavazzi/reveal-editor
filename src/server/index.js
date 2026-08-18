@@ -1,15 +1,32 @@
 import express from 'express'
-import { readFile, stat } from 'node:fs/promises'
+import { copyFile, readdir, readFile, stat } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { loadDeck, saveDeck } from './deck.js'
 import { assetsRouter } from './assets.js'
 import { watchDeck } from './watch.js'
 
+/**
+ * Decks vendored before a custom theme existed (templates/themes/) lack its
+ * CSS in their reveal/ copy. Add missing theme files so those decks can also
+ * select the theme; never overwrite files already in the deck.
+ */
+async function syncCustomThemes(deckDir, repoRoot) {
+  const source = join(repoRoot, 'templates', 'themes')
+  const target = join(deckDir, 'reveal', 'dist', 'theme')
+  if (!existsSync(source) || !existsSync(target)) return
+  for (const file of await readdir(source)) {
+    if (!file.endsWith('.css') || existsSync(join(target, file))) continue
+    await copyFile(join(source, file), join(target, file))
+    console.log(`added custom theme ${file} to ${target}`)
+  }
+}
+
 export async function createServer({ deckPath, port = 3737, dev = false, repoRoot }) {
   const app = express()
   const deckDir = dirname(deckPath)
   const deckFile = basename(deckPath)
+  await syncCustomThemes(deckDir, repoRoot).catch(() => {})
 
   // --- Host header validation (defense against DNS rebinding) ---
   const ALLOWED_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]'])

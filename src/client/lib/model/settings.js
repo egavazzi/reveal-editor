@@ -5,7 +5,9 @@ import { editor, runtime } from '../../stores/editor.svelte.js'
 
 export const REVEAL_THEMES = Object.freeze([
   'black', 'white', 'league', 'beige', 'sky', 'night', 'serif', 'simple',
-  'solarized', 'moon', 'dracula', 'blood', 'black-contrast', 'white-contrast'
+  'solarized', 'moon', 'dracula', 'blood', 'black-contrast', 'white-contrast',
+  // custom themes vendored from templates/themes/
+  'uit'
 ])
 
 export const TYPOGRAPHY_PRESETS = Object.freeze([

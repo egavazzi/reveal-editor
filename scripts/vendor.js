@@ -1,7 +1,7 @@
 // Copies the pinned reveal.js and KaTeX dists from node_modules into
 // templates/reveal-dist/, which is committed to this repo and vendored into
 // every scaffolded deck so decks stay standalone and offline-capable.
-import { cp, mkdir, rm } from 'node:fs/promises'
+import { cp, mkdir, readdir, rm } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -23,5 +23,12 @@ await cp(join(katex, 'katex.min.css'), join(katexOut, 'katex.min.css'))
 await cp(join(katex, 'contrib', 'auto-render.min.js'), join(katexOut, 'contrib', 'auto-render.min.js'))
 await cp(join(katex, 'contrib', 'mhchem.min.js'), join(katexOut, 'contrib', 'mhchem.min.js'))
 await cp(join(katex, 'fonts'), join(katexOut, 'fonts'), { recursive: true })
+
+// Custom themes (e.g. uit) live in templates/themes/ and ship alongside the
+// stock reveal themes so `theme: <name>` resolves the same way for both.
+const customThemes = join(root, 'templates', 'themes')
+for (const file of await readdir(customThemes)) {
+  if (file.endsWith('.css')) await cp(join(customThemes, file), join(out, 'dist', 'theme', file))
+}
 
 console.log(`vendored reveal.js + katex into ${out}`)
