@@ -99,9 +99,9 @@ try {
     const typography = selects.find(s => s.parentElement.textContent.includes('Typography'));
     theme.value = 'moon'; theme.dispatchEvent(new Event('change', { bubbles: true }));
     typography.value = 'serif'; typography.dispatchEvent(new Event('change', { bubbles: true }));
-    const layout = document.querySelector('select[title="New slide layout"]');
+    const layout = document.querySelector('select[title="Layout used by the buttons below"]');
     layout.value = 'two-column'; layout.dispatchEvent(new Event('change', { bubbles: true }));
-    document.querySelector('button[title="Add slide with selected layout"]').click();
+    document.querySelector('button[title="New slide after this one, using the selected layout"]').click();
     return true;
   `)
   await waitFor(() => execute(`

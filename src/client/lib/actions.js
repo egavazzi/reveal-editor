@@ -17,6 +17,8 @@ import {
   addSlide, addVerticalSlide, deleteCurrentSlide, duplicateCurrentSlide,
   demoteHorizontalSlide, moveCurrentSlide, promoteVerticalSlide, setSlideBackground
 } from './model/slides.js'
+import { arrangeSlides } from './model/arrange.js'
+import { rescaleSlides } from './model/rescale.js'
 import { snapshot, undo as histUndo, redo as histRedo } from './history/history.js'
 import { cleanElementHtml } from './model/clean.js'
 import { loadSlideTemplates, storeSlideTemplate } from './model/templates.js'
@@ -26,6 +28,7 @@ import {
   initializeSettings, updateSettings as updateSettingsModel, writeSettings
 } from './model/settings.js'
 import { setShapeColors, shapeColors, syncShapeGeometry } from './model/shapes.js'
+import { videoInfo, applyVideoProperties } from './model/media.js'
 export { saveDeck } from './model/save.js'
 export { slideSummaries } from './model/slides.js'
 
@@ -69,6 +72,27 @@ export function markDirty() {
 export function updateDeckSettings(patch) {
   snapshotDeck()
   updateSettingsModel(patch)
+  markDirty()
+}
+
+/**
+ * Change the canvas size, optionally rescaling all positioned content so
+ * slides keep their composition in the new format.
+ */
+export function resizeDeck(size, { scaleContent = true } = {}) {
+  const from = {
+    width: Number(editor.settings.width) || 960,
+    height: Number(editor.settings.height) || 700
+  }
+  const to = {
+    width: Math.max(100, Number(size.width) || from.width),
+    height: Math.max(100, Number(size.height) || from.height)
+  }
+  if (to.width === from.width && to.height === from.height) return
+  snapshotDeck()
+  if (scaleContent) rescaleSlides(runtime.bridge.slidesEl, from, to)
+  updateSettingsModel({ width: to.width, height: to.height })
+  runtime.bridge.sync()
   markDirty()
 }
 
@@ -124,6 +148,11 @@ export async function addVideoBlob(blob, name) {
   try {
     snapshotSlide()
     const el = await insertVideoBlob(runtime.bridge, blob, name)
+    el.addEventListener('error', () => {
+      editor.statusMessage =
+        'Video added, but this browser cannot decode it (unsupported codec) — it will not play here. Convert to WebM (VP9) or H.264 MP4.'
+      editor.selectionVersion++
+    }, { once: true })
     runtime.overlay.setSelection([el])
     markDirty()
   } catch (err) {
@@ -160,7 +189,7 @@ export function handlePaste(event) {
   }
 }
 
-export function beginTextEdit(el, { selectAll = false } = {}) {
+export function beginTextEdit(el, { selectAll = false, caretPoint = null } = {}) {
   snapshotSlide()
   runtime.overlay.setSelection([])
   editor.textEditing = true
@@ -178,21 +207,55 @@ export function beginTextEdit(el, { selectAll = false } = {}) {
     const sel = runtime.bridge.win.getSelection()
     sel.removeAllRanges()
     sel.addRange(range)
+  } else if (caretPoint) {
+    placeCaretAtPoint(el, caretPoint)
   }
 }
 
-/** Route a double-click on a slide element to the right editor. */
-export function editElement(el) {
+/**
+ * Put the caret where the user double-clicked. The dblclick often lands on
+ * Moveable's overlay, so the browser never got to place a caret itself.
+ */
+function placeCaretAtPoint(el, { x, y }) {
+  const doc = runtime.bridge.doc
+  let range = null
+  try {
+    if (doc.caretPositionFromPoint) {
+      const pos = doc.caretPositionFromPoint(x, y)
+      if (pos && el.contains(pos.offsetNode)) {
+        range = doc.createRange()
+        range.setStart(pos.offsetNode, pos.offset)
+        range.collapse(true)
+      }
+    } else if (doc.caretRangeFromPoint) {
+      const candidate = doc.caretRangeFromPoint(x, y)
+      if (candidate && el.contains(candidate.startContainer)) range = candidate
+    }
+  } catch { /* leave the caret where focus put it */ }
+  if (!range) return
+  const sel = runtime.bridge.win.getSelection()
+  sel.removeAllRanges()
+  sel.addRange(range)
+}
+
+/**
+ * Route a double-click (or a click on an already-selected element) to the
+ * right editor. viaClick only opens in-place text editing — popover editors
+ * (math, code, HTML) stay double-click-only so a stray click can't open a
+ * modal.
+ */
+export function editElement(el, event = null, { viaClick = false } = {}) {
+  if (isEditingText() && activeElement() === el) return
   const tag = el.tagName.toLowerCase()
   if (tag === 'img' || tag === 'svg' || tag === 'video') return
   if (el.classList.contains('re-html')) {
-    openHtmlEditor(el)
+    if (!viaClick) openHtmlEditor(el)
   } else if (el.classList.contains('re-math') || (el.querySelector('.katex') && isMathOnly(el))) {
-    openMathEditor(el)
+    if (!viaClick) openMathEditor(el)
   } else if (tag === 'pre' || el.querySelector('pre > code')) {
-    openCodeEditor(el)
-  } else {
-    beginTextEdit(el)
+    if (!viaClick) openCodeEditor(el)
+  } else if (!(viaClick && el.classList.contains('re-group'))) {
+    beginTextEdit(el, event ? { caretPoint: { x: event.clientX, y: event.clientY } } : {})
   }
 }
 
@@ -313,6 +376,14 @@ export function setFontSize(px) {
   markDirty()
 }
 
+/** Effective font size (canvas px) of the first selected element. */
+export function currentFontSize() {
+  const el = isEditingText() ? activeElement() : (runtime.overlay?.getSelection() ?? [])[0]
+  if (!el) return null
+  const win = el.ownerDocument.defaultView
+  return Math.round(parseFloat(win.getComputedStyle(el).fontSize)) || null
+}
+
 export function setTextColor(color) {
   if (isEditingText()) {
     formatText('foreColor', color)
@@ -379,11 +450,18 @@ export function slideAdd(layout = 'blank') {
 
 export function slideApplyLayout(layout) {
   const section = runtime.bridge.currentSection
-  if (!isSlideEmpty(section)) {
-    editor.statusMessage = 'Layout presets can only be applied to an empty slide.'
+  const hasContent = !isSlideEmpty(section)
+  if (hasContent && !window.confirm(
+    'Applying a layout replaces the contents of this slide (speaker notes are kept). Continue? Undo (Ctrl+Z) restores it.'
+  )) {
     return false
   }
   snapshotSlide()
+  if (hasContent) {
+    for (const el of [...section.children]) {
+      if (!el.matches('aside.notes')) el.remove()
+    }
+  }
   const elements = applyLayout(section, layout, editor.settings)
   runtime.bridge.sync()
   runtime.overlay.setSelection(elements.filter((el) => !el.classList.contains('re-transient')))
@@ -472,6 +550,18 @@ export function slideReorder(order) {
   bridge.sync()
   bridge.goTo(bridge.getSections().indexOf(current))
   refreshSlideState()
+}
+
+/** Apply a full slide matrix from the arrange view (columns of leaf sections). */
+export function slideArrange(matrix) {
+  const bridge = runtime.bridge
+  const current = bridge.getSlide(editor.slideIndex.h, editor.slideIndex.v ?? 0)
+  snapshotDeck()
+  if (!arrangeSlides(bridge, matrix)) return false
+  const entry = bridge.getSlideEntries().find((e) => e.section === current)
+  bridge.goTo(entry?.h ?? 0, entry?.v ?? 0)
+  refreshSlideState()
+  return true
 }
 
 export function slideGoTo(h, v = 0) {
@@ -598,20 +688,51 @@ export function sendToBack() {
   markDirty()
 }
 
+const LAYER_KIND_LABELS = {
+  image: 'Image', video: 'Video', shape: 'Shape', math: 'Math',
+  code: 'Code', html: 'HTML', group: 'Group', text: 'Text'
+}
+
+/** Classify a slide element for the layers panel. */
+export function layerKind(el) {
+  const tag = el.tagName.toLowerCase()
+  if (tag === 'img') return 'image'
+  if (tag === 'video') return 'video'
+  if (tag === 'svg') return 'shape'
+  if (el.classList.contains('re-math') || el.querySelector?.(':scope .katex')) return 'math'
+  if (el.classList.contains('re-html')) return 'html'
+  if (el.classList.contains('re-group')) return 'group'
+  if (tag === 'pre' || el.querySelector?.('pre > code')) return 'code'
+  return 'text'
+}
+
 export function currentLayers() {
   const section = runtime.bridge?.currentSection
   if (!section) return []
   const children = [...section.children].filter((el) => !el.matches('aside.notes, .re-transient'))
-  return children.reverse().map((el, reverseIndex) => ({
-    el,
-    index: children.length - reverseIndex - 1,
-    label: el.getAttribute('aria-label') || el.getAttribute('alt') ||
-      el.textContent?.trim().replace(/\s+/g, ' ').slice(0, 32) || `<${el.tagName.toLowerCase()}>`,
-    tag: el.tagName.toLowerCase(),
-    hidden: el.hasAttribute('data-re-hidden'),
-    locked: el.hasAttribute('data-re-locked'),
-    selected: runtime.overlay?.getSelection().includes(el) ?? false
-  }))
+  return children.reverse().map((el, reverseIndex) => {
+    const kind = layerKind(el)
+    const name = el.getAttribute('aria-label') || el.getAttribute('alt') || ''
+    const text = kind === 'text' || kind === 'math' || kind === 'code'
+      ? el.textContent?.trim().replace(/\s+/g, ' ').slice(0, 40) || ''
+      : ''
+    return {
+      el,
+      index: children.length - reverseIndex - 1,
+      kind,
+      name,
+      preview: text,
+      label: name || text || LAYER_KIND_LABELS[kind],
+      // tiny visual for the row icon
+      src: kind === 'image' ? el.getAttribute('src') : null,
+      svg: kind === 'shape' ? el.outerHTML : null,
+      shapeKind: el.getAttribute?.('data-shape') || null,
+      tag: el.tagName.toLowerCase(),
+      hidden: el.hasAttribute('data-re-hidden'),
+      locked: el.hasAttribute('data-re-locked'),
+      selected: runtime.overlay?.getSelection().includes(el) ?? false
+    }
+  })
 }
 
 export function selectLayer(el) {
@@ -749,6 +870,23 @@ export function ungroupSelection() {
   runtime.overlay.setSelection(children)
   markDirty()
   return true
+}
+
+// --- video properties ---
+
+export function selectedVideoInfo() {
+  const sel = runtime.overlay?.getSelection() ?? []
+  return sel.length === 1 ? videoInfo(sel[0]) : null
+}
+
+export function setVideoProperties(values) {
+  const info = selectedVideoInfo()
+  if (!info) return
+  snapshotSlide()
+  applyVideoProperties(info.el, values)
+  runtime.overlay.refresh()
+  markDirty()
+  bumpSelection()
 }
 
 // --- image properties ---

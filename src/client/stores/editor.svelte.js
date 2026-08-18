@@ -17,7 +17,10 @@ export const editor = $state({
   selectionVersion: 0,
   textEditing: false,
   popover: null, // { type: 'math' | 'code' | 'html', value, lang }
-  sidePanel: null, // 'layers' | 'settings' | 'notes' | 'image' | 'shape' | 'element'
+  sidePanel: null, // 'layers' | 'settings' | 'notes' | 'image' | 'video' | 'shape' | 'element'
+  // when pinned, the side panel never auto-switches or auto-closes on selection
+  panelPinned: localStorage.getItem('reveal-editor:panel-pinned') === '1',
+  arrangeOpen: false,
   settings: {},
   // bumped whenever slide content changes; sidebar re-derives thumbnails
   docVersion: 0,

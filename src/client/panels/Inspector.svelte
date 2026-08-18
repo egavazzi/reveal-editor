@@ -4,9 +4,12 @@
   import {
     currentLayers, selectLayer, toggleLayerHidden, toggleLayerLocked, moveLayer, setLayerName,
     currentSpeakerNotes, selectedElementInfo, selectedImageInfo, setElementProperties,
-    selectedShapeInfo, setShapeProperties,
+    selectedShapeInfo, setShapeProperties, resizeDeck,
+    selectedVideoInfo, setVideoProperties,
     setImageProperties, setSpeakerNotes, updateDeckSettings as updateSettings
   } from '../lib/actions.js'
+  import { icon } from '../lib/icons.js'
+  import { probeVideoCodec, webmConvertCommand } from '../lib/model/codecs.js'
 
   const presets = {
     'standard': [960, 700],
@@ -46,44 +49,219 @@
     void editor.selectionVersion
     return selectedShapeInfo()
   })
+  const video = $derived.by(() => {
+    void editor.docVersion
+    void editor.selectionCount
+    void editor.selectionVersion
+    return selectedVideoInfo()
+  })
   const selectedPreset = $derived.by(() =>
     Object.entries(presets).find(([, size]) =>
       size[0] === Number(editor.settings.width) && size[1] === Number(editor.settings.height)
     )?.[0] ?? ''
   )
 
+  let scaleContent = $state(true)
+
+  // user-resizable panel width, persisted across sessions
+  let panelWidth = $state(
+    Math.min(560, Math.max(220, Number(localStorage.getItem('reveal-editor:panel-width')) || 290))
+  )
+
+  function startPanelResize(e) {
+    e.preventDefault()
+    const startX = e.clientX
+    const startWidth = panelWidth
+    // the iframe swallows mousemove; keep it inert while resizing
+    document.body.classList.add('re-panel-resizing')
+    const onMove = (ev) => {
+      panelWidth = Math.min(560, Math.max(220, startWidth + startX - ev.clientX))
+    }
+    const onUp = () => {
+      document.body.classList.remove('re-panel-resizing')
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      localStorage.setItem('reveal-editor:panel-width', String(Math.round(panelWidth)))
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
   function setPreset(e) {
     const size = presets[e.currentTarget.value]
-    if (size) updateSettings({ width: size[0], height: size[1] })
+    if (size) resizeDeck({ width: size[0], height: size[1] }, { scaleContent })
+  }
+
+  function togglePin() {
+    editor.panelPinned = !editor.panelPinned
+    localStorage.setItem('reveal-editor:panel-pinned', editor.panelPinned ? '1' : '0')
+  }
+
+  // which layer is being renamed (double-click a row)
+  let renaming = $state(null)
+
+  function commitRename(el, value) {
+    renaming = null
+    setLayerName(el, value)
+  }
+
+  const KIND_GLYPHS = { math: '∑', code: '{ }', html: '</>', video: '▶', group: '▣' }
+
+  // Live playback preview of the selected video, driven directly from the
+  // panel. Firefox's native controls misplace their hit zones inside the
+  // scaled slide canvas, so the panel is the reliable way to scrub.
+  let preview = $state(null)
+  $effect(() => {
+    const el = video?.el
+    if (!el) {
+      preview = null
+      return
+    }
+    const sync = () => {
+      preview = {
+        time: el.currentTime || 0,
+        duration: Number.isFinite(el.duration) ? el.duration : 0,
+        playing: !el.paused,
+        volume: el.volume,
+        muted: el.muted
+      }
+    }
+    sync()
+    const events = ['timeupdate', 'durationchange', 'loadedmetadata', 'play', 'pause', 'volumechange', 'error']
+    for (const type of events) el.addEventListener(type, sync)
+    return () => {
+      for (const type of events) el.removeEventListener(type, sync)
+    }
+  })
+
+  // identify the codec of an unplayable video for a helpful warning
+  let codec = $state(null)
+  let probedSrc = ''
+  $effect(() => {
+    const el = video?.el
+    const src = el ? el.currentSrc || el.src : ''
+    if (!video?.broken || !src) {
+      codec = null
+      probedSrc = ''
+      return
+    }
+    if (src === probedSrc) return
+    probedSrc = src
+    codec = null
+    probeVideoCodec(src).then((hit) => {
+      if (probedSrc === src) codec = hit
+    })
+  })
+
+  const videoFileName = $derived.by(() => {
+    const src = video?.el ? video.el.currentSrc || video.el.src : ''
+    try {
+      return decodeURIComponent(src.split('/').pop() || '')
+    } catch {
+      return src.split('/').pop() || ''
+    }
+  })
+  const convertCommand = $derived(webmConvertCommand(videoFileName))
+
+  function copyConvertCommand() {
+    navigator.clipboard?.writeText(convertCommand)
+    editor.statusMessage = 'ffmpeg command copied to the clipboard.'
+  }
+
+  function previewToggle() {
+    const el = video?.el
+    if (!el) return
+    if (el.paused) el.play().catch(() => {})
+    else el.pause()
+  }
+  function previewSeek(value) {
+    const el = video?.el
+    if (el && Number.isFinite(value)) el.currentTime = value
+  }
+  function previewVolume(value) {
+    const el = video?.el
+    if (!el) return
+    el.volume = Math.min(1, Math.max(0, value))
+    el.muted = el.volume === 0
+  }
+  function previewMute() {
+    const el = video?.el
+    if (el) el.muted = !el.muted
+  }
+  function fmtTime(s) {
+    const whole = Math.max(0, Math.floor(s || 0))
+    return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`
   }
 </script>
 
-<aside class="inspector">
+<div class="panel-resizer" role="separator" aria-orientation="vertical" aria-label="Resize panel" onmousedown={startPanelResize}></div>
+<aside class="inspector" style:width="{panelWidth}px">
   <header>
     <button class:active={editor.sidePanel === 'layers'} onclick={() => editor.sidePanel = 'layers'}>Layers</button>
     <button class:active={editor.sidePanel === 'settings'} onclick={() => editor.sidePanel = 'settings'}>Deck</button>
     <button class:active={editor.sidePanel === 'notes'} onclick={() => editor.sidePanel = 'notes'}>Notes</button>
     {#if image}<button class:active={editor.sidePanel === 'image'} onclick={() => editor.sidePanel = 'image'}>Image</button>{/if}
+    {#if video}<button class:active={editor.sidePanel === 'video'} onclick={() => editor.sidePanel = 'video'}>Video</button>{/if}
     {#if shape}<button class:active={editor.sidePanel === 'shape'} onclick={() => editor.sidePanel = 'shape'}>Shape</button>{/if}
     {#if element && !shape}<button class:active={editor.sidePanel === 'element'} onclick={() => editor.sidePanel = 'element'}>Element</button>{/if}
-    <button class="close" title="Close panel" onclick={() => editor.sidePanel = null}>×</button>
+    <button
+      class="pin"
+      class:active={editor.panelPinned}
+      title={editor.panelPinned ? 'Unpin panel (follow selection again)' : 'Pin panel (stop it from following the selection)'}
+      onclick={togglePin}
+    >{@html icon('pin')}</button>
+    <button class="close" title="Close panel" onclick={() => editor.sidePanel = null}>{@html icon('close')}</button>
   </header>
 
   {#if editor.sidePanel === 'layers'}
     <section class="panel layers">
       <h3>Slide layers</h3>
-      <p class="hint">Frontmost objects are listed first.</p>
+      <p class="hint">Frontmost objects are listed first. Double-click a layer to rename it.</p>
       {#if layers.length === 0}<p class="empty">This slide is empty.</p>{/if}
       {#each layers as layer (layer.el)}
-        <div class:selected={layer.selected} class:hidden={layer.hidden} class="layer">
-          <button class="name" title={layer.label} onclick={() => selectLayer(layer.el)}>
-            <span class="tag">{layer.tag}</span>{layer.label}
+        <div class:selected={layer.selected} class:hidden={layer.hidden} class:locked={layer.locked} class="layer">
+          <button
+            class="row"
+            title={layer.label}
+            onclick={() => selectLayer(layer.el)}
+            ondblclick={() => (renaming = layer.el)}
+          >
+            <span class="icon {layer.kind}">
+              {#if layer.kind === 'text'}
+                <span class="t-glyph">T</span>
+              {:else if layer.kind === 'image' && layer.src}
+                <img src={layer.src} alt="" />
+              {:else if layer.kind === 'shape' && layer.svg}
+                <span class="shape-ico">{@html layer.svg}</span>
+              {:else}
+                <span class="glyph">{KIND_GLYPHS[layer.kind] ?? 'T'}</span>
+              {/if}
+            </span>
+            {#if renaming === layer.el}
+              <!-- svelte-ignore a11y_autofocus -->
+              <input
+                class="rename"
+                autofocus
+                value={layer.name}
+                placeholder={layer.label}
+                onclick={(e) => e.stopPropagation()}
+                onkeydown={(e) => {
+                  e.stopPropagation()
+                  if (e.key === 'Enter') commitRename(layer.el, e.currentTarget.value)
+                  if (e.key === 'Escape') renaming = null
+                }}
+                onblur={(e) => commitRename(layer.el, e.currentTarget.value)}
+              />
+            {:else}
+              <span class="label" class:preview={!layer.name && layer.preview}>{layer.label}</span>
+            {/if}
           </button>
-          <input class="layer-name" aria-label="Layer name" value={layer.el.getAttribute('aria-label') || ''} placeholder="name" onchange={(e) => setLayerName(layer.el, e.currentTarget.value)} />
-          <button title="Move forward one level" onclick={() => moveLayer(layer.el, 'up')}>↑</button>
-          <button title="Move backward one level" onclick={() => moveLayer(layer.el, 'down')}>↓</button>
-          <button title={layer.hidden ? 'Show layer' : 'Hide layer'} onclick={() => toggleLayerHidden(layer.el)}>{layer.hidden ? '◌' : '◉'}</button>
-          <button title={layer.locked ? 'Unlock layer' : 'Lock layer'} onclick={() => toggleLayerLocked(layer.el)}>{layer.locked ? '🔒' : '🔓'}</button>
+          <span class="controls">
+            <button class="ctl move" title="Move forward one level" onclick={() => moveLayer(layer.el, 'up')}>{@html icon('chevronUp')}</button>
+            <button class="ctl move" title="Move backward one level" onclick={() => moveLayer(layer.el, 'down')}>{@html icon('chevronDown')}</button>
+            <button class="ctl" class:on={layer.locked} title={layer.locked ? 'Unlock layer' : 'Lock layer'} onclick={() => toggleLayerLocked(layer.el)}>{@html icon(layer.locked ? 'lock' : 'unlock')}</button>
+            <button class="ctl" class:on={layer.hidden} title={layer.hidden ? 'Show layer' : 'Hide layer'} onclick={() => toggleLayerHidden(layer.el)}>{@html icon(layer.hidden ? 'eyeOff' : 'eye')}</button>
+          </span>
         </div>
       {/each}
     </section>
@@ -133,9 +311,11 @@
         </select>
       </label>
       <div class="row">
-        <label>Width<input type="number" min="100" value={editor.settings.width} onchange={(e) => updateSettings({ width: +e.currentTarget.value })} /></label>
-        <label>Height<input type="number" min="100" value={editor.settings.height} onchange={(e) => updateSettings({ height: +e.currentTarget.value })} /></label>
+        <label>Width<input type="number" min="100" value={editor.settings.width} onchange={(e) => resizeDeck({ width: +e.currentTarget.value }, { scaleContent })} /></label>
+        <label>Height<input type="number" min="100" value={editor.settings.height} onchange={(e) => resizeDeck({ height: +e.currentTarget.value }, { scaleContent })} /></label>
       </div>
+      <label class="check"><input type="checkbox" bind:checked={scaleContent} /> Scale slide content to the new size</label>
+      <p class="hint">When enabled, changing the canvas size proportionally moves and resizes everything on every slide.</p>
       <label>Presentation margin (%)<input type="number" min="0" max="30" value={editor.settings.margin} onchange={(e) => updateSettings({ margin: +e.currentTarget.value })} /></label>
 
       <h3>Grid</h3>
@@ -146,6 +326,16 @@
 
       <h3>Navigation arrows</h3>
       <label class="check"><input type="checkbox" checked={editor.settings.controls} onchange={(e) => updateSettings({ controls: e.currentTarget.checked })} /> Show navigation arrows</label>
+
+      <h3>Presenting</h3>
+      <label class="check"><input type="checkbox" checked={editor.settings.laserPointer} onchange={(e) => updateSettings({ laserPointer: e.currentTarget.checked })} /> Laser pointer</label>
+      {#if editor.settings.laserPointer}<p class="hint">Press Q while presenting to toggle the pointer.</p>{/if}
+      <label class="check"><input type="checkbox" checked={editor.settings.clickZoom} onchange={(e) => updateSettings({ clickZoom: e.currentTarget.checked })} /> Zoom with Ctrl+click</label>
+      {#if editor.settings.clickZoom}<p class="hint">Ctrl+click zooms in on that spot; Ctrl+click again or Esc zooms out.</p>{/if}
+      <label class="check"><input type="checkbox" checked={editor.settings.mouseWheel} onchange={(e) => updateSettings({ mouseWheel: e.currentTarget.checked })} /> Navigate with the mouse wheel</label>
+      <label class="check"><input type="checkbox" checked={editor.settings.loop} onchange={(e) => updateSettings({ loop: e.currentTarget.checked })} /> Loop back to the first slide</label>
+      <label>Auto-advance slides (seconds, 0 = off)<input type="number" min="0" max="3600" value={editor.settings.autoSlide} onchange={(e) => updateSettings({ autoSlide: Math.max(0, +e.currentTarget.value || 0) })} /></label>
+      <p class="hint">These apply when presenting, not while editing. Press F for fullscreen, S for speaker view, Esc for the slide overview.</p>
 
       <h3>Slide numbers</h3>
       <label class="check"><input type="checkbox" checked={editor.settings.slideNumbers} onchange={(e) => updateSettings({ slideNumbers: e.currentTarget.checked })} /> Show slide numbers</label>
@@ -191,6 +381,76 @@
       <label>Corner radius<input type="number" min="0" max="500" value={image.radius} onchange={(e) => setImageProperties({ radius: +e.currentTarget.value })} /></label>
       <label class="check"><input type="checkbox" checked={image.shadow} onchange={(e) => setImageProperties({ shadow: e.currentTarget.checked })} /> Drop shadow</label>
       <label>Link URL<input type="url" placeholder="https://…" value={image.href} onchange={(e) => setImageProperties({ href: e.currentTarget.value })} /></label>
+    </section>
+  {/if}
+
+  {#if video && editor.sidePanel === 'video'}
+    <section class="panel video-panel">
+      <h3>Video</h3>
+      {#if video.broken}
+        <div class="codec-warn">
+          <strong>This video can't play in this browser</strong>
+          <p>
+            {#if codec}
+              It's encoded with <b>{codec.name}</b>, which this browser can't decode.
+            {:else}
+              Its codec or container isn't supported by this browser.
+            {/if}
+            The frame will stay blank both while editing and when presenting here
+            (other browsers or devices may still play it).
+          </p>
+          <p>Re-encode it as WebM — VP9 video and Opus audio are royalty-free codecs every modern browser plays:</p>
+          <code>{convertCommand}</code>
+          <button class="copy" onclick={copyConvertCommand}>Copy command</button>
+          <p class="fine">
+            <b>-c:v libvpx-vp9</b> re-encodes the video as VP9 ·
+            <b>-crf 32</b> sets quality (lower&nbsp;=&nbsp;better, bigger file) ·
+            <b>-c:a libopus</b> converts the audio to Opus
+          </p>
+        </div>
+      {/if}
+      {#if preview}
+        <div class="preview-row">
+          <button class="pv" title={preview.playing ? 'Pause' : 'Play'} onclick={previewToggle}>{@html icon(preview.playing ? 'pause' : 'play')}</button>
+          <input
+            class="scrub"
+            type="range"
+            min="0"
+            max={preview.duration || 0}
+            step="0.05"
+            value={preview.time}
+            disabled={!preview.duration}
+            aria-label="Seek"
+            oninput={(e) => previewSeek(Number(e.currentTarget.value))}
+          />
+          <span class="time">{fmtTime(preview.time)} / {fmtTime(preview.duration)}</span>
+        </div>
+        <div class="preview-row">
+          <button class="pv" title={preview.muted ? 'Unmute preview' : 'Mute preview'} onclick={previewMute}>{@html icon(preview.muted ? 'volumeMute' : 'volume')}</button>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            value={preview.muted ? 0 : preview.volume}
+            aria-label="Preview volume"
+            oninput={(e) => previewVolume(Number(e.currentTarget.value))}
+          />
+        </div>
+        <p class="hint">Preview only — playback settings below are what get saved. You can also hold Ctrl to use the player on the canvas.</p>
+      {/if}
+      <div class="row">
+        <label>Width<input type="number" min="1" value={video.width} onchange={(e) => setVideoProperties({ width: +e.currentTarget.value })} /></label>
+        <label>Height<input type="number" min="1" value={video.height} onchange={(e) => setVideoProperties({ height: +e.currentTarget.value })} /></label>
+      </div>
+      <h3>Playback</h3>
+      <label class="check"><input type="checkbox" checked={video.autoplay} onchange={(e) => setVideoProperties({ autoplay: e.currentTarget.checked })} /> Autoplay when the slide appears</label>
+      <label class="check"><input type="checkbox" checked={video.loop} onchange={(e) => setVideoProperties({ loop: e.currentTarget.checked })} /> Loop</label>
+      <label class="check"><input type="checkbox" checked={video.muted} onchange={(e) => setVideoProperties({ muted: e.currentTarget.checked })} /> Start muted</label>
+      <label class="check"><input type="checkbox" checked={video.controls} onchange={(e) => setVideoProperties({ controls: e.currentTarget.checked })} /> Show player controls</label>
+      {#if video.autoplay && !video.muted}
+        <p class="hint">Browsers may block autoplay with sound — enable “Start muted” to make autoplay reliable.</p>
+      {/if}
     </section>
   {/if}
 
@@ -241,27 +501,92 @@
 </aside>
 
 <style>
-  .inspector { width: 290px; background: #222329; border-left: 1px solid #131418; overflow-y: auto; color: #d6d7dc; }
-  header { display: flex; gap: 4px; position: sticky; top: 0; z-index: 2; padding: 8px; background: #26272e; border-bottom: 1px solid #131418; }
-  button { background: #34353d; color: #d6d7dc; border: 1px solid #45464f; border-radius: 5px; padding: 4px 8px; cursor: pointer; }
-  header button.active { background: #2f6fba; color: white; }
-  header .close { margin-left: auto; }
-  .panel { padding: 10px 12px 16px; border-bottom: 1px solid #3a3b42; }
-  h3 { margin: 8px 0; color: #8ab4ff; font-size: 14px; }
+  .inspector { width: 290px; flex: none; background: var(--ui-surface); border-left: 1px solid var(--ui-border-strong); overflow-y: auto; color: var(--ui-text); }
+  .panel-resizer { flex: none; width: 5px; margin-right: -5px; cursor: col-resize; z-index: 3; }
+  .panel-resizer:hover, :global(body.re-panel-resizing) .panel-resizer { background: var(--ui-primary); opacity: .6; }
+  :global(body.re-panel-resizing) { cursor: col-resize; user-select: none; }
+  :global(body.re-panel-resizing iframe) { pointer-events: none; }
+  header { display: flex; gap: 4px; position: sticky; top: 0; z-index: 2; padding: 8px; background: var(--ui-surface-raised); border-bottom: 1px solid var(--ui-border-strong); }
+  button { background: var(--ui-control); color: var(--ui-text); border: 1px solid var(--ui-border); border-radius: 5px; padding: 4px 8px; cursor: pointer; font-family: inherit; font-size: 12px; }
+  button:hover { background: var(--ui-control-hover); }
+  header button.active { background: var(--ui-primary); border-color: transparent; color: white; }
+  header .pin { margin-left: auto; }
+  header .pin, header .close { display: flex; align-items: center; justify-content: center; width: 26px; padding: 4px 0; }
+  header .pin.active { background: var(--ui-primary); border-color: transparent; color: white; }
+  .inspector :global(svg) { width: 13px; height: 13px; display: block; flex: none; }
+  .panel { padding: 10px 12px 16px; border-bottom: 1px solid var(--ui-border); }
+  h3 { margin: 8px 0; color: var(--ui-accent); font-size: 14px; }
   h3:not(:first-child) { margin-top: 20px; }
-  label { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; color: #9a9ba3; font-size: 12px; }
-  label.check { flex-direction: row; align-items: center; color: #d6d7dc; }
-  input, select, textarea { min-width: 0; box-sizing: border-box; width: 100%; background: #34353d; color: #d6d7dc; border: 1px solid #45464f; border-radius: 4px; padding: 4px 6px; }
+  label { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; color: var(--ui-muted); font-size: 12px; }
+  label.check { flex-direction: row; align-items: center; color: var(--ui-text); }
+  input, select, textarea { min-width: 0; box-sizing: border-box; width: 100%; background: var(--ui-control); color: var(--ui-text); border: 1px solid var(--ui-border); border-radius: 4px; padding: 4px 6px; font-family: inherit; }
   textarea { resize: vertical; font: inherit; line-height: 1.4; }
-  input[type='checkbox'] { width: auto; } input[type='color'] { height: 30px; padding: 1px; }
+  input[type='checkbox'] { width: auto; accent-color: var(--ui-primary); } input[type='color'] { height: 30px; padding: 1px; }
   .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .hint, .empty { margin: 4px 0 10px; color: #777983; font-size: 11px; }
-  .layer { display: flex; gap: 3px; margin: 4px 0; opacity: .95; }
-  .layer.selected { outline: 1px solid #2f6fba; border-radius: 5px; }
-  .layer.hidden { opacity: .5; }
-  .layer .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
-  .layer-name { width: 58px; padding: 3px; }
-  .layer button:not(.name) { padding: 3px 5px; }
-  .tag { display: inline-block; color: #8ab4ff; font-size: 9px; margin-right: 5px; text-transform: uppercase; }
-  .image-panel, .shape-panel { background: #25262d; }
+  .hint, .empty { margin: 4px 0 10px; color: var(--ui-faint); font-size: 11px; }
+
+  /* layers */
+  .layer { display: flex; align-items: center; gap: 2px; margin: 2px 0; border-radius: 6px; padding: 2px; }
+  .layer:hover { background: var(--ui-control); }
+  .layer.selected { background: var(--ui-control); outline: 1px solid var(--ui-primary); }
+  .layer.hidden .label, .layer.hidden .icon { opacity: .45; }
+  .layer .row { display: flex; flex: 1; min-width: 0; align-items: center; gap: 9px; background: none; border: none; padding: 3px 4px; text-align: left; cursor: pointer; }
+  .layer .row:hover { background: none; }
+  .icon { flex: none; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border-radius: 4px; overflow: hidden; }
+  .icon img { width: 22px; height: 22px; object-fit: cover; border-radius: 4px; display: block; }
+  .icon .t-glyph { font-family: Georgia, serif; font-size: 15px; color: var(--ui-text); }
+  .icon .glyph { font-size: 10px; font-weight: 600; color: var(--ui-muted); letter-spacing: -0.5px; }
+  .shape-ico { display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; }
+  .shape-ico :global(svg) { width: 18px !important; height: 14px !important; overflow: visible; }
+  .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--ui-text); }
+  .label.preview { font-style: italic; color: var(--ui-muted); }
+  .rename { flex: 1; min-width: 0; padding: 2px 5px; font-size: 12px; }
+  .controls { display: flex; align-items: center; gap: 1px; }
+  .ctl { display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; background: none; border: none; color: var(--ui-faint); border-radius: 4px; }
+  .ctl:hover { background: var(--ui-control-hover); color: var(--ui-text); }
+  .ctl.on { color: var(--ui-accent); }
+  .ctl.move { visibility: hidden; }
+  .layer:hover .ctl.move { visibility: visible; }
+
+  .image-panel, .shape-panel, .video-panel { background: var(--ui-surface); }
+  .preview-row { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+  .preview-row .pv { flex: none; display: flex; align-items: center; justify-content: center; width: 28px; height: 26px; padding: 0; }
+  .preview-row input[type='range'] { flex: 1; width: auto; padding: 0; accent-color: var(--ui-primary); background: transparent; border: none; }
+  .preview-row .time { flex: none; color: var(--ui-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .hint.warn { color: #e3b76b; }
+  .codec-warn {
+    margin: 8px 0 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: rgba(227, 183, 107, 0.1);
+    border: 1px solid rgba(227, 183, 107, 0.45);
+    color: #e8c98a;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .codec-warn strong { display: block; margin-bottom: 4px; color: #f0d49c; font-size: 12.5px; }
+  .codec-warn p { margin: 6px 0; }
+  .codec-warn b { color: #f0d49c; font-weight: 600; }
+  .codec-warn code {
+    display: block;
+    margin: 8px 0 6px;
+    padding: 7px 9px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.35);
+    color: #ead9b0;
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    user-select: all;
+  }
+  .codec-warn .copy {
+    width: auto;
+    padding: 3px 10px;
+    font-size: 11px;
+    background: rgba(227, 183, 107, 0.18);
+    border-color: rgba(227, 183, 107, 0.45);
+    color: #f0d49c;
+  }
+  .codec-warn .copy:hover { background: rgba(227, 183, 107, 0.3); }
+  .codec-warn .fine { margin-top: 8px; color: rgba(232, 201, 138, 0.75); font-size: 11px; }
 </style>

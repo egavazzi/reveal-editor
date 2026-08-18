@@ -21,9 +21,16 @@
   import PopoverEditor from './panels/PopoverEditor.svelte'
   import Sidebar from './panels/Sidebar.svelte'
   import Inspector from './panels/Inspector.svelte'
+  import ArrangeView from './panels/ArrangeView.svelte'
+  import { icon } from './lib/icons.js'
 
   let iframeSrc = $state('')
   let pristineHtml = ''
+  // remember which panel to restore from the edge handle
+  let lastPanel = 'layers'
+  $effect(() => {
+    if (editor.sidePanel) lastPanel = editor.sidePanel
+  })
   const emptySlide = $derived.by(() => {
     void editor.docVersion
     void editor.slideIndex.h
@@ -87,10 +94,15 @@
           editor.selectionCount = targets.length
           editor.selectionTag = targets[0]?.tagName.toLowerCase() ?? ''
           editor.selectionVersion++
-          if (targets.length === 1 && editor.selectionTag === 'img') editor.sidePanel = 'image'
-          else if (targets.length === 1 && targets[0].hasAttribute('data-shape')) editor.sidePanel = 'shape'
-          else if (targets.length === 1) editor.sidePanel = 'element'
-          else if (['image', 'shape', 'element'].includes(editor.sidePanel)) editor.sidePanel = null
+          // A pinned panel keeps whatever the user chose; otherwise it
+          // follows the selection.
+          if (!editor.panelPinned) {
+            if (targets.length === 1 && editor.selectionTag === 'img') editor.sidePanel = 'image'
+            else if (targets.length === 1 && editor.selectionTag === 'video') editor.sidePanel = 'video'
+            else if (targets.length === 1 && targets[0].hasAttribute('data-shape')) editor.sidePanel = 'shape'
+            else if (targets.length === 1) editor.sidePanel = 'element'
+            else if (['image', 'video', 'shape', 'element'].includes(editor.sidePanel)) editor.sidePanel = null
+          }
         },
         onBeforeEdit() {
           snapshotSlide()
@@ -98,8 +110,8 @@
         onEdit() {
           markDirty()
         },
-        onDblClick(el) {
-          editElement(el)
+        onDblClick(el, e, opts) {
+          editElement(el, e, opts)
         }
       })
       editor.ready = true
@@ -179,10 +191,21 @@
         {/if}
       {/if}
     </main>
-    {#if editor.sidePanel}<Inspector />{/if}
+    {#if editor.sidePanel}
+      <Inspector />
+    {:else if editor.ready}
+      <button
+        class="panel-peek"
+        title="Open side panel"
+        aria-label="Open side panel"
+        onclick={() => (editor.sidePanel = lastPanel)}
+      >{@html icon('chevronLeft')}</button>
+    {/if}
   </div>
 
   <PopoverEditor />
+
+  {#if editor.arrangeOpen}<ArrangeView />{/if}
 
   <footer class="statusbar">
     <span>{editor.statusMessage}</span>
@@ -205,12 +228,31 @@
   :global(#app) {
     height: 100%;
   }
+  /* Shared design tokens for the editor chrome. */
+  :global(:root) {
+    --ui-bg: #191a1f;
+    --ui-surface: #212228;
+    --ui-surface-raised: #26272e;
+    --ui-control: #2d2e36;
+    --ui-control-hover: #383a44;
+    --ui-control-active: #41434f;
+    --ui-border: #34353d;
+    --ui-border-strong: #101116;
+    --ui-text: #e2e3e8;
+    --ui-muted: #9a9ba3;
+    --ui-faint: #6f7077;
+    --ui-accent: #8ab4ff;
+    --ui-primary: #3574c4;
+    --ui-primary-hover: #4285d6;
+    --ui-danger: #b3565e;
+    --ui-radius: 6px;
+  }
   .editor {
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: #1e1f24;
-    color: #d6d7dc;
+    background: var(--ui-bg);
+    color: var(--ui-text);
     font-family: system-ui, sans-serif;
     font-size: 14px;
   }
@@ -218,6 +260,39 @@
     flex: 1;
     display: flex;
     min-height: 0;
+    position: relative;
+  }
+  /* tucked-away handle to reopen the side panel; slides out on approach */
+  .panel-peek {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 72px;
+    padding: 0;
+    transform: translate(14px, -50%);
+    background: var(--ui-surface-raised);
+    color: var(--ui-muted);
+    border: 1px solid var(--ui-border);
+    border-right: none;
+    border-radius: 9px 0 0 9px;
+    cursor: pointer;
+    opacity: 0.45;
+    transition: transform 0.15s ease, opacity 0.15s ease;
+  }
+  .panel-peek:hover,
+  .panel-peek:focus-visible {
+    transform: translate(0, -50%);
+    opacity: 1;
+    color: var(--ui-text);
+  }
+  .panel-peek :global(svg) {
+    width: 15px;
+    height: 15px;
   }
   .stage {
     flex: 1;
@@ -258,10 +333,11 @@
     display: flex;
     gap: 10px;
     padding: 4px 14px;
-    background: #26272e;
-    border-top: 1px solid #131418;
+    background: var(--ui-surface-raised);
+    border-top: 1px solid var(--ui-border-strong);
     min-height: 20px;
-    color: #9a9ba3;
+    color: var(--ui-muted);
+    font-size: 12px;
   }
   .spacer {
     flex: 1;

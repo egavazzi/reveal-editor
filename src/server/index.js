@@ -83,8 +83,13 @@ export async function createServer({ deckPath, port = 3737, dev = false, repoRoo
     if (!existsSync(join(dist, 'index.html'))) {
       throw new Error(`Editor UI not built (${dist} missing). Run: npm run build — or use --dev.`)
     }
-    app.use(express.static(dist))
+    // no-cache: revalidate on every load (cheap 304s), so a rebuilt dist/
+    // is never shadowed by a heuristically-cached editor bundle
+    app.use(express.static(dist, {
+      setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache')
+    }))
     app.get('/{*any}', async (req, res) => {
+      res.set('Cache-Control', 'no-cache')
       res.type('html').send(await readFile(join(dist, 'index.html'), 'utf8'))
     })
   }

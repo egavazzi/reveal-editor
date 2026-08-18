@@ -25,6 +25,23 @@ describe('deck settings', () => {
     expect(saved).toContain('"width": 1280')
   })
 
+  it('persists presenting extras and ships them in the runtime script', () => {
+    document.body.innerHTML = '<div class="slides"><section></section></div>'
+    const slides = document.querySelector('.slides')
+    const settings = { ...DEFAULT_SETTINGS, laserPointer: true, clickZoom: true, mouseWheel: true, loop: true, autoSlide: 30 }
+    writeSettings(slides, settings)
+
+    expect(readSettings(slides)).toEqual(settings)
+    const runtime = slides.querySelector('script[data-re-settings-runtime]').textContent
+    for (const feature of ['laserPointer', 'clickZoom', 'mouseWheel', 'loop', 'autoSlide']) {
+      expect(runtime).toContain(feature)
+    }
+    // extras run only when presenting, never in the editor preview
+    expect(runtime).toContain("editmode=1")
+    expect(DEFAULT_SETTINGS.laserPointer).toBe(false)
+    expect(DEFAULT_SETTINGS.autoSlide).toBe(0)
+  })
+
   it('falls back safely when settings JSON is malformed', () => {
     document.body.innerHTML = '<div class="slides"><template data-re-settings>{bad</template></div>'
     expect(readSettings(document.querySelector('.slides'))).toEqual({ ...DEFAULT_SETTINGS })

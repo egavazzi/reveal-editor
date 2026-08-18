@@ -22,7 +22,16 @@ export function startTextEdit(el, bridge, { onDone } = {}) {
   el.setAttribute('spellcheck', 'false')
   el.focus()
 
-  const finish = () => stopTextEdit()
+  // Focus moving into editor chrome marked [data-keep-text-edit] (the format
+  // bar's select/inputs) must not commit the edit — those controls act on the
+  // live text selection. Blur order is unreliable, so check after a tick.
+  const finish = () => {
+    setTimeout(() => {
+      if (!active || active.el !== el) return
+      if (document.activeElement?.closest?.('[data-keep-text-edit]')) return
+      stopTextEdit()
+    }, 0)
+  }
   const onKeydown = (e) => {
     if (e.key === 'Escape') {
       e.preventDefault()
@@ -37,21 +46,28 @@ export function startTextEdit(el, bridge, { onDone } = {}) {
   const onDocMousedown = (e) => {
     if (!el.contains(e.target)) stopTextEdit()
   }
+  // Clicks on editor chrome (parent document) outside the keep-edit zone
+  // also commit — the iframe's blur may already have been swallowed above.
+  const onParentMousedown = (e) => {
+    if (!e.target.closest?.('[data-keep-text-edit]')) stopTextEdit()
+  }
   el.addEventListener('blur', finish)
   el.addEventListener('keydown', onKeydown)
   doc.addEventListener('mousedown', onDocMousedown, true)
+  document.addEventListener('mousedown', onParentMousedown, true)
 
-  active = { el, bridge, onDone, finish, onKeydown, onDocMousedown, doc }
+  active = { el, bridge, onDone, finish, onKeydown, onDocMousedown, onParentMousedown, doc }
   return active
 }
 
 export function stopTextEdit() {
   if (!active) return
-  const { el, onDone, finish, onKeydown, onDocMousedown, doc } = active
+  const { el, onDone, finish, onKeydown, onDocMousedown, onParentMousedown, doc } = active
   active = null
   el.removeEventListener('blur', finish)
   el.removeEventListener('keydown', onKeydown)
   doc.removeEventListener('mousedown', onDocMousedown, true)
+  document.removeEventListener('mousedown', onParentMousedown, true)
   el.removeAttribute('contenteditable')
   el.removeAttribute('spellcheck')
   cleanupMarkup(el)
@@ -59,18 +75,88 @@ export function stopTextEdit() {
   onDone?.({ el, removed })
 }
 
+// Commands whose semantic-tag output is deprecated markup (<font>, align="")
+// use CSS styling instead; everything else stays plain tags (<b>, <ul>…).
+const CSS_COMMANDS = ['foreColor', 'fontSize', 'justifyLeft', 'justifyCenter', 'justifyRight', 'justifyFull']
+
 /** Apply a formatting command to the current text selection. */
 export function formatText(command, value = null) {
   if (!active) return
   const doc = active.bridge.doc
-  doc.execCommand('styleWithCSS', false, ['foreColor', 'fontSize'].includes(command))
+  doc.execCommand('styleWithCSS', false, CSS_COMMANDS.includes(command))
   doc.execCommand(command, false, value)
   active.el.focus()
 }
 
+/** Snapshot of the formatting state at the caret, for toolbar highlighting. */
+export function queryFormatState() {
+  if (!active) return null
+  const doc = active.doc
+  const read = (command) => {
+    try { return doc.queryCommandState(command) } catch { return false }
+  }
+  let block = ''
+  try { block = String(doc.queryCommandValue('formatBlock') || '').toLowerCase() } catch { /* ignore */ }
+  const win = active.bridge.win
+  const anchor = win.getSelection()?.anchorNode
+  const sizeEl = (anchor && active.el.contains(anchor)
+    ? (anchor.nodeType === 1 ? anchor : anchor.parentElement)
+    : active.el)
+  const fontSize = Math.round(parseFloat(win.getComputedStyle(sizeEl).fontSize)) || null
+  return {
+    fontSize,
+    bold: read('bold'),
+    italic: read('italic'),
+    underline: read('underline'),
+    strike: read('strikeThrough'),
+    ul: read('insertUnorderedList'),
+    ol: read('insertOrderedList'),
+    block: ['h1', 'h2', 'h3', 'h4', 'blockquote'].includes(block) ? block : 'p',
+    align: read('justifyCenter') ? 'center' : read('justifyRight') ? 'right' : read('justifyFull') ? 'justify' : 'left',
+    link: Boolean(currentAnchor())
+  }
+}
+
+function currentAnchor() {
+  if (!active) return null
+  const sel = active.bridge.win.getSelection()
+  const node = sel?.anchorNode
+  if (!node || !active.el.contains(node)) return null
+  const el = node.nodeType === 1 ? node : node.parentElement
+  return el?.closest('a') ?? null
+}
+
+/** Save the current text selection so it survives focusing a chrome input. */
+export function saveTextSelection() {
+  if (!active) return null
+  const sel = active.bridge.win.getSelection()
+  return sel && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null
+}
+
+export function restoreTextSelection(range) {
+  if (!active || !range) return
+  const sel = active.bridge.win.getSelection()
+  sel.removeAllRanges()
+  sel.addRange(range)
+  active.el.focus()
+}
+
+/** Turn the given (saved) selection into a link; empty url removes links. */
+export function applyLink(url, range) {
+  if (!active) return
+  restoreTextSelection(range)
+  const href = String(url || '').trim()
+  if (!href) {
+    formatText('unlink')
+    return
+  }
+  if (/^(?:javascript|data|vbscript):/i.test(href)) return
+  formatText('createLink', /^(?:[a-z][a-z0-9+.-]*:|\/|#|\.)/i.test(href) ? href : `https://${href}`)
+}
+
 function cleanupMarkup(el) {
   // Browsers occasionally leave empty inline elements behind.
-  for (const empty of el.querySelectorAll('b:empty, i:empty, u:empty, span:empty, strong:empty, em:empty')) {
+  for (const empty of el.querySelectorAll('b:empty, i:empty, u:empty, s:empty, strike:empty, a:empty, span:empty, strong:empty, em:empty')) {
     empty.remove()
   }
   for (const span of el.querySelectorAll('span:not([style]):not([class])')) {
