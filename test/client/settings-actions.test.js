@@ -4,9 +4,12 @@ import { editor, runtime } from '../../src/client/stores/editor.svelte.js'
 import {
   currentSpeakerNotes, currentSlideTransition, redoAction, selectedImageInfo,
   groupSelection, selectedElementInfo, setCurrentSlideTransition, setElementProperties,
+  setFragmentIndex, setFontSize, setTextColor,
   setImageProperties, setSpeakerNotes, ungroupSelection, undoAction, updateDeckSettings
 } from '../../src/client/lib/actions.js'
 import { DEFAULT_SETTINGS } from '../../src/client/lib/model/settings.js'
+import { getCanvasSize } from '../../src/client/lib/overlay/editmode.js'
+import { createShape } from '../../src/client/lib/model/shapes.js'
 
 function makeBridge() {
   const slidesEl = document.querySelector('.slides')
@@ -76,6 +79,11 @@ describe('settings actions', () => {
     expect(link.getAttribute('href')).toContain('/theme/white.css')
   })
 
+  it('uses the edited presentation size immediately for the design canvas', () => {
+    updateDeckSettings({ width: 1280, height: 720 })
+    expect(getCanvasSize(runtime.bridge)).toEqual({ width: 1280, height: 720 })
+  })
+
   it('keeps valid zero-percent crop positions', () => {
     const image = document.createElement('img')
     image.style.objectPosition = '0% 0%'
@@ -139,5 +147,40 @@ describe('settings actions', () => {
     expect(selection).toHaveLength(2)
     expect(selection[0].style.left).toBe('25px')
     expect(selection[1].style.left).toBe('150px')
+  })
+
+  it('undoes selected-object color and size changes without deleting the object', () => {
+    const shape = createShape(document, 'rect')
+    shape.style.position = 'absolute'
+    shape.style.left = '10px'
+    shape.style.top = '10px'
+    runtime.bridge.getSections()[0].appendChild(shape)
+    runtime.overlay.getSelection = () => [shape]
+
+    setTextColor('#ff0000')
+    undoAction()
+    let restored = runtime.bridge.getSections()[0].querySelector('[data-shape="rect"]')
+    expect(restored).not.toBeNull()
+    expect(restored.querySelector('rect').getAttribute('stroke')).toBe('#2f6fba')
+
+    runtime.overlay.getSelection = () => [restored]
+    setFontSize(64)
+    undoAction()
+    restored = runtime.bridge.getSections()[0].querySelector('[data-shape="rect"]')
+    expect(restored).not.toBeNull()
+    expect(restored.style.fontSize).toBe('')
+  })
+
+  it('undoes fragment order changes', () => {
+    const fragment = document.createElement('p')
+    fragment.className = 'fragment'
+    fragment.textContent = 'Later'
+    runtime.bridge.getSections()[0].appendChild(fragment)
+    runtime.overlay.getSelection = () => [fragment]
+
+    setFragmentIndex(3)
+    expect(fragment.getAttribute('data-fragment-index')).toBe('3')
+    undoAction()
+    expect(runtime.bridge.getSections()[0].querySelector('.fragment').hasAttribute('data-fragment-index')).toBe(false)
   })
 })

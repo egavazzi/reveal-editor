@@ -4,6 +4,7 @@
   import {
     currentLayers, selectLayer, toggleLayerHidden, toggleLayerLocked, moveLayer, setLayerName,
     currentSpeakerNotes, selectedElementInfo, selectedImageInfo, setElementProperties,
+    selectedShapeInfo, setShapeProperties,
     setImageProperties, setSpeakerNotes, updateDeckSettings as updateSettings
   } from '../lib/actions.js'
 
@@ -39,6 +40,17 @@
     void editor.slideIndex.h
     return currentSpeakerNotes()
   })
+  const shape = $derived.by(() => {
+    void editor.docVersion
+    void editor.selectionCount
+    void editor.selectionVersion
+    return selectedShapeInfo()
+  })
+  const selectedPreset = $derived.by(() =>
+    Object.entries(presets).find(([, size]) =>
+      size[0] === Number(editor.settings.width) && size[1] === Number(editor.settings.height)
+    )?.[0] ?? ''
+  )
 
   function setPreset(e) {
     const size = presets[e.currentTarget.value]
@@ -52,7 +64,8 @@
     <button class:active={editor.sidePanel === 'settings'} onclick={() => editor.sidePanel = 'settings'}>Deck</button>
     <button class:active={editor.sidePanel === 'notes'} onclick={() => editor.sidePanel = 'notes'}>Notes</button>
     {#if image}<button class:active={editor.sidePanel === 'image'} onclick={() => editor.sidePanel = 'image'}>Image</button>{/if}
-    {#if element}<button class:active={editor.sidePanel === 'element'} onclick={() => editor.sidePanel = 'element'}>Element</button>{/if}
+    {#if shape}<button class:active={editor.sidePanel === 'shape'} onclick={() => editor.sidePanel = 'shape'}>Shape</button>{/if}
+    {#if element && !shape}<button class:active={editor.sidePanel === 'element'} onclick={() => editor.sidePanel = 'element'}>Element</button>{/if}
     <button class="close" title="Close panel" onclick={() => editor.sidePanel = null}>×</button>
   </header>
 
@@ -110,7 +123,7 @@
 
       <h3>Canvas</h3>
       <label>Format
-        <select onchange={setPreset}>
+        <select value={selectedPreset} onchange={setPreset}>
           <option value="">Custom</option>
           <option value="standard">Standard 960 × 700</option>
           <option value="widescreen">Widescreen 1280 × 720</option>
@@ -129,6 +142,7 @@
       <label class="check"><input type="checkbox" checked={editor.settings.showGrid} onchange={(e) => updateSettings({ showGrid: e.currentTarget.checked })} /> Show grid</label>
       <label class="check"><input type="checkbox" checked={editor.settings.snapGrid} onchange={(e) => updateSettings({ snapGrid: e.currentTarget.checked })} /> Snap objects to grid</label>
       <label>Grid spacing (px)<input type="number" min="2" max="200" value={editor.settings.gridSize} onchange={(e) => updateSettings({ gridSize: +e.currentTarget.value })} /></label>
+      <p class="hint">Hold Ctrl while dragging to ignore snapping temporarily.</p>
 
       <h3>Navigation arrows</h3>
       <label class="check"><input type="checkbox" checked={editor.settings.controls} onchange={(e) => updateSettings({ controls: e.currentTarget.checked })} /> Show navigation arrows</label>
@@ -195,6 +209,35 @@
       <label class="check"><input type="checkbox" checked={element.lockRatio} onchange={(e) => setElementProperties({ lockRatio: e.currentTarget.checked })} /> Lock aspect ratio while resizing</label>
     </section>
   {/if}
+
+  {#if shape && editor.sidePanel === 'shape'}
+    <section class="panel shape-panel">
+      <h3>{shape.kind === 'rect' ? 'Rectangle' : shape.kind[0].toUpperCase() + shape.kind.slice(1)}</h3>
+      <h3>Position (px)</h3>
+      <div class="row">
+        <label>X<input type="number" value={shape.x} onchange={(e) => setShapeProperties({ x: +e.currentTarget.value })} /></label>
+        <label>Y<input type="number" value={shape.y} onchange={(e) => setShapeProperties({ y: +e.currentTarget.value })} /></label>
+      </div>
+      <h3>Size (px)</h3>
+      <div class="row">
+        <label>Width<input type="number" min="1" value={shape.width} onchange={(e) => setShapeProperties({ width: +e.currentTarget.value })} /></label>
+        <label>Height<input type="number" min="1" value={shape.height} onchange={(e) => setShapeProperties({ height: +e.currentTarget.value })} /></label>
+      </div>
+      {#if shape.kind !== 'line' && shape.kind !== 'arrow'}
+        <label>Rotation (°)<input type="number" step="0.1" value={shape.rotation} onchange={(e) => setShapeProperties({ rotation: +e.currentTarget.value })} /></label>
+      {:else}
+        <p class="hint">Drag either blue endpoint on the canvas to change direction and length.</p>
+      {/if}
+      <h3>Appearance</h3>
+      {#if shape.fill}
+        <label>Fill color<input type="color" value={shape.fill} onchange={(e) => setShapeProperties({ fill: e.currentTarget.value })} /></label>
+      {/if}
+      <div class="row">
+        <label>{shape.kind === 'line' || shape.kind === 'arrow' ? 'Color' : 'Outline'}<input type="color" value={shape.stroke} onchange={(e) => setShapeProperties({ stroke: e.currentTarget.value })} /></label>
+        <label>Line width<input type="number" min="0" max="40" step="0.5" value={shape.strokeWidth} onchange={(e) => setShapeProperties({ strokeWidth: +e.currentTarget.value })} /></label>
+      </div>
+    </section>
+  {/if}
 </aside>
 
 <style>
@@ -220,5 +263,5 @@
   .layer-name { width: 58px; padding: 3px; }
   .layer button:not(.name) { padding: 3px 5px; }
   .tag { display: inline-block; color: #8ab4ff; font-size: 9px; margin-right: 5px; text-transform: uppercase; }
-  .image-panel { background: #25262d; }
+  .image-panel, .shape-panel { background: #25262d; }
 </style>
