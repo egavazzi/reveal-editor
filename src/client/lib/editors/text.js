@@ -25,9 +25,12 @@ export function startTextEdit(el, bridge, { onDone } = {}) {
   // Focus moving into editor chrome marked [data-keep-text-edit] (the format
   // bar's select/inputs) must not commit the edit — those controls act on the
   // live text selection. Blur order is unreliable, so check after a tick.
+  // The session token (not the element) identifies the edit: setBlockStyle
+  // may retag the edited element mid-session.
+  const session = {}
   const finish = () => {
     setTimeout(() => {
-      if (!active || active.el !== el) return
+      if (!active || active.session !== session) return
       if (document.activeElement?.closest?.('[data-keep-text-edit]')) return
       stopTextEdit()
     }, 0)
@@ -44,7 +47,7 @@ export function startTextEdit(el, bridge, { onDone } = {}) {
   // blur alone is unreliable (focus may sit outside the iframe); any
   // pointer-down outside the element also commits the edit.
   const onDocMousedown = (e) => {
-    if (!el.contains(e.target)) stopTextEdit()
+    if (!active?.el.contains(e.target)) stopTextEdit()
   }
   // Clicks on editor chrome (parent document) outside the keep-edit zone
   // also commit — the iframe's blur may already have been swallowed above.
@@ -56,7 +59,7 @@ export function startTextEdit(el, bridge, { onDone } = {}) {
   doc.addEventListener('mousedown', onDocMousedown, true)
   document.addEventListener('mousedown', onParentMousedown, true)
 
-  active = { el, bridge, onDone, finish, onKeydown, onDocMousedown, onParentMousedown, doc }
+  active = { el, bridge, onDone, finish, onKeydown, onDocMousedown, onParentMousedown, doc, session }
   return active
 }
 
@@ -88,6 +91,48 @@ export function formatText(command, value = null) {
   active.el.focus()
 }
 
+const BLOCK_TAGS = ['h1', 'h2', 'h3', 'h4', 'blockquote']
+const BLOCK_HOST_TAGS = [...BLOCK_TAGS, 'h5', 'h6', 'p']
+
+/**
+ * Change the paragraph style at the caret. When the edited element itself is
+ * the block (layout headings are bare <h1>/<h2> hosts), retag the host in
+ * place — execCommand('formatBlock') would nest a new block inside it.
+ */
+export function setBlockStyle(tag) {
+  if (!active) return
+  const host = active.el
+  const sel = active.bridge.win.getSelection()
+  const anchor = sel?.anchorNode
+  const anchorEl = anchor ? (anchor.nodeType === 1 ? anchor : anchor.parentElement) : null
+  const inner = anchorEl && anchorEl !== host && host.contains(anchorEl)
+    ? anchorEl.closest('h1, h2, h3, h4, h5, h6, blockquote, p, li')
+    : null
+  if ((inner && inner !== host && host.contains(inner)) ||
+      !BLOCK_HOST_TAGS.includes(host.tagName.toLowerCase())) {
+    formatText('formatBlock', `<${tag}>`)
+    return
+  }
+  if (host.tagName.toLowerCase() === tag) return
+  // retag the host, preserving attributes, children, caret and edit session
+  const doc = active.bridge.doc
+  const next = doc.createElement(tag)
+  for (const attr of host.attributes) next.setAttribute(attr.name, attr.value)
+  const range = sel && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null
+  next.append(...host.childNodes)
+  host.replaceWith(next)
+  host.removeEventListener('blur', active.finish)
+  host.removeEventListener('keydown', active.onKeydown)
+  next.addEventListener('blur', active.finish)
+  next.addEventListener('keydown', active.onKeydown)
+  active.el = next
+  next.focus()
+  if (range) {
+    sel.removeAllRanges()
+    sel.addRange(range)
+  }
+}
+
 /** Snapshot of the formatting state at the caret, for toolbar highlighting. */
 export function queryFormatState() {
   if (!active) return null
@@ -102,6 +147,12 @@ export function queryFormatState() {
   const sizeEl = (anchor && active.el.contains(anchor)
     ? (anchor.nodeType === 1 ? anchor : anchor.parentElement)
     : active.el)
+  if (!BLOCK_TAGS.includes(block)) {
+    // formatBlock only sees blocks INSIDE the editing host — but layout
+    // headings are the host itself (a bare <h1>/<h2> being edited directly)
+    const hit = sizeEl?.closest('h1, h2, h3, h4, blockquote')
+    if (hit && (hit === active.el || active.el.contains(hit))) block = hit.tagName.toLowerCase()
+  }
   const computed = win.getComputedStyle(sizeEl)
   const fontSize = Math.round(parseFloat(computed.fontSize)) || null
   return {
@@ -113,7 +164,7 @@ export function queryFormatState() {
     strike: read('strikeThrough'),
     ul: read('insertUnorderedList'),
     ol: read('insertOrderedList'),
-    block: ['h1', 'h2', 'h3', 'h4', 'blockquote'].includes(block) ? block : 'p',
+    block: BLOCK_TAGS.includes(block) ? block : 'p',
     align: read('justifyCenter') ? 'center' : read('justifyRight') ? 'right' : read('justifyFull') ? 'justify' : 'left',
     link: Boolean(currentAnchor())
   }

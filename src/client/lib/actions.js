@@ -6,7 +6,7 @@ import {
   insertTextBox, insertShape, insertImageBlob, imageFromClipboard,
   insertMathBox, insertCodeBlock, insertVideoBlob, insertHtmlBlock
 } from './model/insert.js'
-import { startTextEdit, formatText, isEditingText, activeElement } from './editors/text.js'
+import { startTextEdit, formatText, setBlockStyle, isEditingText, activeElement } from './editors/text.js'
 import { ensurePositioned } from './model/position.js'
 import { arrangeElements } from './model/alignment.js'
 import { applyLayout, isSlideEmpty } from './model/layouts.js'
@@ -386,6 +386,11 @@ export function closePopover(keep) {
 
 export function applyFormat(command, value) {
   formatText(command, value)
+  markDirty()
+}
+
+export function applyBlockStyle(tag) {
+  setBlockStyle(tag)
   markDirty()
 }
 

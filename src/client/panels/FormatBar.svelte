@@ -5,7 +5,7 @@
     toggleFragment, setFragmentIndex, bringToFront, sendToBack,
     currentSlideTransition, setCurrentSlideTransition,
     slideBackground, selectionInfo, arrangeSelection, groupSelection, ungroupSelection,
-    currentFontSize
+    currentFontSize, applyBlockStyle
   } from '../lib/actions.js'
   import { queryFormatState, saveTextSelection, applyLink } from '../lib/editors/text.js'
   import { icon } from '../lib/icons.js'
@@ -49,7 +49,7 @@
   })
 
   function setBlock(value) {
-    applyFormat('formatBlock', `<${value}>`)
+    applyBlockStyle(value)
     fmt = queryFormatState() ?? fmt
   }
 
