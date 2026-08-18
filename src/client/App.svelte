@@ -22,9 +22,15 @@
   import Sidebar from './panels/Sidebar.svelte'
   import Inspector from './panels/Inspector.svelte'
   import ArrangeView from './panels/ArrangeView.svelte'
+  import { icon } from './lib/icons.js'
 
   let iframeSrc = $state('')
   let pristineHtml = ''
+  // remember which panel to restore from the edge handle
+  let lastPanel = 'layers'
+  $effect(() => {
+    if (editor.sidePanel) lastPanel = editor.sidePanel
+  })
   const emptySlide = $derived.by(() => {
     void editor.docVersion
     void editor.slideIndex.h
@@ -185,7 +191,16 @@
         {/if}
       {/if}
     </main>
-    {#if editor.sidePanel}<Inspector />{/if}
+    {#if editor.sidePanel}
+      <Inspector />
+    {:else if editor.ready}
+      <button
+        class="panel-peek"
+        title="Open side panel"
+        aria-label="Open side panel"
+        onclick={() => (editor.sidePanel = lastPanel)}
+      >{@html icon('chevronLeft')}</button>
+    {/if}
   </div>
 
   <PopoverEditor />
@@ -245,6 +260,39 @@
     flex: 1;
     display: flex;
     min-height: 0;
+    position: relative;
+  }
+  /* tucked-away handle to reopen the side panel; slides out on approach */
+  .panel-peek {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 72px;
+    padding: 0;
+    transform: translate(14px, -50%);
+    background: var(--ui-surface-raised);
+    color: var(--ui-muted);
+    border: 1px solid var(--ui-border);
+    border-right: none;
+    border-radius: 9px 0 0 9px;
+    cursor: pointer;
+    opacity: 0.45;
+    transition: transform 0.15s ease, opacity 0.15s ease;
+  }
+  .panel-peek:hover,
+  .panel-peek:focus-visible {
+    transform: translate(0, -50%);
+    opacity: 1;
+    color: var(--ui-text);
+  }
+  .panel-peek :global(svg) {
+    width: 15px;
+    height: 15px;
   }
   .stage {
     flex: 1;
