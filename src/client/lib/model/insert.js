@@ -65,13 +65,15 @@ export async function insertImageBlob(bridge, blob, name) {
 export async function insertVideoBlob(bridge, blob, name) {
   const { path } = await uploadAsset(blob, name)
   const doc = bridge.doc
-  const natural = await new Promise((resolvePromise, reject) => {
+  // A failed probe means this browser can't decode the file — still insert
+  // it (another browser may present it fine); the video panel explains.
+  const natural = await new Promise((resolvePromise) => {
     const probe = doc.createElement('video')
     probe.onloadedmetadata = () => resolvePromise({
       w: probe.videoWidth || 640,
       h: probe.videoHeight || 360
     })
-    probe.onerror = reject
+    probe.onerror = () => resolvePromise({ w: 640, h: 360 })
     probe.preload = 'metadata'
     probe.src = path
   })

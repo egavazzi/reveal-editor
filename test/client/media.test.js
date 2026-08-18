@@ -50,4 +50,11 @@ describe('video media properties', () => {
     expect(html).toContain('muted')
     expect(html).toContain('controls')
   })
+
+  it('strips reveal runtime pause markers on save', () => {
+    const el = makeVideo('controls data-paused-by-reveal')
+    const html = cleanElementHtml(el.closest('section'))
+    expect(html).not.toContain('data-paused-by-reveal')
+    expect(html).toContain('controls')
+  })
 })

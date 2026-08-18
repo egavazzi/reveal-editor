@@ -148,6 +148,11 @@ export async function addVideoBlob(blob, name) {
   try {
     snapshotSlide()
     const el = await insertVideoBlob(runtime.bridge, blob, name)
+    el.addEventListener('error', () => {
+      editor.statusMessage =
+        'Video added, but this browser cannot decode it (unsupported codec) — it will not play here. Convert to WebM (VP9) or H.264 MP4.'
+      editor.selectionVersion++
+    }, { once: true })
     runtime.overlay.setSelection([el])
     markDirty()
   } catch (err) {

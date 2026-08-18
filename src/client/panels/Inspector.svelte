@@ -105,6 +105,58 @@
   }
 
   const KIND_GLYPHS = { math: '∑', code: '{ }', html: '</>', video: '▶', group: '▣' }
+
+  // Live playback preview of the selected video, driven directly from the
+  // panel. Firefox's native controls misplace their hit zones inside the
+  // scaled slide canvas, so the panel is the reliable way to scrub.
+  let preview = $state(null)
+  $effect(() => {
+    const el = video?.el
+    if (!el) {
+      preview = null
+      return
+    }
+    const sync = () => {
+      preview = {
+        time: el.currentTime || 0,
+        duration: Number.isFinite(el.duration) ? el.duration : 0,
+        playing: !el.paused,
+        volume: el.volume,
+        muted: el.muted
+      }
+    }
+    sync()
+    const events = ['timeupdate', 'durationchange', 'loadedmetadata', 'play', 'pause', 'volumechange', 'error']
+    for (const type of events) el.addEventListener(type, sync)
+    return () => {
+      for (const type of events) el.removeEventListener(type, sync)
+    }
+  })
+
+  function previewToggle() {
+    const el = video?.el
+    if (!el) return
+    if (el.paused) el.play().catch(() => {})
+    else el.pause()
+  }
+  function previewSeek(value) {
+    const el = video?.el
+    if (el && Number.isFinite(value)) el.currentTime = value
+  }
+  function previewVolume(value) {
+    const el = video?.el
+    if (!el) return
+    el.volume = Math.min(1, Math.max(0, value))
+    el.muted = el.volume === 0
+  }
+  function previewMute() {
+    const el = video?.el
+    if (el) el.muted = !el.muted
+  }
+  function fmtTime(s) {
+    const whole = Math.max(0, Math.floor(s || 0))
+    return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`
+  }
 </script>
 
 <div class="panel-resizer" role="separator" aria-orientation="vertical" aria-label="Resize panel" onmousedown={startPanelResize}></div>
@@ -290,7 +342,39 @@
   {#if video && editor.sidePanel === 'video'}
     <section class="panel video-panel">
       <h3>Video</h3>
-      <p class="hint">Hold Ctrl to use the video player itself (play, scrub, volume) while editing.</p>
+      {#if video.broken}
+        <p class="hint warn">Your browser can't decode this video file (unsupported codec), so it won't preview or present here. Convert it, e.g.: ffmpeg -i in -c:v libvpx-vp9 -c:a libopus out.webm</p>
+      {/if}
+      {#if preview}
+        <div class="preview-row">
+          <button class="pv" title={preview.playing ? 'Pause' : 'Play'} onclick={previewToggle}>{@html icon(preview.playing ? 'pause' : 'play')}</button>
+          <input
+            class="scrub"
+            type="range"
+            min="0"
+            max={preview.duration || 0}
+            step="0.05"
+            value={preview.time}
+            disabled={!preview.duration}
+            aria-label="Seek"
+            oninput={(e) => previewSeek(Number(e.currentTarget.value))}
+          />
+          <span class="time">{fmtTime(preview.time)} / {fmtTime(preview.duration)}</span>
+        </div>
+        <div class="preview-row">
+          <button class="pv" title={preview.muted ? 'Unmute preview' : 'Mute preview'} onclick={previewMute}>{@html icon(preview.muted ? 'volumeMute' : 'volume')}</button>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            value={preview.muted ? 0 : preview.volume}
+            aria-label="Preview volume"
+            oninput={(e) => previewVolume(Number(e.currentTarget.value))}
+          />
+        </div>
+        <p class="hint">Preview only — playback settings below are what get saved. You can also hold Ctrl to use the player on the canvas.</p>
+      {/if}
       <div class="row">
         <label>Width<input type="number" min="1" value={video.width} onchange={(e) => setVideoProperties({ width: +e.currentTarget.value })} /></label>
         <label>Height<input type="number" min="1" value={video.height} onchange={(e) => setVideoProperties({ height: +e.currentTarget.value })} /></label>
@@ -401,4 +485,9 @@
   .layer:hover .ctl.move { visibility: visible; }
 
   .image-panel, .shape-panel, .video-panel { background: var(--ui-surface); }
+  .preview-row { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+  .preview-row .pv { flex: none; display: flex; align-items: center; justify-content: center; width: 28px; height: 26px; padding: 0; }
+  .preview-row input[type='range'] { flex: 1; width: auto; padding: 0; accent-color: var(--ui-primary); background: transparent; border: none; }
+  .preview-row .time { flex: none; color: var(--ui-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .hint.warn { color: #e3b76b; }
 </style>

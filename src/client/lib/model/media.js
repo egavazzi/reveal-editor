@@ -8,6 +8,8 @@ export function videoInfo(el) {
     el,
     width: Math.round(parseFloat(el.style.width) || el.getBoundingClientRect().width),
     height: Math.round(parseFloat(el.style.height) || el.getBoundingClientRect().height),
+    // decode failure (codec/container the browser can't play)
+    broken: Boolean(el.error),
     autoplay: el.hasAttribute('data-autoplay'),
     loop: el.hasAttribute('loop'),
     muted: el.hasAttribute('muted'),
