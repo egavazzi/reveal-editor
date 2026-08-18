@@ -52,6 +52,24 @@ describe('slide layouts', () => {
     expect(section.querySelector('svg[aria-label="UiT wordmark"] path')).not.toBeNull()
   })
 
+  it('builds UiT title/chapter image frames behind a locked field polygon', () => {
+    document.body.innerHTML = '<div class="slides"><section class="re-slide"></section></div>'
+    const slides = document.querySelector('.slides')
+    const section = document.querySelector('section')
+    applyLayout(section, 'uit-title', { width: 960, height: 700, theme: 'uit' })
+
+    const field = section.querySelector('svg[aria-label="Background field"]')
+    expect(field).not.toBeNull()
+    expect(field.hasAttribute('data-re-locked')).toBe(true)
+    const placeholder = section.querySelector('.re-image-placeholder')
+    expect(placeholder.getAttribute('data-re-fit')).toBe('cover')
+    // the placeholder (and hence a dropped image) stacks directly behind the
+    // field, so the field crops the image along the template diagonal
+    expect(placeholder.nextElementSibling).toBe(field)
+    // editor-only hint never reaches the saved file
+    expect(cleanSlides(slides)).not.toContain('re-image-placeholder')
+  })
+
   it('offers the five solid content backgrounds from the template', () => {
     const cases = [
       ['uit-content-white', '#FFFFFF'], ['uit-content-ice', '#CDEBEF'],

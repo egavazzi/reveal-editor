@@ -147,7 +147,10 @@ export async function addImageBlob(blob, name) {
       for (const prop of ['left', 'top', 'width', 'height']) {
         if (placeholder.style[prop]) el.style[prop] = placeholder.style[prop]
       }
-      el.style.objectFit = 'contain'
+      el.style.objectFit = placeholder.getAttribute('data-re-fit') || 'contain'
+      // take over the placeholder's stacking position too — frame images
+      // must stay behind covering elements (e.g. the UiT field polygon)
+      placeholder.before(el)
       placeholder.remove()
     }
     runtime.overlay.setSelection([el])

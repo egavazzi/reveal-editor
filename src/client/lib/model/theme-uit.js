@@ -82,6 +82,54 @@ function framePanel(doc, W, H, fill) {
   })
 }
 
+/**
+ * The colored field left of the frame, as a locked element (not just the
+ * slide background): an image dropped into the frame slides BEHIND it and
+ * is cropped along the diagonal, like the template's picture placeholders.
+ */
+function fieldPanel(doc, W, H, fill) {
+  const w = FRAME_TOP_X * W
+  const h = BAND_TOP * H
+  const notch = (FRAME_TOP_X - FRAME_BOTTOM_X) * W
+  const field = svgEl(doc, {
+    viewBox: `0 0 ${Math.round(w)} ${Math.round(h)}`,
+    inner: `<polygon points="0 0 ${Math.round(w)} 0 ${Math.round(w - notch)} ${Math.round(h)} 0 ${Math.round(h)}" fill="${fill}"/>`,
+    preserve: 'none',
+    label: 'Background field',
+    x: 0, y: 0, w, h
+  })
+  // locked so clicks land on the content above; unlock via the Layers panel
+  field.setAttribute('data-re-locked', '')
+  return field
+}
+
+/** Editor-only hint frame: select it, then add/paste/drop an image. */
+function imagePlaceholder(doc, W, H, dark) {
+  const el = doc.createElement('div')
+  el.className = 're-el re-image-placeholder re-transient'
+  el.setAttribute('aria-label', 'Image placeholder')
+  el.setAttribute('data-re-fit', 'cover')
+  const ink = dark ? 'rgba(0,51,73,.75)' : 'rgba(205,235,239,.85)'
+  Object.assign(el.style, {
+    position: 'absolute',
+    left: `${Math.round(FRAME_BOTTOM_X * W)}px`,
+    top: '0px',
+    width: `${Math.round((1 - FRAME_BOTTOM_X) * W)}px`,
+    height: `${Math.round(BAND_TOP * H)}px`,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    textAlign: 'center',
+    boxSizing: 'border-box',
+    padding: `0 0 0 ${Math.round((FRAME_TOP_X - FRAME_BOTTOM_X) * W)}px`,
+    border: `3px dashed ${ink}`,
+    color: ink,
+    fontSize: `${Math.round(0.03 * H)}px`
+  })
+  el.textContent = 'Optional image: select this frame, then add, paste, or drop one'
+  return el
+}
+
 /** White footer band + full UiT wordmark, as on title/chapter slides. */
 function footerBand(doc, W, H) {
   const band = doc.createElement('div')
@@ -147,7 +195,12 @@ export function buildUitLayout(section, layout, _box, { sx = 1, sy = 1 } = {}) {
     const title = layout.startsWith('uit-title')
     section.setAttribute('data-background-color', dark ? UIT_COLORS.petrol : UIT_COLORS.ice)
     section.classList.add('uit-own-footer')
-    elements.push(framePanel(doc, W, H, dark ? UIT_COLORS.ice : UIT_COLORS.petrol))
+    // stacking, back to front: frame color → (image lands here) → field
+    elements.push(
+      framePanel(doc, W, H, dark ? UIT_COLORS.ice : UIT_COLORS.petrol),
+      imagePlaceholder(doc, W, H, dark),
+      fieldPanel(doc, W, H, dark ? UIT_COLORS.petrol : UIT_COLORS.ice)
+    )
     elements.push(textEl(doc, title ? 'h1' : 'h2', {
       text: title ? 'Presentation title' : 'Chapter title',
       x: 0.062 * W, y: 0.156 * H, w: 0.493 * W, size: fs(40)
