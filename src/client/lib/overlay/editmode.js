@@ -128,6 +128,9 @@ function injectEditStyles(doc) {
        element; hold Ctrl to use the native player */
     body:not(.re-media-live) .reveal .slides section video { pointer-events: none; }
     body.re-media-live .reveal .slides section video { outline: 2px solid rgba(47,111,186,.65); }
+    /* selection frame handles overlap the player's control bar; get them
+       fully out of the way while the native player is live */
+    body.re-media-live .moveable-control-box { display: none !important; }
     body { overflow: hidden; }
   `
   doc.head.appendChild(style)

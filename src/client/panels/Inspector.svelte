@@ -62,6 +62,30 @@
 
   let scaleContent = $state(true)
 
+  // user-resizable panel width, persisted across sessions
+  let panelWidth = $state(
+    Math.min(560, Math.max(220, Number(localStorage.getItem('reveal-editor:panel-width')) || 290))
+  )
+
+  function startPanelResize(e) {
+    e.preventDefault()
+    const startX = e.clientX
+    const startWidth = panelWidth
+    // the iframe swallows mousemove; keep it inert while resizing
+    document.body.classList.add('re-panel-resizing')
+    const onMove = (ev) => {
+      panelWidth = Math.min(560, Math.max(220, startWidth + startX - ev.clientX))
+    }
+    const onUp = () => {
+      document.body.classList.remove('re-panel-resizing')
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      localStorage.setItem('reveal-editor:panel-width', String(Math.round(panelWidth)))
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
   function setPreset(e) {
     const size = presets[e.currentTarget.value]
     if (size) resizeDeck({ width: size[0], height: size[1] }, { scaleContent })
@@ -83,7 +107,8 @@
   const KIND_GLYPHS = { math: '∑', code: '{ }', html: '</>', video: '▶', group: '▣' }
 </script>
 
-<aside class="inspector">
+<div class="panel-resizer" role="separator" aria-orientation="vertical" aria-label="Resize panel" onmousedown={startPanelResize}></div>
+<aside class="inspector" style:width="{panelWidth}px">
   <header>
     <button class:active={editor.sidePanel === 'layers'} onclick={() => editor.sidePanel = 'layers'}>Layers</button>
     <button class:active={editor.sidePanel === 'settings'} onclick={() => editor.sidePanel = 'settings'}>Deck</button>
@@ -328,7 +353,11 @@
 </aside>
 
 <style>
-  .inspector { width: 290px; background: var(--ui-surface); border-left: 1px solid var(--ui-border-strong); overflow-y: auto; color: var(--ui-text); }
+  .inspector { width: 290px; flex: none; background: var(--ui-surface); border-left: 1px solid var(--ui-border-strong); overflow-y: auto; color: var(--ui-text); }
+  .panel-resizer { flex: none; width: 5px; margin-right: -5px; cursor: col-resize; z-index: 3; }
+  .panel-resizer:hover, :global(body.re-panel-resizing) .panel-resizer { background: var(--ui-primary); opacity: .6; }
+  :global(body.re-panel-resizing) { cursor: col-resize; user-select: none; }
+  :global(body.re-panel-resizing iframe) { pointer-events: none; }
   header { display: flex; gap: 4px; position: sticky; top: 0; z-index: 2; padding: 8px; background: var(--ui-surface-raised); border-bottom: 1px solid var(--ui-border-strong); }
   button { background: var(--ui-control); color: var(--ui-text); border: 1px solid var(--ui-border); border-radius: 5px; padding: 4px 8px; cursor: pointer; font-family: inherit; font-size: 12px; }
   button:hover { background: var(--ui-control-hover); }

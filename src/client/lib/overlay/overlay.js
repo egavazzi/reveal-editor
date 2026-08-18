@@ -92,6 +92,8 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
 
     moveable
       .on('dragStart', (e) => {
+        // Ctrl over a video means "talk to the native player" — never a drag
+        if (e.inputEvent?.ctrlKey && e.inputEvent.target?.closest?.('video')) return false
         moveable.snappable = !snapOverride(e.inputEvent)
         dragMoved = false
         onBeforeEdit?.()
