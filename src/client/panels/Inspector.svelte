@@ -9,6 +9,7 @@
     setImageProperties, setSpeakerNotes, updateDeckSettings as updateSettings
   } from '../lib/actions.js'
   import { icon } from '../lib/icons.js'
+  import { probeVideoCodec, webmConvertCommand } from '../lib/model/codecs.js'
 
   const presets = {
     'standard': [960, 700],
@@ -132,6 +133,40 @@
       for (const type of events) el.removeEventListener(type, sync)
     }
   })
+
+  // identify the codec of an unplayable video for a helpful warning
+  let codec = $state(null)
+  let probedSrc = ''
+  $effect(() => {
+    const el = video?.el
+    const src = el ? el.currentSrc || el.src : ''
+    if (!video?.broken || !src) {
+      codec = null
+      probedSrc = ''
+      return
+    }
+    if (src === probedSrc) return
+    probedSrc = src
+    codec = null
+    probeVideoCodec(src).then((hit) => {
+      if (probedSrc === src) codec = hit
+    })
+  })
+
+  const videoFileName = $derived.by(() => {
+    const src = video?.el ? video.el.currentSrc || video.el.src : ''
+    try {
+      return decodeURIComponent(src.split('/').pop() || '')
+    } catch {
+      return src.split('/').pop() || ''
+    }
+  })
+  const convertCommand = $derived(webmConvertCommand(videoFileName))
+
+  function copyConvertCommand() {
+    navigator.clipboard?.writeText(convertCommand)
+    editor.statusMessage = 'ffmpeg command copied to the clipboard.'
+  }
 
   function previewToggle() {
     const el = video?.el
@@ -343,7 +378,26 @@
     <section class="panel video-panel">
       <h3>Video</h3>
       {#if video.broken}
-        <p class="hint warn">Your browser can't decode this video file (unsupported codec), so it won't preview or present here. Convert it, e.g.: ffmpeg -i in -c:v libvpx-vp9 -c:a libopus out.webm</p>
+        <div class="codec-warn">
+          <strong>This video can't play in this browser</strong>
+          <p>
+            {#if codec}
+              It's encoded with <b>{codec.name}</b>, which this browser can't decode.
+            {:else}
+              Its codec or container isn't supported by this browser.
+            {/if}
+            The frame will stay blank both while editing and when presenting here
+            (other browsers or devices may still play it).
+          </p>
+          <p>Re-encode it as WebM — VP9 video and Opus audio are royalty-free codecs every modern browser plays:</p>
+          <code>{convertCommand}</code>
+          <button class="copy" onclick={copyConvertCommand}>Copy command</button>
+          <p class="fine">
+            <b>-c:v libvpx-vp9</b> re-encodes the video as VP9 ·
+            <b>-crf 32</b> sets quality (lower&nbsp;=&nbsp;better, bigger file) ·
+            <b>-c:a libopus</b> converts the audio to Opus
+          </p>
+        </div>
       {/if}
       {#if preview}
         <div class="preview-row">
@@ -490,4 +544,39 @@
   .preview-row input[type='range'] { flex: 1; width: auto; padding: 0; accent-color: var(--ui-primary); background: transparent; border: none; }
   .preview-row .time { flex: none; color: var(--ui-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
   .hint.warn { color: #e3b76b; }
+  .codec-warn {
+    margin: 8px 0 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: rgba(227, 183, 107, 0.1);
+    border: 1px solid rgba(227, 183, 107, 0.45);
+    color: #e8c98a;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .codec-warn strong { display: block; margin-bottom: 4px; color: #f0d49c; font-size: 12.5px; }
+  .codec-warn p { margin: 6px 0; }
+  .codec-warn b { color: #f0d49c; font-weight: 600; }
+  .codec-warn code {
+    display: block;
+    margin: 8px 0 6px;
+    padding: 7px 9px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.35);
+    color: #ead9b0;
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    user-select: all;
+  }
+  .codec-warn .copy {
+    width: auto;
+    padding: 3px 10px;
+    font-size: 11px;
+    background: rgba(227, 183, 107, 0.18);
+    border-color: rgba(227, 183, 107, 0.45);
+    color: #f0d49c;
+  }
+  .codec-warn .copy:hover { background: rgba(227, 183, 107, 0.3); }
+  .codec-warn .fine { margin-top: 8px; color: rgba(232, 201, 138, 0.75); font-size: 11px; }
 </style>
