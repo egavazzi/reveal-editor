@@ -45,6 +45,23 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
     return bridge.currentSection
   }
 
+  /**
+   * Videos are pointer-inert in edit mode, so pointer events land on the
+   * section behind them. Resolve those by geometry instead of by target.
+   */
+  function resolveAtPointer(event, section) {
+    const direct = resolveEditable(event.target, section)
+    if (direct || event.clientX == null) return direct
+    for (const video of section.querySelectorAll('video')) {
+      const r = video.getBoundingClientRect()
+      if (event.clientX >= r.left && event.clientX <= r.right &&
+          event.clientY >= r.top && event.clientY <= r.bottom) {
+        return resolveEditable(video, section)
+      }
+    }
+    return null
+  }
+
   function buildMoveable() {
     moveable?.destroy()
     const section = currentSection()
@@ -220,9 +237,11 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
     // Ignore clicks on moveable handles, and leave text editing alone
     if (e.target.closest?.('.moveable-control-box, .re-moveable')) return
     if (isEditingText() && activeElement()?.contains(e.target)) return
+    // Ctrl+click on a video is native player interaction, not selection
+    if (e.ctrlKey && e.target.closest?.('video')) return
     const section = currentSection()
     if (!section) return
-    const el = resolveEditable(e.target, section)
+    const el = resolveAtPointer(e, section)
     if (!el || el.hasAttribute('data-re-locked')) {
       if (targets.length) setSelection([])
       return
@@ -240,9 +259,10 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
   }
 
   function onDoubleClick(e) {
+    if (e.ctrlKey && e.target.closest?.('video')) return
     const section = currentSection()
     if (!section) return
-    let el = resolveEditable(e.target, section)
+    let el = resolveAtPointer(e, section)
     // A selected element is covered by Moveable's invisible drag area, so
     // the dblclick lands on the overlay instead — route it to the target.
     if (!el && targets.length === 1 && e.target.closest?.('.moveable-control-box, .re-moveable')) {
@@ -267,7 +287,7 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
       const section = currentSection()
       if (
         e.inputEvent.target.closest?.('.moveable-control-box, .re-moveable, .controls, .slide-number') ||
-        (section && resolveEditable(e.inputEvent.target, section))
+        (section && resolveAtPointer(e.inputEvent, section))
       ) {
         e.stop()
       }
@@ -277,8 +297,23 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
     })
   }
 
+  // Pointer-inert videos never receive the mousedown Moveable listens for,
+  // so start its drag gesture manually when the press lands on a selected
+  // video's footprint.
+  function onMediaMousedown(e) {
+    if (e.ctrlKey || e.button !== 0) return
+    if (e.target.closest?.('.moveable-control-box, .re-moveable')) return
+    const section = currentSection()
+    if (!section || resolveEditable(e.target, section)) return
+    const el = resolveAtPointer(e, section)
+    if (el && el.tagName === 'VIDEO' && targets.length === 1 && targets[0] === el) {
+      try { moveable.dragStart(e, el) } catch { /* gesture already active */ }
+    }
+  }
+
   doc.addEventListener('click', onClick)
   doc.addEventListener('dblclick', onDoubleClick)
+  doc.addEventListener('mousedown', onMediaMousedown)
   buildMoveable()
   buildSelecto()
 
@@ -292,6 +327,7 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
     destroy() {
       doc.removeEventListener('click', onClick)
       doc.removeEventListener('dblclick', onDoubleClick)
+      doc.removeEventListener('mousedown', onMediaMousedown)
       moveable?.destroy()
       selecto?.destroy()
     }

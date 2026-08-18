@@ -5,6 +5,7 @@
     currentLayers, selectLayer, toggleLayerHidden, toggleLayerLocked, moveLayer, setLayerName,
     currentSpeakerNotes, selectedElementInfo, selectedImageInfo, setElementProperties,
     selectedShapeInfo, setShapeProperties, resizeDeck,
+    selectedVideoInfo, setVideoProperties,
     setImageProperties, setSpeakerNotes, updateDeckSettings as updateSettings
   } from '../lib/actions.js'
   import { icon } from '../lib/icons.js'
@@ -47,6 +48,12 @@
     void editor.selectionVersion
     return selectedShapeInfo()
   })
+  const video = $derived.by(() => {
+    void editor.docVersion
+    void editor.selectionCount
+    void editor.selectionVersion
+    return selectedVideoInfo()
+  })
   const selectedPreset = $derived.by(() =>
     Object.entries(presets).find(([, size]) =>
       size[0] === Number(editor.settings.width) && size[1] === Number(editor.settings.height)
@@ -82,6 +89,7 @@
     <button class:active={editor.sidePanel === 'settings'} onclick={() => editor.sidePanel = 'settings'}>Deck</button>
     <button class:active={editor.sidePanel === 'notes'} onclick={() => editor.sidePanel = 'notes'}>Notes</button>
     {#if image}<button class:active={editor.sidePanel === 'image'} onclick={() => editor.sidePanel = 'image'}>Image</button>{/if}
+    {#if video}<button class:active={editor.sidePanel === 'video'} onclick={() => editor.sidePanel = 'video'}>Video</button>{/if}
     {#if shape}<button class:active={editor.sidePanel === 'shape'} onclick={() => editor.sidePanel = 'shape'}>Shape</button>{/if}
     {#if element && !shape}<button class:active={editor.sidePanel === 'element'} onclick={() => editor.sidePanel = 'element'}>Element</button>{/if}
     <button
@@ -254,6 +262,25 @@
     </section>
   {/if}
 
+  {#if video && editor.sidePanel === 'video'}
+    <section class="panel video-panel">
+      <h3>Video</h3>
+      <p class="hint">Hold Ctrl to use the video player itself (play, scrub, volume) while editing.</p>
+      <div class="row">
+        <label>Width<input type="number" min="1" value={video.width} onchange={(e) => setVideoProperties({ width: +e.currentTarget.value })} /></label>
+        <label>Height<input type="number" min="1" value={video.height} onchange={(e) => setVideoProperties({ height: +e.currentTarget.value })} /></label>
+      </div>
+      <h3>Playback</h3>
+      <label class="check"><input type="checkbox" checked={video.autoplay} onchange={(e) => setVideoProperties({ autoplay: e.currentTarget.checked })} /> Autoplay when the slide appears</label>
+      <label class="check"><input type="checkbox" checked={video.loop} onchange={(e) => setVideoProperties({ loop: e.currentTarget.checked })} /> Loop</label>
+      <label class="check"><input type="checkbox" checked={video.muted} onchange={(e) => setVideoProperties({ muted: e.currentTarget.checked })} /> Start muted</label>
+      <label class="check"><input type="checkbox" checked={video.controls} onchange={(e) => setVideoProperties({ controls: e.currentTarget.checked })} /> Show player controls</label>
+      {#if video.autoplay && !video.muted}
+        <p class="hint">Browsers may block autoplay with sound — enable “Start muted” to make autoplay reliable.</p>
+      {/if}
+    </section>
+  {/if}
+
   {#if element && editor.sidePanel === 'element'}
     <section class="panel element-panel">
       <h3>{element.group ? 'Group' : 'Element'} geometry</h3>
@@ -344,5 +371,5 @@
   .ctl.move { visibility: hidden; }
   .layer:hover .ctl.move { visibility: visible; }
 
-  .image-panel, .shape-panel { background: var(--ui-surface); }
+  .image-panel, .shape-panel, .video-panel { background: var(--ui-surface); }
 </style>

@@ -92,9 +92,10 @@
           // follows the selection.
           if (!editor.panelPinned) {
             if (targets.length === 1 && editor.selectionTag === 'img') editor.sidePanel = 'image'
+            else if (targets.length === 1 && editor.selectionTag === 'video') editor.sidePanel = 'video'
             else if (targets.length === 1 && targets[0].hasAttribute('data-shape')) editor.sidePanel = 'shape'
             else if (targets.length === 1) editor.sidePanel = 'element'
-            else if (['image', 'shape', 'element'].includes(editor.sidePanel)) editor.sidePanel = null
+            else if (['image', 'video', 'shape', 'element'].includes(editor.sidePanel)) editor.sidePanel = null
           }
         },
         onBeforeEdit() {

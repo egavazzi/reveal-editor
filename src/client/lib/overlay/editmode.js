@@ -25,6 +25,7 @@ export function enterEditMode(bridge) {
     progress: false,
     slideNumber: false,
     autoAnimate: false,
+    autoPlayMedia: false,
     fragments: true,
     transition: 'none',
     backgroundTransition: 'none',
@@ -37,7 +38,25 @@ export function enterEditMode(bridge) {
   const relayout = () => applyStageScale(bridge)
   relayout()
   bridge.win.addEventListener('resize', relayout)
+  watchMediaKey(bridge)
   return { relayout, getScale: () => currentScale(bridge) }
+}
+
+// While editing, videos are pointer-inert so they select/move like any
+// element. Holding Ctrl hands the pointer back to the native player
+// (play, scrub, volume). Listen in both documents — focus can sit in
+// either — and clear on blur so the class never sticks.
+function watchMediaKey(bridge) {
+  const setLive = (on) => bridge.doc.body.classList.toggle('re-media-live', on)
+  const onKey = (e) => {
+    if (e.key === 'Control') setLive(e.type === 'keydown')
+  }
+  const clear = () => setLive(false)
+  for (const win of [window, bridge.win]) {
+    win.addEventListener('keydown', onKey)
+    win.addEventListener('keyup', onKey)
+    win.addEventListener('blur', clear)
+  }
 }
 
 function currentScale(bridge) {
@@ -105,6 +124,10 @@ function injectEditStyles(doc) {
       content: ''; position: absolute; pointer-events: none; z-index: 2147483646;
       inset: var(--re-safe-margin); border: 1px dashed rgba(47,111,186,.45);
     }
+    /* videos are pointer-inert while editing so they behave like any other
+       element; hold Ctrl to use the native player */
+    body:not(.re-media-live) .reveal .slides section video { pointer-events: none; }
+    body.re-media-live .reveal .slides section video { outline: 2px solid rgba(47,111,186,.65); }
     body { overflow: hidden; }
   `
   doc.head.appendChild(style)

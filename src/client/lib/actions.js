@@ -28,6 +28,7 @@ import {
   initializeSettings, updateSettings as updateSettingsModel, writeSettings
 } from './model/settings.js'
 import { setShapeColors, shapeColors, syncShapeGeometry } from './model/shapes.js'
+import { videoInfo, applyVideoProperties } from './model/media.js'
 export { saveDeck } from './model/save.js'
 export { slideSummaries } from './model/slides.js'
 
@@ -857,6 +858,23 @@ export function ungroupSelection() {
   runtime.overlay.setSelection(children)
   markDirty()
   return true
+}
+
+// --- video properties ---
+
+export function selectedVideoInfo() {
+  const sel = runtime.overlay?.getSelection() ?? []
+  return sel.length === 1 ? videoInfo(sel[0]) : null
+}
+
+export function setVideoProperties(values) {
+  const info = selectedVideoInfo()
+  if (!info) return
+  snapshotSlide()
+  applyVideoProperties(info.el, values)
+  runtime.overlay.refresh()
+  markDirty()
+  bumpSelection()
 }
 
 // --- image properties ---
