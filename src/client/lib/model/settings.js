@@ -39,7 +39,13 @@ export const DEFAULT_SETTINGS = Object.freeze({
   theme: '',
   typography: '',
   transition: 'slide',
-  transitionSpeed: 'default'
+  transitionSpeed: 'default',
+  // presentation extras (runtime script features; no plugins required)
+  laserPointer: false,
+  clickZoom: false,
+  mouseWheel: false,
+  loop: false,
+  autoSlide: 0
 })
 
 const TEMPLATE_SELECTOR = 'template[data-re-settings]'
@@ -139,7 +145,9 @@ const RUNTIME_SCRIPT = `(() => {
       margin: (s.margin ?? 4) / 100, controls: s.controls !== false,
       slideNumber: s.slideNumbers ? (s.slideNumberFormat || 'c/t') : false,
       showSlideNumber: 'all', transition: s.transition || 'slide',
-      transitionSpeed: s.transitionSpeed || 'default' });
+      transitionSpeed: s.transitionSpeed || 'default',
+      mouseWheel: s.mouseWheel === true, loop: s.loop === true,
+      autoSlide: Number(s.autoSlide) > 0 ? Number(s.autoSlide) * 1000 : 0 });
     if (/^[a-z0-9_-]+$/i.test(s.theme || '')) {
       const link = document.querySelector('link[rel~="stylesheet"][href*="/theme/"], link[rel~="stylesheet"][href^="theme/"]');
       if (link) {
@@ -159,6 +167,47 @@ const RUNTIME_SCRIPT = `(() => {
         const el = e.target.closest('[data-re-href]');
         if (el) window.open(el.dataset.reHref, '_blank', 'noopener');
       });
+      if (s.laserPointer) {
+        const dot = document.createElement('div');
+        dot.style.cssText = 'position:fixed;z-index:2147483647;width:14px;height:14px;' +
+          'margin:-7px 0 0 -7px;border-radius:50%;pointer-events:none;display:none;' +
+          'background:radial-gradient(circle,#ff6666 0%,#dd0000 55%,rgba(221,0,0,0) 100%);' +
+          'box-shadow:0 0 14px 5px rgba(255,40,40,.55)';
+        document.body.appendChild(dot);
+        let laserOn = false;
+        document.addEventListener('keydown', e => {
+          if (e.key !== 'l' && e.key !== 'L') return;
+          if (e.ctrlKey || e.metaKey || e.altKey) return;
+          if (/^(input|textarea|select)$/i.test(e.target.tagName) || e.target.isContentEditable) return;
+          laserOn = !laserOn;
+          dot.style.display = laserOn ? 'block' : 'none';
+          document.documentElement.style.cursor = laserOn ? 'none' : '';
+        });
+        document.addEventListener('mousemove', e => {
+          if (!laserOn) return;
+          dot.style.left = e.clientX + 'px';
+          dot.style.top = e.clientY + 'px';
+        });
+      }
+      if (s.clickZoom) {
+        let zoomed = false;
+        const reset = () => {
+          zoomed = false;
+          document.body.style.transform = '';
+        };
+        document.addEventListener('click', e => {
+          if (!e.ctrlKey) return;
+          e.preventDefault();
+          if (zoomed) return reset();
+          zoomed = true;
+          document.body.style.transition = 'transform .25s ease';
+          document.body.style.transformOrigin = e.clientX + 'px ' + e.clientY + 'px';
+          document.body.style.transform = 'scale(2)';
+        }, true);
+        document.addEventListener('keydown', e => {
+          if (e.key === 'Escape' && zoomed) reset();
+        });
+      }
     }
   };
   addEventListener('load', () => setTimeout(apply, 0), { once: true });

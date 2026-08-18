@@ -327,6 +327,16 @@
       <h3>Navigation arrows</h3>
       <label class="check"><input type="checkbox" checked={editor.settings.controls} onchange={(e) => updateSettings({ controls: e.currentTarget.checked })} /> Show navigation arrows</label>
 
+      <h3>Presenting</h3>
+      <label class="check"><input type="checkbox" checked={editor.settings.laserPointer} onchange={(e) => updateSettings({ laserPointer: e.currentTarget.checked })} /> Laser pointer</label>
+      {#if editor.settings.laserPointer}<p class="hint">Press L while presenting to toggle the pointer.</p>{/if}
+      <label class="check"><input type="checkbox" checked={editor.settings.clickZoom} onchange={(e) => updateSettings({ clickZoom: e.currentTarget.checked })} /> Zoom with Ctrl+click</label>
+      {#if editor.settings.clickZoom}<p class="hint">Ctrl+click zooms in on that spot; Ctrl+click again or Esc zooms out.</p>{/if}
+      <label class="check"><input type="checkbox" checked={editor.settings.mouseWheel} onchange={(e) => updateSettings({ mouseWheel: e.currentTarget.checked })} /> Navigate with the mouse wheel</label>
+      <label class="check"><input type="checkbox" checked={editor.settings.loop} onchange={(e) => updateSettings({ loop: e.currentTarget.checked })} /> Loop back to the first slide</label>
+      <label>Auto-advance slides (seconds, 0 = off)<input type="number" min="0" max="3600" value={editor.settings.autoSlide} onchange={(e) => updateSettings({ autoSlide: Math.max(0, +e.currentTarget.value || 0) })} /></label>
+      <p class="hint">These apply when presenting, not while editing. Press F for fullscreen, S for speaker view, Esc for the slide overview.</p>
+
       <h3>Slide numbers</h3>
       <label class="check"><input type="checkbox" checked={editor.settings.slideNumbers} onchange={(e) => updateSettings({ slideNumbers: e.currentTarget.checked })} /> Show slide numbers</label>
       <label>Format<select value={editor.settings.slideNumberFormat} onchange={(e) => updateSettings({ slideNumberFormat: e.currentTarget.value })}>

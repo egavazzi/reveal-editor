@@ -450,11 +450,18 @@ export function slideAdd(layout = 'blank') {
 
 export function slideApplyLayout(layout) {
   const section = runtime.bridge.currentSection
-  if (!isSlideEmpty(section)) {
-    editor.statusMessage = 'Layout presets can only be applied to an empty slide.'
+  const hasContent = !isSlideEmpty(section)
+  if (hasContent && !window.confirm(
+    'Applying a layout replaces the contents of this slide (speaker notes are kept). Continue? Undo (Ctrl+Z) restores it.'
+  )) {
     return false
   }
   snapshotSlide()
+  if (hasContent) {
+    for (const el of [...section.children]) {
+      if (!el.matches('aside.notes')) el.remove()
+    }
+  }
   const elements = applyLayout(section, layout, editor.settings)
   runtime.bridge.sync()
   runtime.overlay.setSelection(elements.filter((el) => !el.classList.contains('re-transient')))
