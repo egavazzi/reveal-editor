@@ -10,15 +10,61 @@
  *   red      #CB333B   accent 3 (light: #F7E0E2)
  *   link     #007396
  *
- * Typography: the template uses Open Sans (ExtraBold for headings). Open Sans
- * is not bundled, so the stack falls back to metric-similar system fonts;
- * install Open Sans locally (or add a webfont) for an exact match.
+ * Typography: Open Sans (the template uses ExtraBold for headings), bundled
+ * as variable woff2 next to this file (fonts/open-sans/, OFL 1.1 licensed)
+ * so decks render identically everywhere, offline included.
  *
  * The UiT wordmark is embedded below as a data URI (no network needed) and
  * rendered as the small corner emblem bottom-right, as on the template's
  * content slides (title/chapter/closing layouts carry their own footer). Add class="no-uit-logo" to
  * the <body> or set --uit-logo-display: none to hide it.
  */
+/*********************************************
+ * BUNDLED FONT — Open Sans (variable, weights 300-800)
+ * Licensed under the SIL Open Font License 1.1; see
+ * fonts/open-sans/OFL.txt alongside these files.
+ *********************************************/
+/* Open Sans variable (italic, latin-ext) */
+@font-face {
+  font-family: 'Open Sans';
+  font-style: italic;
+  font-weight: 300 800;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url(./fonts/open-sans/open-sans-italic-latin-ext.woff2) format('woff2-variations');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* Open Sans variable (italic, latin) */
+@font-face {
+  font-family: 'Open Sans';
+  font-style: italic;
+  font-weight: 300 800;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url(./fonts/open-sans/open-sans-italic-latin.woff2) format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* Open Sans variable (normal, latin-ext) */
+@font-face {
+  font-family: 'Open Sans';
+  font-style: normal;
+  font-weight: 300 800;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url(./fonts/open-sans/open-sans-latin-ext.woff2) format('woff2-variations');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* Open Sans variable (normal, latin) */
+@font-face {
+  font-family: 'Open Sans';
+  font-style: normal;
+  font-weight: 300 800;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url(./fonts/open-sans/open-sans-latin.woff2) format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 section.has-dark-background, section.has-dark-background h1, section.has-dark-background h2, section.has-dark-background h3, section.has-dark-background h4, section.has-dark-background h5, section.has-dark-background h6 {
   color: #fff;
 }

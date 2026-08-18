@@ -26,9 +26,12 @@ await cp(join(katex, 'fonts'), join(katexOut, 'fonts'), { recursive: true })
 
 // Custom themes (e.g. uit) live in templates/themes/ and ship alongside the
 // stock reveal themes so `theme: <name>` resolves the same way for both.
+// Copied recursively: css files plus their assets (fonts/…).
 const customThemes = join(root, 'templates', 'themes')
-for (const file of await readdir(customThemes)) {
-  if (file.endsWith('.css')) await cp(join(customThemes, file), join(out, 'dist', 'theme', file))
+for (const entry of await readdir(customThemes, { withFileTypes: true })) {
+  if (entry.isDirectory() || entry.name.endsWith('.css')) {
+    await cp(join(customThemes, entry.name), join(out, 'dist', 'theme', entry.name), { recursive: true })
+  }
 }
 
 console.log(`vendored reveal.js + katex into ${out}`)

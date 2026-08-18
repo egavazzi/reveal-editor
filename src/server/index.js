@@ -1,5 +1,5 @@
 import express from 'express'
-import { copyFile, readdir, readFile, stat } from 'node:fs/promises'
+import { cp, readdir, readFile, stat } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { loadDeck, saveDeck } from './deck.js'
@@ -8,17 +8,19 @@ import { watchDeck } from './watch.js'
 
 /**
  * Decks vendored before a custom theme existed (templates/themes/) lack its
- * CSS in their reveal/ copy. Add missing theme files so those decks can also
- * select the theme; never overwrite files already in the deck.
+ * CSS (and font assets) in their reveal/ copy. Add missing theme files so
+ * those decks can also select the theme; never overwrite files already in
+ * the deck.
  */
 async function syncCustomThemes(deckDir, repoRoot) {
   const source = join(repoRoot, 'templates', 'themes')
   const target = join(deckDir, 'reveal', 'dist', 'theme')
   if (!existsSync(source) || !existsSync(target)) return
-  for (const file of await readdir(source)) {
-    if (!file.endsWith('.css') || existsSync(join(target, file))) continue
-    await copyFile(join(source, file), join(target, file))
-    console.log(`added custom theme ${file} to ${target}`)
+  for (const entry of await readdir(source, { withFileTypes: true })) {
+    const isTheme = entry.isDirectory() || entry.name.endsWith('.css')
+    if (!isTheme || existsSync(join(target, entry.name))) continue
+    await cp(join(source, entry.name), join(target, entry.name), { recursive: true })
+    console.log(`added custom theme ${entry.name} to ${target}`)
   }
 }
 
