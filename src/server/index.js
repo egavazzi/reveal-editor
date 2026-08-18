@@ -1,5 +1,5 @@
 import express from 'express'
-import { cp, readdir, readFile, stat } from 'node:fs/promises'
+import { cp, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { loadDeck, saveDeck } from './deck.js'
@@ -7,20 +7,30 @@ import { assetsRouter } from './assets.js'
 import { watchDeck } from './watch.js'
 
 /**
- * Decks vendored before a custom theme existed (templates/themes/) lack its
- * CSS (and font assets) in their reveal/ copy. Add missing theme files so
- * those decks can also select the theme; never overwrite files already in
- * the deck.
+ * Keep the deck's vendored copy of the repo's custom themes
+ * (templates/themes/) current: add missing files and refresh outdated ones.
+ * The repo is authoritative for these — a stale copy in a deck causes
+ * subtle mixed-version rendering (old theme CSS with new layouts). Decks
+ * that don't use a custom theme are unaffected; stock reveal themes are
+ * never touched.
  */
 async function syncCustomThemes(deckDir, repoRoot) {
   const source = join(repoRoot, 'templates', 'themes')
   const target = join(deckDir, 'reveal', 'dist', 'theme')
   if (!existsSync(source) || !existsSync(target)) return
   for (const entry of await readdir(source, { withFileTypes: true })) {
-    const isTheme = entry.isDirectory() || entry.name.endsWith('.css')
-    if (!isTheme || existsSync(join(target, entry.name))) continue
-    await cp(join(source, entry.name), join(target, entry.name), { recursive: true })
-    console.log(`added custom theme ${entry.name} to ${target}`)
+    const from = join(source, entry.name)
+    const to = join(target, entry.name)
+    if (entry.isDirectory()) {
+      // font/asset dirs: idempotent recursive copy (upstream-versioned files)
+      await cp(from, to, { recursive: true, force: true })
+    } else if (entry.name.endsWith('.css')) {
+      const fresh = await readFile(from, 'utf8')
+      const current = existsSync(to) ? await readFile(to, 'utf8') : null
+      if (current === fresh) continue
+      await writeFile(to, fresh, 'utf8')
+      console.log(`${current === null ? 'added' : 'updated'} custom theme ${entry.name} in ${target}`)
+    }
   }
 }
 
