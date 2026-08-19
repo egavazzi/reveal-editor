@@ -15,7 +15,8 @@ import {
 } from './editors/mathcode.js'
 import {
   addSlide, addVerticalSlide, deleteCurrentSlide, duplicateCurrentSlide,
-  demoteHorizontalSlide, moveCurrentSlide, promoteVerticalSlide, setSlideBackground
+  demoteHorizontalSlide, moveCurrentSlide, promoteVerticalSlide, setSlideBackground,
+  toggleSlideHidden
 } from './model/slides.js'
 import { arrangeSlides } from './model/arrange.js'
 import { rescaleSlides } from './model/rescale.js'
@@ -600,6 +601,25 @@ export function slideArrange(matrix) {
   const entry = bridge.getSlideEntries().find((e) => e.section === current)
   bridge.goTo(entry?.h ?? 0, entry?.v ?? 0)
   refreshSlideState()
+  return true
+}
+
+/**
+ * Toggle whether a slide is skipped when presenting (reveal's
+ * data-visibility="hidden"). Defaults to the current slide.
+ */
+export function slideToggleHidden(h = editor.slideIndex.h, v = editor.slideIndex.v ?? 0) {
+  snapshotDeck()
+  const hidden = toggleSlideHidden(runtime.bridge, h, v)
+  if (hidden === null) return false
+  // Hidden slides survive an editor reload only because the settings runtime
+  // script forces showHiddenSlides before reveal initializes — make sure the
+  // deck carries that script even if settings were never touched.
+  writeSettings(runtime.bridge.slidesEl, editor.settings)
+  editor.statusMessage = hidden
+    ? 'Slide hidden — it will be skipped when presenting. Click the eye icon to show it again.'
+    : 'Slide will be shown when presenting.'
+  markDirty()
   return true
 }
 

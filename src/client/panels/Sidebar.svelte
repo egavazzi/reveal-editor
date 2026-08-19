@@ -4,7 +4,7 @@
   import {
     slideSummaries, slideAdd, slideAddVertical, slideApplyLayout, slideDuplicate,
     slideAddTemplate, slideDelete, slideDemote, slideGoTo, slideMove, slidePromote,
-    slideReorder, saveCurrentSlideTemplate
+    slideReorder, slideToggleHidden, saveCurrentSlideTemplate
   } from '../lib/actions.js'
   import { getCanvasSize } from '../lib/overlay/editmode.js'
   import { isSlideEmpty, slideLayoutsFor } from '../lib/model/layouts.js'
@@ -72,19 +72,26 @@
       <div
         class="thumb-wrap"
         class:vertical={item.vertical}
+        class:hidden={item.hidden}
         class:current={item.h === editor.slideIndex.h && item.v === (editor.slideIndex.v ?? 0)}
         onclick={() => slideGoTo(item.h, item.v)}
         onkeydown={(e) => e.key === 'Enter' && slideGoTo(item.h, item.v)}
         role="button"
         tabindex="0"
       >
-        <span class="num">{item.h + 1}{item.vertical ? `.${item.v + 1}` : ''}</span>
+        <span class="num" title={item.hidden ? 'Not shown when presenting' : null}>{item.num || '–'}</span>
         <div class="thumb-holder">
           <SlideThumb
             summary={item}
             current={item.h === editor.slideIndex.h && item.v === (editor.slideIndex.v ?? 0)}
           />
         </div>
+        <button
+          class="hide-toggle"
+          class:on={item.hidden}
+          title={item.hidden ? 'Hidden when presenting — click to show' : 'Hide this slide when presenting'}
+          onclick={(e) => { e.stopPropagation(); slideToggleHidden(item.h, item.v) }}
+        >{@html icon(item.hidden ? 'eyeOff' : 'eye')}</button>
       </div>
     {/each}
   </div>
@@ -153,6 +160,32 @@
     padding-top: 2px;
   }
   .thumb-wrap.vertical { margin-left: 14px; }
+  .thumb-wrap.hidden .thumb-holder { opacity: 0.4; }
+  .hide-toggle {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    background: rgba(18, 19, 23, 0.75);
+    color: #d6d7dc;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    opacity: 0;
+  }
+  .thumb-wrap:hover .hide-toggle,
+  .thumb-wrap:focus-within .hide-toggle,
+  .hide-toggle.on { opacity: 1; }
+  .hide-toggle:hover { color: #fff; background: rgba(18, 19, 23, 0.9); }
+  .hide-toggle :global(svg) {
+    width: 12px;
+    height: 12px;
+  }
   .actions {
     display: grid;
     grid-template-columns: repeat(4, 1fr);

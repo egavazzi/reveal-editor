@@ -142,6 +142,29 @@ ${typography}
 // This script makes settings work in decks not originally created from our
 // template too. It executes only when the saved presentation is opened.
 const RUNTIME_SCRIPT = `(() => {
+  if (location.search.includes('editmode=1')) {
+    // The editor must keep slides with data-visibility="hidden" in the DOM
+    // (reveal deletes them during initialize otherwise, and the next save
+    // would drop them from the file). This script is parsed before the
+    // deck's reveal.js script tag, so intercept the global assignment and
+    // force showHiddenSlides into whatever config the deck initializes with.
+    const wrapInit = (api) => {
+      if (api && typeof api.initialize === 'function' && !api.__reEditInit) {
+        api.__reEditInit = true;
+        const init = api.initialize.bind(api);
+        api.initialize = (config) => init(Object.assign({}, config, { showHiddenSlides: true }));
+      }
+      return api;
+    };
+    try {
+      let current = wrapInit(window.Reveal);
+      Object.defineProperty(window, 'Reveal', {
+        configurable: true,
+        get: () => current,
+        set: (value) => { current = wrapInit(value); }
+      });
+    } catch {}
+  }
   const apply = () => {
     const node = document.querySelector('.reveal .slides template[data-re-settings]');
     if (!node || !window.Reveal) return;

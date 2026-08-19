@@ -18,6 +18,8 @@ describe('deck settings', () => {
     expect(slides.querySelector('style[data-re-settings-style]').textContent)
       .toContain('.reveal .controls { display: none !important; }')
     expect(slides.querySelector('script[data-re-settings-runtime]').textContent).toContain('Reveal.configure')
+    // edit mode must keep data-visibility="hidden" slides in the DOM
+    expect(slides.querySelector('script[data-re-settings-runtime]').textContent).toContain('showHiddenSlides')
     expect(() => new Function(slides.querySelector('script[data-re-settings-runtime]').textContent)).not.toThrow()
 
     const saved = cleanSlides(slides)
