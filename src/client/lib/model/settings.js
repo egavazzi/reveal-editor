@@ -5,7 +5,9 @@ import { editor, runtime } from '../../stores/editor.svelte.js'
 
 export const REVEAL_THEMES = Object.freeze([
   'black', 'white', 'league', 'beige', 'sky', 'night', 'serif', 'simple',
-  'solarized', 'moon', 'dracula', 'blood', 'black-contrast', 'white-contrast'
+  'solarized', 'moon', 'dracula', 'blood', 'black-contrast', 'white-contrast',
+  // custom themes vendored from templates/themes/
+  'uit'
 ])
 
 export const TYPOGRAPHY_PRESETS = Object.freeze([
@@ -45,7 +47,10 @@ export const DEFAULT_SETTINGS = Object.freeze({
   clickZoom: false,
   mouseWheel: false,
   loop: false,
-  autoSlide: 0
+  autoSlide: 0,
+  // PowerPoint-style letterboxing: slide backgrounds stay inside the slide
+  // area and the surroundings are black. Off = reveal's default full-bleed.
+  letterbox: false
 })
 
 const TEMPLATE_SELECTOR = 'template[data-re-settings]'
@@ -189,6 +194,36 @@ const RUNTIME_SCRIPT = `(() => {
           dot.style.left = e.clientX + 'px';
           dot.style.top = e.clientY + 'px';
         });
+      }
+      if (s.letterbox && !location.search.includes('print-pdf')) {
+        // PowerPoint-style: pin the background layer to the slide area and
+        // paint the surroundings black instead of bleeding the slide's
+        // background color across the whole window.
+        const reveal = document.querySelector('.reveal');
+        const backgrounds = document.querySelector('.reveal .backgrounds');
+        const slides = document.querySelector('.reveal .slides');
+        if (reveal && backgrounds && slides) {
+          for (const el of [document.documentElement, document.body, reveal]) el.style.background = '#000';
+          const viewport = document.querySelector('.reveal-viewport');
+          if (viewport) viewport.style.background = '#000';
+          // slides without their own background color must show the theme
+          // background, not the black letterbox behind them
+          backgrounds.style.background = 'var(--r-background-color, #fff)';
+          const fit = () => {
+            const rr = reveal.getBoundingClientRect();
+            const sr = slides.getBoundingClientRect();
+            backgrounds.style.position = 'absolute';
+            backgrounds.style.left = (sr.left - rr.left) + 'px';
+            backgrounds.style.top = (sr.top - rr.top) + 'px';
+            backgrounds.style.width = sr.width + 'px';
+            backgrounds.style.height = sr.height + 'px';
+          };
+          const refit = () => setTimeout(fit, 0);
+          Reveal.on('resize', refit);
+          Reveal.on('ready', refit);
+          addEventListener('resize', refit);
+          refit();
+        }
       }
       if (s.clickZoom) {
         let zoomed = false;

@@ -6,7 +6,7 @@ import {
   insertTextBox, insertShape, insertImageBlob, imageFromClipboard,
   insertMathBox, insertCodeBlock, insertVideoBlob, insertHtmlBlock
 } from './model/insert.js'
-import { startTextEdit, formatText, isEditingText, activeElement } from './editors/text.js'
+import { startTextEdit, formatText, setBlockStyle, isEditingText, activeElement } from './editors/text.js'
 import { ensurePositioned } from './model/position.js'
 import { arrangeElements } from './model/alignment.js'
 import { applyLayout, isSlideEmpty } from './model/layouts.js'
@@ -70,6 +70,31 @@ export function markDirty() {
 }
 
 export function updateDeckSettings(patch) {
+  // Selecting the UiT theme also adopts the template's native format —
+  // 16:9 canvas (only when still on the scaffold default, rescaling the
+  // content along) and no presentation margin, so full-bleed compositions
+  // like the footer band reach the window edges. One undo step.
+  if (patch.theme === 'uit' && editor.settings.theme !== 'uit') {
+    snapshotDeck()
+    const from = {
+      width: Number(editor.settings.width) || 960,
+      height: Number(editor.settings.height) || 700
+    }
+    const adoptSize = from.width === 960 && from.height === 700
+    if (adoptSize) rescaleSlides(runtime.bridge.slidesEl, from, { width: 1280, height: 720 })
+    updateSettingsModel({
+      ...patch,
+      ...(adoptSize ? { width: 1280, height: 720 } : {}),
+      margin: 0,
+      letterbox: true
+    })
+    runtime.bridge.sync()
+    editor.statusMessage = adoptSize
+      ? 'UiT theme: adopted the template format — 1280×720 canvas, no margin, PowerPoint-style letterboxing (all adjustable in Deck settings).'
+      : 'UiT theme: presentation margin set to 0 and PowerPoint-style letterboxing enabled (adjustable in Deck settings).'
+    markDirty()
+    return
+  }
   snapshotDeck()
   updateSettingsModel(patch)
   markDirty()
@@ -122,7 +147,10 @@ export async function addImageBlob(blob, name) {
       for (const prop of ['left', 'top', 'width', 'height']) {
         if (placeholder.style[prop]) el.style[prop] = placeholder.style[prop]
       }
-      el.style.objectFit = 'contain'
+      el.style.objectFit = placeholder.getAttribute('data-re-fit') || 'contain'
+      // take over the placeholder's stacking position too — frame images
+      // must stay behind covering elements (e.g. the UiT field polygon)
+      placeholder.before(el)
       placeholder.remove()
     }
     runtime.overlay.setSelection([el])
@@ -364,6 +392,11 @@ export function applyFormat(command, value) {
   markDirty()
 }
 
+export function applyBlockStyle(tag) {
+  setBlockStyle(tag)
+  markDirty()
+}
+
 /** Font size applies to whole boxes (like slides.com), not text runs. */
 export function setFontSize(px) {
   if (!(Number.isFinite(px) && px > 0)) return
@@ -445,6 +478,9 @@ export function slideAdd(layout = 'blank') {
   snapshotDeck()
   const section = addSlide(runtime.bridge, editor.slideIndex.h)
   applyLayout(section, layout, editor.settings)
+  // re-sync: the layout may have set slide attributes (background color)
+  // that reveal mirrors into its background layer
+  runtime.bridge.sync()
   refreshSlideState()
 }
 
@@ -484,6 +520,9 @@ export function slideAddVertical(layout = 'blank') {
   snapshotDeck()
   const section = addVerticalSlide(runtime.bridge, editor.slideIndex.h, editor.slideIndex.v ?? 0)
   applyLayout(section, layout, editor.settings)
+  // re-sync: the layout may have set slide attributes (background color)
+  // that reveal mirrors into its background layer
+  runtime.bridge.sync()
   refreshSlideState()
 }
 

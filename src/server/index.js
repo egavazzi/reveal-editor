@@ -1,15 +1,44 @@
 import express from 'express'
-import { readFile, stat } from 'node:fs/promises'
+import { cp, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { loadDeck, saveDeck } from './deck.js'
 import { assetsRouter } from './assets.js'
 import { watchDeck } from './watch.js'
 
+/**
+ * Keep the deck's vendored copy of the repo's custom themes
+ * (templates/themes/) current: add missing files and refresh outdated ones.
+ * The repo is authoritative for these — a stale copy in a deck causes
+ * subtle mixed-version rendering (old theme CSS with new layouts). Decks
+ * that don't use a custom theme are unaffected; stock reveal themes are
+ * never touched.
+ */
+async function syncCustomThemes(deckDir, repoRoot) {
+  const source = join(repoRoot, 'templates', 'themes')
+  const target = join(deckDir, 'reveal', 'dist', 'theme')
+  if (!existsSync(source) || !existsSync(target)) return
+  for (const entry of await readdir(source, { withFileTypes: true })) {
+    const from = join(source, entry.name)
+    const to = join(target, entry.name)
+    if (entry.isDirectory()) {
+      // font/asset dirs: idempotent recursive copy (upstream-versioned files)
+      await cp(from, to, { recursive: true, force: true })
+    } else if (entry.name.endsWith('.css')) {
+      const fresh = await readFile(from, 'utf8')
+      const current = existsSync(to) ? await readFile(to, 'utf8') : null
+      if (current === fresh) continue
+      await writeFile(to, fresh, 'utf8')
+      console.log(`${current === null ? 'added' : 'updated'} custom theme ${entry.name} in ${target}`)
+    }
+  }
+}
+
 export async function createServer({ deckPath, port = 3737, dev = false, repoRoot }) {
   const app = express()
   const deckDir = dirname(deckPath)
   const deckFile = basename(deckPath)
+  await syncCustomThemes(deckDir, repoRoot).catch(() => {})
 
   // --- Host header validation (defense against DNS rebinding) ---
   const ALLOWED_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]'])

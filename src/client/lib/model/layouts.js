@@ -1,3 +1,5 @@
+import { UIT_LAYOUTS, buildUitLayout } from './theme-uit.js'
+
 export const SLIDE_LAYOUTS = Object.freeze([
   { id: 'blank', label: 'Blank' },
   { id: 'title', label: 'Title slide' },
@@ -5,6 +7,14 @@ export const SLIDE_LAYOUTS = Object.freeze([
   { id: 'two-column', label: 'Two columns' },
   { id: 'image-focus', label: 'Image focus' }
 ])
+
+const THEME_LAYOUTS = { uit: UIT_LAYOUTS }
+
+/** Layouts offered for a deck: the built-in set plus the theme's own. */
+export function slideLayoutsFor(settings) {
+  const themed = THEME_LAYOUTS[settings?.theme]
+  return themed ? [...SLIDE_LAYOUTS, ...themed] : SLIDE_LAYOUTS
+}
 
 function positioned(doc, tag, { text, className = '', left, top, width, height, styles = {} }) {
   const el = doc.createElement(tag)
@@ -22,8 +32,9 @@ function positioned(doc, tag, { text, className = '', left, top, width, height, 
 }
 
 /** Populate an empty section with editor-native, readable HTML elements. */
-export function applyLayout(section, layout, { width = 960, height = 700 } = {}) {
-  if (!section || !SLIDE_LAYOUTS.some((item) => item.id === layout)) return []
+export function applyLayout(section, layout, settings = {}) {
+  const { width = 960, height = 700 } = settings
+  if (!section || !slideLayoutsFor(settings).some((item) => item.id === layout)) return []
   const doc = section.ownerDocument
   const sx = width / 960
   const sy = height / 700
@@ -34,6 +45,13 @@ export function applyLayout(section, layout, { width = 960, height = 700 } = {})
     width: Math.round(options.width * sx),
     height: options.height ? Math.round(options.height * sy) : undefined
   })
+
+  if (layout.startsWith('uit-')) {
+    const elements = buildUitLayout(section, layout, box, { sx, sy })
+    section.append(...elements)
+    return elements
+  }
+
   const elements = []
 
   if (layout === 'title') {

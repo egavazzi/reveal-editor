@@ -70,32 +70,33 @@ export function applyStageScale(bridge) {
   const slides = bridge.slidesEl
   const stageW = bridge.win.innerWidth
   const stageH = bridge.win.innerHeight
-  const scale = Math.min(stageW / (width + 40), stageH / (height + 40))
+  // Snap the scaled canvas to whole pixels: a percentage-centered transform
+  // can land the layer on a half-pixel boundary, and the compositor's
+  // resampling then reads as ghosting/halos on fine glyphs (SVG ring text).
+  let scale = Math.min(stageW / (width + 40), stageH / (height + 40))
+  scale = Math.max(1, Math.round(width * scale)) / width
+  const left = Math.round((stageW - width * scale) / 2)
+  const top = Math.round((stageH - height * scale) / 2)
 
   // Reveal's own layout may have left inline zoom/size styles; we own the
   // canvas now. These inline styles live on .slides itself, which is never
   // part of the saved innerHTML.
+  const place = (el) => {
+    el.style.width = `${width}px`
+    el.style.height = `${height}px`
+    el.style.position = 'absolute'
+    el.style.left = '0'
+    el.style.top = '0'
+    el.style.transform = `translate(${left}px, ${top}px) scale(${scale})`
+    el.style.transformOrigin = '0 0'
+  }
   slides.style.zoom = ''
-  slides.style.width = `${width}px`
-  slides.style.height = `${height}px`
-  slides.style.position = 'absolute'
-  slides.style.left = '50%'
-  slides.style.top = '50%'
-  slides.style.transform = `translate(-50%, -50%) scale(${scale})`
-  slides.style.transformOrigin = 'center'
+  place(slides)
 
   // Pin reveal's background layer (a sibling of .slides) to the same
   // canvas geometry so slide backgrounds don't flood the whole stage.
   const backgrounds = bridge.doc.querySelector('.reveal .backgrounds')
-  if (backgrounds) {
-    backgrounds.style.width = `${width}px`
-    backgrounds.style.height = `${height}px`
-    backgrounds.style.position = 'absolute'
-    backgrounds.style.left = '50%'
-    backgrounds.style.top = '50%'
-    backgrounds.style.transform = `translate(-50%, -50%) scale(${scale})`
-    backgrounds.style.transformOrigin = 'center'
-  }
+  if (backgrounds) place(backgrounds)
 }
 
 function injectEditStyles(doc) {

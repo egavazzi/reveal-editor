@@ -317,6 +317,8 @@
       <label class="check"><input type="checkbox" bind:checked={scaleContent} /> Scale slide content to the new size</label>
       <p class="hint">When enabled, changing the canvas size proportionally moves and resizes everything on every slide.</p>
       <label>Presentation margin (%)<input type="number" min="0" max="30" value={editor.settings.margin} onchange={(e) => updateSettings({ margin: +e.currentTarget.value })} /></label>
+      <label class="check"><input type="checkbox" checked={editor.settings.letterbox} onchange={(e) => updateSettings({ letterbox: e.currentTarget.checked })} /> Letterbox slides (PowerPoint-style)</label>
+      <p class="hint">On: slide backgrounds stay inside the slide area with black surroundings, like PowerPoint. Off: reveal.js extends each slide's background color to fill the window.</p>
 
       <h3>Grid</h3>
       <label class="check"><input type="checkbox" checked={editor.settings.showGrid} onchange={(e) => updateSettings({ showGrid: e.currentTarget.checked })} /> Show grid</label>

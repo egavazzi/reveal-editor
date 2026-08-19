@@ -14,7 +14,11 @@ import { getCanvasSize } from './editmode.js'
  */
 export function resolveEditable(target, section) {
   if (!section.contains(target) || target === section) return null
-  if (target.closest('aside.notes, .re-transient')) return null
+  if (target.closest('aside.notes')) return null
+  // transient editor hints are not content — except image placeholders,
+  // which must be selectable so an image can be dropped into their frame
+  const transient = target.closest('.re-transient')
+  if (transient && !transient.classList.contains('re-image-placeholder')) return null
   const reEl = target.closest('.re-el')
   if (reEl && section.contains(reEl)) return reEl
   let el = target

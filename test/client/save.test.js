@@ -56,4 +56,33 @@ describe('saveDeck', () => {
     expect(editor.dirty).toBe(false)
     expect(editor.mtimeMs).toBe(3)
   })
+
+  it('offers to overwrite when the deck changed on disk (409)', async () => {
+    putDeck
+      .mockRejectedValueOnce(Object.assign(new Error('deck changed on disk'), { status: 409 }))
+      .mockResolvedValueOnce({ mtimeMs: 9 })
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    await saveDeck()
+
+    expect(putDeck).toHaveBeenCalledTimes(2)
+    // the forced save carries no mtime precondition
+    expect(putDeck.mock.calls[1][1]).toBe(null)
+    expect(editor.dirty).toBe(false)
+    expect(editor.mtimeMs).toBe(9)
+    expect(editor.statusMessage).toContain('overwrote disk version')
+    confirm.mockRestore()
+  })
+
+  it('keeps edits unsaved when the user declines to overwrite', async () => {
+    putDeck.mockRejectedValueOnce(Object.assign(new Error('deck changed on disk'), { status: 409 }))
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+
+    await saveDeck()
+
+    expect(putDeck).toHaveBeenCalledTimes(1)
+    expect(editor.dirty).toBe(true)
+    expect(editor.statusMessage).toContain('Not saved')
+    confirm.mockRestore()
+  })
 })
