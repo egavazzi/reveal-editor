@@ -10,7 +10,7 @@
   import { createOverlay } from './lib/overlay/overlay.js'
   import {
     editElement, handlePaste, snapshotSlide, undoAction, redoAction,
-    deleteSelection, copySelection, pasteElements, duplicateSelection,
+    deleteSelection, duplicateSelection, handleCopy,
     nudgeSelection, clearSelection, markDirty, handleFileDrop
   } from './lib/actions.js'
   import { isEditingText, stopTextEdit } from './lib/editors/text.js'
@@ -59,6 +59,7 @@
       }
     })()
     window.addEventListener('keydown', onKeydown)
+    window.addEventListener('copy', handleCopy)
     window.addEventListener('paste', handlePaste)
     window.addEventListener('beforeunload', onBeforeUnload)
     const unsubscribe = subscribeEvents((ev) => {
@@ -72,6 +73,7 @@
     })
     return () => {
       window.removeEventListener('keydown', onKeydown)
+      window.removeEventListener('copy', handleCopy)
       window.removeEventListener('paste', handlePaste)
       window.removeEventListener('beforeunload', onBeforeUnload)
       unsubscribe()
@@ -123,6 +125,7 @@
       })
       // Shortcuts and paste must also work when focus is inside the iframe.
       bridge.doc.addEventListener('keydown', onKeydown)
+      bridge.doc.addEventListener('copy', handleCopy)
       bridge.doc.addEventListener('paste', handlePaste)
       bridge.doc.addEventListener('dragover', (e) => {
         if ([...(e.dataTransfer?.items ?? [])].some((item) => item.kind === 'file')) e.preventDefault()
@@ -173,12 +176,6 @@
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault()
       deleteSelection()
-    } else if (mod && e.key === 'c') {
-      copySelection()
-    } else if (mod && e.key === 'v') {
-      // element paste; if the editor clipboard is empty, the paste event
-      // may still deliver an image
-      if (pasteElements()) e.preventDefault()
     } else if (mod && e.key === 'd') {
       e.preventDefault()
       duplicateSelection()
