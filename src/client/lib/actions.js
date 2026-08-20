@@ -443,6 +443,39 @@ export function setFontSize(px) {
   markDirty()
 }
 
+/**
+ * Vertical alignment of text inside its box, applied per box like font size.
+ * Uses align-content, which works on block containers without switching the
+ * box to flex (flex would stop sibling paragraph margins from collapsing).
+ */
+const VALIGN_STYLES = { top: '', middle: 'center', bottom: 'end' }
+
+export function setTextVAlign(align) {
+  if (!(align in VALIGN_STYLES)) return
+  const targets = (isEditingText() ? [activeElement()] : runtime.overlay.getSelection())
+    .filter((el) => el && !el.matches('img, svg, [data-shape]'))
+  if (!targets.length) return
+  if (!isEditingText()) snapshotSlide()
+  for (const el of targets) {
+    // alignment only shows inside a fixed height; freeze the rendered height
+    // for width-only boxes so the choice takes effect immediately
+    if (align !== 'top' && !el.style.height && el.offsetHeight) {
+      el.style.height = `${el.offsetHeight}px`
+    }
+    if (align === 'top') el.style.removeProperty('align-content')
+    else el.style.alignContent = VALIGN_STYLES[align]
+  }
+  runtime.overlay.refresh()
+  markDirty()
+}
+
+/** Vertical alignment of the first selected element ('top' when unset). */
+export function currentTextVAlign() {
+  const el = isEditingText() ? activeElement() : (runtime.overlay?.getSelection() ?? [])[0]
+  const value = el?.style.alignContent
+  return value === 'center' ? 'middle' : value === 'end' ? 'bottom' : 'top'
+}
+
 /** Effective font size (canvas px) of the first selected element. */
 export function currentFontSize() {
   const el = isEditingText() ? activeElement() : (runtime.overlay?.getSelection() ?? [])[0]

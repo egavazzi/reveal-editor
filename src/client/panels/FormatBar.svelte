@@ -5,7 +5,7 @@
     toggleFragment, setFragmentIndex, bringToFront, sendToBack,
     currentSlideTransition, setCurrentSlideTransition,
     slideBackground, selectionInfo, arrangeSelection, groupSelection, ungroupSelection,
-    currentFontSize, applyBlockStyle
+    currentFontSize, applyBlockStyle, setTextVAlign, currentTextVAlign
   } from '../lib/actions.js'
   import { queryFormatState, saveTextSelection, applyLink } from '../lib/editors/text.js'
   import { icon } from '../lib/icons.js'
@@ -93,6 +93,14 @@
     void editor.docVersion
     if (editor.textEditing) return fmt?.fontSize ?? null
     return currentFontSize()
+  })
+
+  const vAlign = $derived.by(() => {
+    void editor.selectionCount
+    void editor.selectionVersion
+    void editor.docVersion
+    void editor.textEditing
+    return currentTextVAlign()
   })
 
   function commitLink() {
@@ -186,6 +194,10 @@
         color
         <input type="color" onmousedown={stopFocus} onchange={(e) => setTextColor(e.currentTarget.value)} />
       </label>
+      <span class="sep"></span>
+      <button class:active={vAlign === 'top'} title="Align text to top of box" onclick={() => setTextVAlign('top')}>{@html icon('vAlignTop')}</button>
+      <button class:active={vAlign === 'middle'} title="Center text vertically in box" onclick={() => setTextVAlign('middle')}>{@html icon('vAlignMiddle')}</button>
+      <button class:active={vAlign === 'bottom'} title="Align text to bottom of box" onclick={() => setTextVAlign('bottom')}>{@html icon('vAlignBottom')}</button>
     {/if}
 
     {#if editor.selectionCount > 0 && !editor.textEditing}
