@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   DEFAULT_SETTINGS, applyTheme, initializeSettings, readSettings,
   settingsFromRevealConfig, themeFromDocument, writeSettings
@@ -7,6 +7,8 @@ import {
 import { cleanSlides } from '../../src/client/lib/model/clean.js'
 
 describe('deck settings', () => {
+  afterEach(() => { vi.useRealTimers() })
+
   it('round-trips readable settings and presentation support nodes', () => {
     document.body.innerHTML = '<div class="slides"><section><p>Hello</p></section></div>'
     const slides = document.querySelector('.slides')
@@ -144,5 +146,55 @@ describe('deck settings', () => {
     expect(css).toContain('--r-main-font: Georgia, serif')
     expect(css).toContain('--r-heading-font: Georgia, serif')
     expect(readSettings(slides).typography).toBe('serif')
+  })
+
+  // reveal's overview mode (O / Esc) moves .backgrounds inside the scaled
+  // .slides element, so letterbox geometry measured against .reveal must not
+  // follow it there — it used to stretch every slide background past its cell.
+  it('keeps letterbox pinning out of overview mode', () => {
+    vi.useFakeTimers()
+    document.head.innerHTML = ''
+    document.body.innerHTML =
+      '<div class="reveal"><div class="slides"></div><div class="backgrounds"></div></div>'
+    const slidesEl = document.querySelector('.slides')
+    writeSettings(slidesEl, { ...DEFAULT_SETTINGS, letterbox: true })
+
+    const reveal = document.querySelector('.reveal')
+    const backgrounds = document.querySelector('.backgrounds')
+    reveal.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1600, height: 800 })
+    slidesEl.getBoundingClientRect = () => ({ left: 100, top: 0, width: 1400, height: 800 })
+    const handlers = {}
+    window.Reveal = {
+      configure() {},
+      layout() {},
+      on(type, fn) { handlers[type] = fn }
+    }
+    new Function(slidesEl.querySelector('script[data-re-settings-runtime]').textContent)()
+    window.dispatchEvent(new Event('load'))
+    vi.runAllTimers()
+
+    const letterboxWidth = () => reveal.style.getPropertyValue('--re-letterbox-width')
+    // outside overview the layer is pinned to the slide area, and the pinning
+    // is CSS the overview class can opt out of rather than inline geometry
+    expect(letterboxWidth()).toBe('1400px')
+    expect(backgrounds.getAttribute('style')).toBeNull()
+    const css = [...document.head.querySelectorAll('style')].map((s) => s.textContent).join('\n')
+    expect(css).toContain('.reveal:not(.overview) .backgrounds')
+    expect(css).toContain('.reveal.overview .backgrounds .slide-background')
+
+    // measurements taken while the overview grid is open describe the shrunken
+    // grid, so they must not overwrite the geometry used on the way out
+    reveal.classList.add('overview')
+    slidesEl.getBoundingClientRect = () => ({ left: 655, top: 326, width: 289, height: 163 })
+    window.dispatchEvent(new Event('resize'))
+    vi.runAllTimers()
+    expect(letterboxWidth()).toBe('1400px')
+
+    // a window resize during overview is picked up again once it closes
+    slidesEl.getBoundingClientRect = () => ({ left: 0, top: 90, width: 1100, height: 620 })
+    reveal.classList.remove('overview')
+    handlers.overviewhidden()
+    vi.runAllTimers()
+    expect(letterboxWidth()).toBe('1100px')
   })
 })
