@@ -39,7 +39,20 @@ export function enterEditMode(bridge) {
   relayout()
   bridge.win.addEventListener('resize', relayout)
   watchMediaKey(bridge)
+  blockLinkNavigation(bridge)
   return { relayout, getScale: () => currentScale(bridge) }
+}
+
+// A link followed inside the editor replaces the very document the editor
+// is attached to, and the iframe has no browser chrome to come back with.
+// Clicking a link here selects and edits it like any other content; links
+// are for the audience, so they stay live in Present mode and the exported
+// deck. Capture the click so an <a> around an image or a shape is caught
+// too, and cover SVG anchors, whose href is an xlink attribute.
+function blockLinkNavigation(bridge) {
+  bridge.doc.addEventListener('click', (e) => {
+    if (e.target.closest?.('a')) e.preventDefault()
+  }, true)
 }
 
 // While editing, videos are pointer-inert so they select/move like any

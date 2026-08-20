@@ -229,21 +229,44 @@ const RUNTIME_SCRIPT = `(() => {
           for (const el of [document.documentElement, document.body, reveal]) el.style.background = '#000';
           const viewport = document.querySelector('.reveal-viewport');
           if (viewport) viewport.style.background = '#000';
-          // slides without their own background color must show the theme
-          // background, not the black letterbox behind them
-          backgrounds.style.background = 'var(--r-background-color, #fff)';
+          // The pinning lives in a stylesheet driven by custom properties
+          // rather than inline styles: overview mode (O / Esc) moves the
+          // backgrounds layer inside the scaled .slides element, where those
+          // viewport pixel offsets would blow the layer up past its slide.
+          // There the layer's own 100%/100% default is already correct, so
+          // the rule opts out and the theme background moves to the
+          // individual slide backgrounds, which each own one overview cell.
+          const style = document.createElement('style');
+          style.textContent =
+            '.reveal:not(.overview) .backgrounds {' +
+            'position: absolute;' +
+            'left: var(--re-letterbox-left, 0);' +
+            'top: var(--re-letterbox-top, 0);' +
+            'width: var(--re-letterbox-width, 100%);' +
+            'height: var(--re-letterbox-height, 100%);' +
+            // slides without their own background color must show the theme
+            // background, not the black letterbox behind them
+            'background: var(--r-background-color, #fff); }' +
+            '.reveal.overview .backgrounds .slide-background {' +
+            'background-color: var(--r-background-color, #fff); }';
+          document.head.appendChild(style);
           const fit = () => {
+            // in overview the measurements describe the shrunken grid, and
+            // the rule above ignores them anyway — keep the last good ones
+            if (reveal.classList.contains('overview')) return;
             const rr = reveal.getBoundingClientRect();
             const sr = slides.getBoundingClientRect();
-            backgrounds.style.position = 'absolute';
-            backgrounds.style.left = (sr.left - rr.left) + 'px';
-            backgrounds.style.top = (sr.top - rr.top) + 'px';
-            backgrounds.style.width = sr.width + 'px';
-            backgrounds.style.height = sr.height + 'px';
+            reveal.style.setProperty('--re-letterbox-left', (sr.left - rr.left) + 'px');
+            reveal.style.setProperty('--re-letterbox-top', (sr.top - rr.top) + 'px');
+            reveal.style.setProperty('--re-letterbox-width', sr.width + 'px');
+            reveal.style.setProperty('--re-letterbox-height', sr.height + 'px');
           };
           const refit = () => setTimeout(fit, 0);
           Reveal.on('resize', refit);
           Reveal.on('ready', refit);
+          // leaving overview does not always change the scale, so 'resize'
+          // alone can miss a window resize that happened while it was open
+          Reveal.on('overviewhidden', refit);
           addEventListener('resize', refit);
           refit();
         }
