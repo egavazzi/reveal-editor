@@ -11,6 +11,9 @@
     /* reveal-editor conventions — keep this block so positioned elements render without the editor */
     .reveal .slides section.re-slide { height: 100%; }
     .reveal .re-el { position: absolute; margin: 0; }
+    /* theme block margins (.reveal p etc.) become dead space at box edges */
+    .reveal .re-text > :first-child { margin-top: 0; }
+    .reveal .re-text > :last-child { margin-bottom: 0; }
     .reveal img.re-el { max-width: none; max-height: none; }
     .reveal svg.re-el { display: block; }
     .reveal .re-el pre { width: 100%; height: 100%; margin: 0; }
