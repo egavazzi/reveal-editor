@@ -123,7 +123,9 @@ workflows and the one-way eject tradeoff.
   the toolbar
 - **Save**: Ctrl+S or the Save button; optional autosave toggle
 - **Undo/redo**: Ctrl+Z / Ctrl+Shift+Z, ~100 steps
-- **Copy/paste/duplicate elements**: Ctrl+C / Ctrl+V / Ctrl+D
+- **Copy/paste/duplicate elements**: Ctrl+C / Ctrl+V / Ctrl+D. Copied
+  elements go on the system clipboard, so pasting an image or text copied
+  in another application works too — text arrives as a new text box
 
 ## File conventions (what the editor writes)
 

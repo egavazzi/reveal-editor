@@ -10,10 +10,10 @@
   import { createOverlay } from './lib/overlay/overlay.js'
   import {
     editElement, handlePaste, snapshotSlide, undoAction, redoAction,
-    deleteSelection, copySelection, pasteElements, duplicateSelection,
+    deleteSelection, duplicateSelection, handleCopy,
     nudgeSelection, clearSelection, markDirty, handleFileDrop
   } from './lib/actions.js'
-  import { isEditingText } from './lib/editors/text.js'
+  import { isEditingText, stopTextEdit } from './lib/editors/text.js'
   import { subscribeEvents } from './lib/api.js'
   import { editor, runtime } from './stores/editor.svelte.js'
   import Toolbar from './panels/Toolbar.svelte'
@@ -25,6 +25,7 @@
   import { icon } from './lib/icons.js'
 
   let iframeSrc = $state('')
+  let strayNavigation = $state(false)
   let pristineHtml = ''
   // remember which panel to restore from the edge handle
   let lastPanel = 'layers'
@@ -58,6 +59,7 @@
       }
     })()
     window.addEventListener('keydown', onKeydown)
+    window.addEventListener('copy', handleCopy)
     window.addEventListener('paste', handlePaste)
     window.addEventListener('beforeunload', onBeforeUnload)
     const unsubscribe = subscribeEvents((ev) => {
@@ -71,6 +73,7 @@
     })
     return () => {
       window.removeEventListener('keydown', onKeydown)
+      window.removeEventListener('copy', handleCopy)
       window.removeEventListener('paste', handlePaste)
       window.removeEventListener('beforeunload', onBeforeUnload)
       unsubscribe()
@@ -122,14 +125,34 @@
       })
       // Shortcuts and paste must also work when focus is inside the iframe.
       bridge.doc.addEventListener('keydown', onKeydown)
+      bridge.doc.addEventListener('copy', handleCopy)
       bridge.doc.addEventListener('paste', handlePaste)
       bridge.doc.addEventListener('dragover', (e) => {
         if ([...(e.dataTransfer?.items ?? [])].some((item) => item.kind === 'file')) e.preventDefault()
       })
       bridge.doc.addEventListener('drop', handleFileDrop)
+      // Nothing in the editor ever reloads this iframe — Present and PDF open
+      // their own tab — so a second load means the deck navigated somewhere
+      // else and took the editing surface with it. There is no browser
+      // chrome inside the frame to come back with, so offer the way back.
+      node.addEventListener('load', () => (strayNavigation = true))
     } catch (err) {
       editor.error = `Could not attach to deck: ${err.message}`
     }
+  }
+
+  async function leaveStrayPage() {
+    // The slides the editor was attached to are still intact behind the
+    // bridge's document handle, even though the frame now shows another
+    // page — so unsaved edits can still be written out before reloading.
+    // A text edit interrupted by the navigation never got its commit, and
+    // that commit is what marks the deck dirty.
+    stopTextEdit()
+    if (editor.dirty) {
+      await saveDeck()
+      if (editor.dirty) return
+    }
+    window.location.reload()
   }
 
   function onKeydown(e) {
@@ -153,12 +176,6 @@
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault()
       deleteSelection()
-    } else if (mod && e.key === 'c') {
-      copySelection()
-    } else if (mod && e.key === 'v') {
-      // element paste; if the editor clipboard is empty, the paste event
-      // may still deliver an image
-      if (pasteElements()) e.preventDefault()
     } else if (mod && e.key === 'd') {
       e.preventDefault()
       duplicateSelection()
@@ -186,7 +203,14 @@
         <div class="error-banner">{editor.error}</div>
       {:else if iframeSrc}
         <iframe src={iframeSrc} title="presentation" use:onIframeSrcSet></iframe>
-        {#if emptySlide}
+        {#if strayNavigation}
+          <div class="stray-nav">
+            <p>This view left the deck and is showing another page.</p>
+            <button onclick={leaveStrayPage}>
+              {editor.dirty || editor.textEditing ? 'Save and go back to the deck' : 'Go back to the deck'}
+            </button>
+          </div>
+        {:else if emptySlide}
           <div class="empty-hint">Choose a layout in the lower-left corner, or add content from the toolbar.</div>
         {/if}
       {/if}
@@ -307,6 +331,40 @@
     border-radius: 8px;
     background: #fff;
     box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  }
+  .stray-nav {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    z-index: 3;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 20px 26px;
+    border: 1px solid #555762;
+    border-radius: 9px;
+    background: rgba(38, 39, 46, .97);
+    box-shadow: 0 6px 28px rgba(0, 0, 0, 0.5);
+    color: #c8cad1;
+    font-size: 13px;
+    text-align: center;
+  }
+  .stray-nav p {
+    margin: 0;
+  }
+  .stray-nav button {
+    padding: 7px 14px;
+    border: 1px solid transparent;
+    border-radius: var(--ui-radius);
+    background: var(--ui-primary);
+    color: #fff;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .stray-nav button:hover {
+    background: var(--ui-primary-hover);
   }
   .empty-hint {
     position: absolute;

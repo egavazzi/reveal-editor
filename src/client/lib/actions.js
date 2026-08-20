@@ -129,6 +129,22 @@ export function addText() {
   beginTextEdit(el, { selectAll: true })
 }
 
+/** Text copied in another application lands in a new text box. */
+export function addTextBox(text) {
+  snapshotSlide()
+  const bridge = runtime.bridge
+  const el = insertTextBox(bridge)
+  el.textContent = ''
+  for (const line of text.replace(/\r\n?/g, '\n').split('\n')) {
+    if (!line.trim()) continue
+    const p = bridge.doc.createElement('p')
+    p.textContent = line.trim()
+    el.appendChild(p)
+  }
+  runtime.overlay.setSelection([el])
+  markDirty()
+}
+
 export function addShape(kind) {
   snapshotSlide()
   const el = insertShape(runtime.bridge, kind)
@@ -215,7 +231,24 @@ export function handlePaste(event) {
   if (blob) {
     event.preventDefault()
     addImageBlob(blob, 'pasted.png')
+    return
   }
+  const data = event.clipboardData
+  const own = clipboardElements(data?.getData('text/html'))
+  if (own.length) {
+    event.preventDefault()
+    pasteElements(own)
+    return
+  }
+  const text = data?.getData('text/plain') ?? ''
+  if (text.trim()) {
+    event.preventDefault()
+    addTextBox(text)
+    return
+  }
+  // An empty clipboard usually means the browser withheld a copy made in this
+  // page; fall back to the elements that copy put aside.
+  if (pasteElements()) event.preventDefault()
 }
 
 export function beginTextEdit(el, { selectAll = false, caretPoint = null } = {}) {
@@ -1039,6 +1072,14 @@ export function setImageProperties(values) {
 
 // --- element clipboard / delete / nudge ---
 
+// Copied elements go on the SYSTEM clipboard, tagged with this attribute so a
+// paste can recognize them again. A private in-editor clipboard would outrank
+// whatever the user copied most recently somewhere else, and there is no way
+// to tell which of the two is newer — copying a text box here would then
+// shadow every image or text copied in another app for the rest of the
+// session. The in-memory copy is only a fallback for browsers that hand us an
+// empty clipboard for a copy made in this page.
+const CLIPBOARD_MARKER = 'data-re-clipboard'
 let elementClipboard = []
 
 export function deleteSelection() {
@@ -1050,18 +1091,42 @@ export function deleteSelection() {
   markDirty()
 }
 
-export function copySelection() {
-  const sel = runtime.overlay.getSelection()
-  if (sel.length) elementClipboard = sel.map(cleanElementHtml)
+/** Copy handler for a real copy/cut event; also usable without one. */
+export function handleCopy(event) {
+  if (isEditingText()) return // copying text inside a box is the browser's job
+  copySelection(event)
 }
 
-export function pasteElements() {
-  if (!elementClipboard.length) return false
+export function copySelection(event = null) {
+  const sel = runtime.overlay.getSelection()
+  if (!sel.length) return false
+  elementClipboard = sel.map(cleanElementHtml)
+  const data = event?.clipboardData
+  if (data) {
+    data.setData('text/html', `<div ${CLIPBOARD_MARKER}>${elementClipboard.join('')}</div>`)
+    // so the elements paste as something sensible in other applications too
+    const text = sel.map((el) => el.textContent.trim()).filter(Boolean).join('\n')
+    if (text) data.setData('text/plain', text)
+    event.preventDefault()
+  }
+  return true
+}
+
+/** The elements of a copy made in this editor, or [] for foreign clipboards. */
+export function clipboardElements(html) {
+  if (!html || !html.includes(CLIPBOARD_MARKER)) return []
+  const holder = new DOMParser().parseFromString(html, 'text/html')
+    .querySelector(`[${CLIPBOARD_MARKER}]`)
+  return holder ? [...holder.children].map((el) => el.outerHTML) : []
+}
+
+export function pasteElements(htmlList = elementClipboard) {
+  if (!htmlList.length) return false
   snapshotSlide()
   const bridge = runtime.bridge
   const section = bridge.currentSection
   const pasted = []
-  for (const html of elementClipboard) {
+  for (const html of htmlList) {
     const tmp = bridge.doc.createElement('div')
     tmp.innerHTML = html
     const el = tmp.firstElementChild
@@ -1080,8 +1145,10 @@ export function pasteElements() {
 }
 
 export function duplicateSelection() {
-  copySelection()
-  pasteElements()
+  // deliberately not via the clipboard: duplicating must not throw away what
+  // the user has copied
+  const sel = runtime.overlay.getSelection()
+  if (sel.length) pasteElements(sel.map(cleanElementHtml))
 }
 
 let lastNudge = 0
