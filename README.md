@@ -90,7 +90,7 @@ workflows and the one-way eject tradeoff.
   screenshot), video (MP4/WebM picker or drop), rectangle/ellipse/line/arrow, LaTeX
   math (∑), code block (`{}`)
 - **Text**: double-click to edit in place; bold/italic/underline/lists in
-  the context bar; font size and color apply to the whole box
+  the context bar; font size, color, and vertical alignment apply to the whole box
 - **Math**: double-click a formula → popover with raw LaTeX, live preview
   on the slide; `\( … \)` inline, `$$ … $$` display
 - **Code**: double-click a code block → popover with raw source + language
