@@ -71,6 +71,41 @@ try {
     return !document.querySelector('button[title="Text box"]')?.closest('.group')?.classList.contains('disabled');
   `), 'editor controls enabled')
 
+  // Vertical alignment must round-trip back to the top. Gecko keeps the
+  // centered layout when align-content is only removed, so this needs a real
+  // browser: happy-dom has no layout to get stale.
+  await execute(`
+    const doc = document.querySelector('iframe').contentDocument;
+    const box = doc.querySelector('section.present h1.re-el');
+    box.style.height = '300px';
+    box.click();
+    return true;
+  `)
+  await waitFor(() => execute(`
+    return !!document.querySelector('button[title="Align text to top of box"]');
+  `), 'vertical alignment controls')
+  const valign = await execute(`
+    const doc = document.querySelector('iframe').contentDocument;
+    const box = doc.querySelector('section.present h1.re-el');
+    const textTop = () => {
+      const range = doc.createRange();
+      range.selectNodeContents(box);
+      return Math.round(range.getBoundingClientRect().top - box.getBoundingClientRect().top);
+    };
+    const click = (title) => document.querySelector('button[title="' + title + '"]').click();
+    const top = textTop();
+    click('Center text vertically in box');
+    const middle = textTop();
+    click('Align text to bottom of box');
+    const bottom = textTop();
+    click('Align text to top of box');
+    return { top, middle, bottom, back: textTop(), style: box.getAttribute('style') };
+  `)
+  if (!(valign.top < valign.middle && valign.middle < valign.bottom) || valign.back !== valign.top ||
+      valign.style.includes('align-content')) {
+    throw new Error(`Vertical alignment did not round-trip: ${JSON.stringify(valign)}`)
+  }
+
   const media = await executeAsync(`
     const done = arguments[arguments.length - 1];
     const doc = document.querySelector('iframe').contentDocument;

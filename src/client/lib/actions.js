@@ -450,6 +450,11 @@ export function setFontSize(px) {
  */
 const VALIGN_STYLES = { top: '', middle: 'center', bottom: 'end' }
 
+/** Force a synchronous layout of the element's document. */
+function flushLayout(el) {
+  return el.offsetHeight
+}
+
 export function setTextVAlign(align) {
   if (!(align in VALIGN_STYLES)) return
   const targets = (isEditingText() ? [activeElement()] : runtime.overlay.getSelection())
@@ -462,8 +467,17 @@ export function setTextVAlign(align) {
     if (align !== 'top' && !el.style.height && el.offsetHeight) {
       el.style.height = `${el.offsetHeight}px`
     }
-    if (align === 'top') el.style.removeProperty('align-content')
-    else el.style.alignContent = VALIGN_STYLES[align]
+    if (align === 'top') {
+      // Gecko does not reflow when align-content simply goes away (the box
+      // keeps its centered layout even though the computed value is back to
+      // `normal`). Step through an explicit `start` and force a layout flush,
+      // then drop the property so the saved style attribute stays clean.
+      el.style.alignContent = 'start'
+      flushLayout(el)
+      el.style.removeProperty('align-content')
+    } else {
+      el.style.alignContent = VALIGN_STYLES[align]
+    }
   }
   runtime.overlay.refresh()
   markDirty()
