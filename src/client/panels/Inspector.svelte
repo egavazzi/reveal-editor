@@ -6,7 +6,8 @@
     currentSpeakerNotes, selectedElementInfo, selectedImageInfo, setElementProperties,
     selectedShapeInfo, setShapeProperties, resizeDeck,
     selectedVideoInfo, setVideoProperties,
-    setImageProperties, setSpeakerNotes, updateDeckSettings as updateSettings
+    setImageProperties, cropSelectedImage, removeImageCrop,
+    setSpeakerNotes, updateDeckSettings as updateSettings
   } from '../lib/actions.js'
   import { icon } from '../lib/icons.js'
   import { probeVideoCodec, webmConvertCommand } from '../lib/model/codecs.js'
@@ -371,11 +372,15 @@
         <label>Width<input type="number" min="1" value={image.width} onchange={(e) => setImageProperties({ width: +e.currentTarget.value })} /></label>
         <label>Height<input type="number" min="1" value={image.height} onchange={(e) => setImageProperties({ height: +e.currentTarget.value })} /></label>
       </div>
-      <label class="check"><input type="checkbox" checked={image.crop} onchange={(e) => setImageProperties({ crop: e.currentTarget.checked })} /> Crop to frame</label>
-      {#if image.crop}
-        <label>Horizontal crop<input type="range" min="0" max="100" value={image.cropX} onchange={(e) => setImageProperties({ cropX: +e.currentTarget.value })} /></label>
-        <label>Vertical crop<input type="range" min="0" max="100" value={image.cropY} onchange={(e) => setImageProperties({ cropY: +e.currentTarget.value })} /></label>
+      {#if image.cropped}
+        <div class="row">
+          <button onclick={cropSelectedImage}>Adjust crop</button>
+          <button onclick={removeImageCrop}>Remove crop</button>
+        </div>
+      {:else}
+        <button onclick={cropSelectedImage}>Crop image</button>
       {/if}
+      <p class="hint">Or double-click the image. Drag the edge handles to crop, drag the picture to reposition it, and drag its corners to zoom. Resizing a cropped image keeps the crop.</p>
       <div class="row">
         <label>Border<input type="number" min="0" max="40" value={image.borderWidth} onchange={(e) => setImageProperties({ borderWidth: +e.currentTarget.value })} /></label>
         <label>Color<input type="color" value={image.borderColor} onchange={(e) => setImageProperties({ borderColor: e.currentTarget.value })} /></label>

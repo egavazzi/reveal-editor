@@ -110,8 +110,11 @@ workflows and the one-way eject tradeoff.
   accessible names
 - **Layouts/templates**: create slides from built-in layouts or save the
   current slide as a reusable browser-local template
-- **Images**: select an image to set exact dimensions, crop position,
-  border, corner radius, shadow, and a presentation link
+- **Images**: select an image to set exact dimensions, border, corner
+  radius, shadow, and a presentation link; double-click (or use the Crop
+  button) for PowerPoint-style cropping — drag the edge handles to crop,
+  drag the picture to reposition it, drag its corners to zoom — and
+  resizing a cropped image afterwards keeps the crop
 - **Deck setup**: the Deck panel controls the reveal theme, canvas format/size
   and margins, editor grid display/snapping, navigation-arrow visibility, and
   slide number format/position, typography, and transitions

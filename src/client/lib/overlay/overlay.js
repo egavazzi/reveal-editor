@@ -4,6 +4,8 @@ import Moveable from 'moveable'
 import Selecto from 'selecto'
 import { ensurePositioned, roundGeometry } from '../model/position.js'
 import { syncShapeGeometry } from '../model/shapes.js'
+import { imageOf, isImageFrame, readRect, resizeFrameContents } from '../model/crop.js'
+import { createCropMode } from './crop.js'
 import { isEditingText, activeElement } from '../editors/text.js'
 import { editor } from '../../stores/editor.svelte.js'
 import { getCanvasSize } from './editmode.js'
@@ -32,6 +34,9 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
   let moveable = null
   let selecto = null
   let endpointResize = null
+  // Resizing a cropped image scales the picture with its frame; geometry
+  // captured at gesture start.
+  let frameResize = null
   // Mouse jitter between the clicks of a double-click must not count as a
   // drag (it would swallow the dblclick and nudge the element by a pixel).
   const DRAG_THRESHOLD = 4
@@ -43,6 +48,30 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
   function endGesture(realDrag) {
     if (realDrag) lastRealDrag = Date.now()
     return realDrag
+  }
+
+  const cropMode = createCropMode(bridge, {
+    onDone(el, changed) {
+      targets = [el]
+      buildMoveable()
+      onSelectionChange?.(targets)
+      if (changed) onEdit?.()
+    }
+  })
+
+  /** Enter PowerPoint-style crop mode on an image (bare img or frame). */
+  function beginCrop(el) {
+    const img = imageOf(el)
+    if (!img || !el.isConnected || cropMode.active()) return
+    // an unloaded/broken picture can't be cropped faithfully: converting a
+    // legacy object-fit crop to frame geometry needs the natural size
+    if (!isImageFrame(el) && !(img.naturalWidth > 0)) return
+    onBeforeEdit?.()
+    ensurePositioned(el, bridge)
+    moveable?.destroy()
+    moveable = null
+    targets = [cropMode.start(el)]
+    onSelectionChange?.(targets)
   }
 
   function currentSection() {
@@ -68,6 +97,12 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
 
   function buildMoveable() {
     moveable?.destroy()
+    // In crop mode the crop controller owns all handles; the regular
+    // selection box would fight it.
+    if (cropMode.active()) {
+      moveable = null
+      return
+    }
     const section = currentSection()
     const guidelines = targets.length
       ? [section, ...[...section.children].filter((c) => !targets.includes(c))]
@@ -137,6 +172,9 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
         onBeforeEdit?.()
         ensurePositioned(e.target, bridge)
         if (endpointShape) endpointResize = beginEndpointResize(e.target, e.direction)
+        frameResize = isImageFrame(e.target)
+          ? { frame: readRect(e.target), img: readRect(imageOf(e.target)) }
+          : null
       })
       .on('resize', (e) => {
         if (endpointResize && e.inputEvent) {
@@ -146,6 +184,8 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
           e.target.style.height = `${e.height}px`
           e.target.style.left = `${e.drag.left}px`
           e.target.style.top = `${e.drag.top}px`
+          // a cropped image's picture scales with its frame, keeping the crop
+          if (frameResize) resizeFrameContents(e.target, frameResize, e.width, e.height)
         }
         syncShapeGeometry(e.target)
       })
@@ -153,6 +193,8 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
         moveable.snappable = true
         const wasEndpoint = Boolean(endpointResize)
         endpointResize = null
+        if (frameResize) roundGeometry(imageOf(e.target))
+        frameResize = null
         commit(e.target, endGesture(true))
         if (wasEndpoint) buildMoveable()
       })
@@ -234,12 +276,14 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
   }
 
   function setSelection(els) {
+    if (cropMode.active()) cropMode.commit()
     targets = els.filter((el) => el && !el.hasAttribute('data-re-locked') && !el.hasAttribute('data-re-hidden'))
     buildMoveable()
     onSelectionChange?.(targets)
   }
 
   function onClick(e) {
+    if (cropMode.active()) return // the crop controller owns the pointer
     // Ignore clicks on moveable handles, and leave text editing alone
     if (e.target.closest?.('.moveable-control-box, .re-moveable')) return
     if (isEditingText() && activeElement()?.contains(e.target)) return
@@ -265,6 +309,7 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
   }
 
   function onDoubleClick(e) {
+    if (cropMode.active()) return
     if (e.ctrlKey && e.target.closest?.('video')) return
     const section = currentSection()
     if (!section) return
@@ -328,9 +373,12 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
   return {
     setSelection,
     getSelection: () => targets,
+    beginCrop,
+    isCropping: () => cropMode.active(),
     refresh: () => moveable?.updateRect(),
     reconfigure: () => buildMoveable(),
     destroy() {
+      if (cropMode.active()) cropMode.commit()
       doc.removeEventListener('click', onClick)
       doc.removeEventListener('dblclick', onDoubleClick)
       doc.removeEventListener('mousedown', onMediaMousedown)
