@@ -815,11 +815,32 @@ export function setFragmentIndex(n) {
 
 // --- z-order ---
 
+/**
+ * Sort elements back-to-front (document order), so operations that re-home
+ * elements keep the stacking they had relative to each other.
+ */
+function inDomOrder(els) {
+  // DOCUMENT_POSITION_FOLLOWING (4): b comes after a
+  return [...els].sort((a, b) => (a === b ? 0 : a.compareDocumentPosition(b) & 4 ? -1 : 1))
+}
+
+/**
+ * The siblings an element stacks against: the other objects of its group
+ * when it lives inside one, otherwise the objects of the slide. Speaker
+ * notes and editor hints are not part of the stack.
+ */
+function stackSiblings(el) {
+  const parent = el?.parentElement
+  if (!parent) return []
+  return [...parent.children].filter((child) => !child.matches('aside.notes, .re-transient'))
+}
+
 export function bringToFront() {
   snapshotSlide()
-  for (const el of runtime.overlay.getSelection()) {
-    const section = el.closest('section')
-    section.appendChild(el)
+  for (const el of inDomOrder(runtime.overlay.getSelection())) {
+    const siblings = stackSiblings(el)
+    const front = siblings[siblings.length - 1]
+    if (front && front !== el) front.after(el)
   }
   runtime.overlay.refresh()
   markDirty()
@@ -827,9 +848,11 @@ export function bringToFront() {
 
 export function sendToBack() {
   snapshotSlide()
-  for (const el of runtime.overlay.getSelection()) {
-    const section = el.closest('section')
-    section.insertBefore(el, section.firstChild)
+  // back-to-front order reversed: each element lands behind the previous one
+  for (const el of inDomOrder(runtime.overlay.getSelection()).reverse()) {
+    const siblings = stackSiblings(el)
+    const back = siblings[0]
+    if (back && back !== el) back.before(el)
   }
   runtime.overlay.refresh()
   markDirty()
@@ -853,20 +876,34 @@ export function layerKind(el) {
   return 'text'
 }
 
+/**
+ * The layer tree for the current slide, frontmost first. A group carries its
+ * own members as `children`, listed the same way, so the panel can reorder
+ * inside a group instead of only across the slide.
+ */
 export function currentLayers() {
   const section = runtime.bridge?.currentSection
   if (!section) return []
-  const children = [...section.children].filter((el) => !el.matches('aside.notes, .re-transient'))
-  return children.reverse().map((el, reverseIndex) => {
+  return layerRows(section, 0)
+}
+
+function layerRows(container, depth) {
+  const children = [...container.children].filter((el) => !el.matches('aside.notes, .re-transient'))
+  return children.slice().reverse().map((el, reverseIndex) => {
     const kind = layerKind(el)
     const name = el.getAttribute('aria-label') || el.getAttribute('alt') ||
       (kind === 'image' ? imageOf(el)?.getAttribute('alt') : '') || ''
     const text = kind === 'text' || kind === 'math' || kind === 'code'
       ? el.textContent?.trim().replace(/\s+/g, ' ').slice(0, 40) || ''
       : ''
+    const index = children.length - reverseIndex - 1
     return {
       el,
-      index: children.length - reverseIndex - 1,
+      index,
+      depth,
+      // ends of the stack this layer belongs to — the group's, when nested
+      isFront: index === children.length - 1,
+      isBack: index === 0,
       kind,
       name,
       preview: text,
@@ -878,14 +915,47 @@ export function currentLayers() {
       tag: el.tagName.toLowerCase(),
       hidden: el.hasAttribute('data-re-hidden'),
       locked: el.hasAttribute('data-re-locked'),
-      selected: runtime.overlay?.getSelection().includes(el) ?? false
+      selected: runtime.overlay?.getSelection().includes(el) ?? false,
+      children: kind === 'group' ? layerRows(el, depth + 1) : []
     }
   })
 }
 
+function isSelectableLayer(el) {
+  return Boolean(el) && !el.hasAttribute('data-re-locked') && !el.hasAttribute('data-re-hidden')
+}
+
+/**
+ * Drop elements whose ancestor is also selected: a group and one of its own
+ * members must never be dragged together, or the member moves twice.
+ */
+function withoutNested(els) {
+  return els.filter((el) => !els.some((other) => other !== el && other.contains(el)))
+}
+
 export function selectLayer(el) {
-  if (!el || el.hasAttribute('data-re-locked') || el.hasAttribute('data-re-hidden')) return
-  runtime.overlay.setSelection([el])
+  if (!isSelectableLayer(el)) return
+  runtime.overlay.setSelection([el], { keepPanel: true })
+}
+
+/**
+ * Add/remove one layer from the selection (Ctrl/Cmd-click in the panel).
+ * Adding a layer drops anything it nests with — picking a member of an
+ * already-selected group means you want the member, not both.
+ */
+export function toggleLayerSelection(el) {
+  if (!isSelectableLayer(el)) return
+  const current = runtime.overlay.getSelection()
+  const next = current.includes(el)
+    ? current.filter((t) => t !== el)
+    : [...current.filter((t) => !t.contains(el) && !el.contains(t)), el]
+  runtime.overlay.setSelection(next, { keepPanel: true })
+}
+
+/** Select a whole run of layers (Shift-click in the panel). */
+export function selectLayers(els) {
+  const targets = withoutNested(els.filter(isSelectableLayer))
+  if (targets.length) runtime.overlay.setSelection(targets, { keepPanel: true })
 }
 
 export function toggleLayerHidden(el) {
@@ -907,14 +977,23 @@ export function toggleLayerLocked(el) {
   markDirty()
 }
 
+/**
+ * Move one layer a single step through its own stack. Inside a group that
+ * means among the group's members — the group as a whole keeps its place on
+ * the slide.
+ */
 export function moveLayer(el, direction) {
-  const section = el?.closest('section')
-  if (!section) return
+  const siblings = stackSiblings(el)
+  const i = siblings.indexOf(el)
+  if (i === -1) return false
+  const neighbour = direction === 'up' ? siblings[i + 1] : siblings[i - 1]
+  if (!neighbour) return false
   snapshotSlide()
-  if (direction === 'up' && el.nextElementSibling) el.nextElementSibling.after(el)
-  if (direction === 'down' && el.previousElementSibling) el.previousElementSibling.before(el)
+  if (direction === 'up') neighbour.after(el)
+  else neighbour.before(el)
   runtime.overlay.refresh()
   markDirty()
+  return true
 }
 
 export function setLayerName(el, name) {
@@ -978,11 +1057,33 @@ export function setElementProperties(values) {
   bumpSelection()
 }
 
+/**
+ * An element inside a group is not its own editable unit on the canvas
+ * (clicks select the group), while a top-level one is.
+ */
+function adoptInto(el, parent) {
+  const nested = parent.classList.contains('re-group')
+  el.classList.toggle('re-el', !nested)
+  // don't leave an empty class="" behind in the saved deck
+  if (!el.getAttribute('class')) el.removeAttribute('class')
+  el.toggleAttribute('data-re-group-child', nested)
+}
+
 export function groupSelection() {
-  const selection = runtime.overlay?.getSelection() ?? []
-  if (selection.length < 2 || selection.some((el) => el.parentElement !== selection[0].parentElement)) return false
+  // Document order, not click order: the group must preserve the stacking
+  // the elements already had, or objects visibly jump in front of others.
+  const selection = inDomOrder(runtime.overlay?.getSelection() ?? [])
+  if (selection.length < 2) return false
+  const parent = selection[0].parentElement
+  if (selection.some((el) => el.parentElement !== parent)) {
+    editor.statusMessage = 'Grouping needs objects from the same level — pick objects of one slide or one group.'
+    return false
+  }
   snapshotSlide()
   const doc = selection[0].ownerDocument
+  // left/top are read below as canvas coordinates; a foreign-deck element
+  // that was never dragged has none yet
+  for (const el of selection) ensurePositioned(el, runtime.bridge)
   const left = Math.min(...selection.map((el) => parseFloat(el.style.left) || 0))
   const top = Math.min(...selection.map((el) => parseFloat(el.style.top) || 0))
   const right = Math.max(...selection.map((el) => (parseFloat(el.style.left) || 0) + (parseFloat(el.style.width) || el.offsetWidth)))
@@ -990,15 +1091,19 @@ export function groupSelection() {
   const group = doc.createElement('div')
   group.className = 're-el re-group'
   Object.assign(group.style, { position: 'absolute', left: `${left}px`, top: `${top}px`, width: `${right - left}px`, height: `${bottom - top}px` })
-  selection[0].before(group)
+  // the group takes the place of its frontmost member, so nothing that was
+  // behind the selection ends up in front of it
+  selection[selection.length - 1].after(group)
   for (const el of selection) {
     el.style.left = `${(parseFloat(el.style.left) || 0) - left}px`
     el.style.top = `${(parseFloat(el.style.top) || 0) - top}px`
-    el.classList.remove('re-el')
-    el.setAttribute('data-re-group-child', '')
+    adoptInto(el, group)
     group.appendChild(el)
   }
-  runtime.overlay.setSelection([group])
+  adoptInto(group, parent)
+  // grouping is usually driven from the layers panel; don't yank the user
+  // out of it just because the selection became one element
+  runtime.overlay.setSelection([group], { keepPanel: editor.sidePanel === 'layers' })
   markDirty()
   return true
 }
@@ -1008,18 +1113,18 @@ export function ungroupSelection() {
   const group = selection.length === 1 && selection[0].classList.contains('re-group') ? selection[0] : null
   if (!group) return false
   snapshotSlide()
+  const parent = group.parentElement
   const left = parseFloat(group.style.left) || 0
   const top = parseFloat(group.style.top) || 0
   const children = [...group.children]
   for (const child of children) {
     child.style.left = `${left + (parseFloat(child.style.left) || 0)}px`
     child.style.top = `${top + (parseFloat(child.style.top) || 0)}px`
-    child.classList.add('re-el')
-    child.removeAttribute('data-re-group-child')
+    adoptInto(child, parent)
     group.before(child)
   }
   group.remove()
-  runtime.overlay.setSelection(children)
+  runtime.overlay.setSelection(children, { keepPanel: editor.sidePanel === 'layers' })
   markDirty()
   return true
 }

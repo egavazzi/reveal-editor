@@ -276,11 +276,16 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
     onEdit?.()
   }
 
-  function setSelection(els) {
+  /**
+   * `options` is passed on to the selection listener: the layers panel sets
+   * `keepPanel` so picking a layer there doesn't swap the panel out from
+   * under the click.
+   */
+  function setSelection(els, options = {}) {
     if (cropMode.active()) cropMode.commit()
     targets = els.filter((el) => el && !el.hasAttribute('data-re-locked') && !el.hasAttribute('data-re-hidden'))
     buildMoveable()
-    onSelectionChange?.(targets)
+    onSelectionChange?.(targets, options)
   }
 
   function onClick(e) {

@@ -103,8 +103,13 @@ workflows and the one-way eject tradeoff.
 - **Fragments**: select an element → "fragment" checkbox (+ optional
   explicit order) to make it appear step-by-step
 - **Layers**: open the Layers panel to select, reorder, show/hide, and
-  lock/unlock objects; quick bring-to-front/send-to-back buttons remain in
-  the context bar
+  lock/unlock objects; Ctrl-click adds to the selection and Shift-click picks
+  a run, so several objects can be picked there and then grouped, aligned or
+  moved together; quick bring-to-front/send-to-back buttons remain in the
+  context bar
+- **Inside groups**: a group unfolds into its members in the Layers panel —
+  select a member, rename it, hide or lock it, or step it forward/backward
+  within the group without taking it out
 - **Composition**: align/distribute multi-selections, group/ungroup elements,
   edit exact geometry and rotation, lock resize aspect ratios (on by default
   for images and videos), and give layers accessible names

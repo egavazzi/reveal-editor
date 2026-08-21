@@ -94,16 +94,17 @@
       runtime.editMode = enterEditMode(bridge)
       initializeSettings(bridge, initialSettings)
       runtime.overlay = createOverlay(bridge, {
-        onSelectionChange(targets) {
+        onSelectionChange(targets, { keepPanel = false } = {}) {
           editor.selectionCount = targets.length
           // a crop frame is an image as far as the UI is concerned
           editor.selectionTag = isImageFrame(targets[0])
             ? 'img'
             : targets[0]?.tagName.toLowerCase() ?? ''
           editor.selectionVersion++
-          // A pinned panel keeps whatever the user chose; otherwise it
-          // follows the selection.
-          if (!editor.panelPinned) {
+          // A pinned panel keeps whatever the user chose, and a selection
+          // made IN a panel keeps that panel; otherwise the panel follows
+          // the selection.
+          if (!editor.panelPinned && !keepPanel) {
             if (targets.length === 1 && editor.selectionTag === 'img') editor.sidePanel = 'image'
             else if (targets.length === 1 && editor.selectionTag === 'video') editor.sidePanel = 'video'
             else if (targets.length === 1 && targets[0].hasAttribute('data-shape')) editor.sidePanel = 'shape'
