@@ -128,7 +128,10 @@ workflows and the one-way eject tradeoff.
 - **Undo/redo**: Ctrl+Z / Ctrl+Shift+Z, ~100 steps
 - **Copy/paste/duplicate elements**: Ctrl+C / Ctrl+V / Ctrl+D. Copied
   elements go on the system clipboard, so pasting an image or text copied
-  in another application works too — text arrives as a new text box
+  in another application works too — text arrives as a new text box. A paste
+  onto another slide keeps the coordinates it was copied from, so an element
+  can hold the same spot across slides; pasting onto the slide it came from,
+  or onto the same slide twice, steps each copy off the last one
 
 ## File conventions (what the editor writes)
 
