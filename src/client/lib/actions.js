@@ -320,7 +320,11 @@ export function editElement(el, event = null, { viaClick = false } = {}) {
   if (tag === 'svg' || tag === 'video') return
   if (el.classList.contains('re-html')) {
     if (!viaClick) openHtmlEditor(el)
-  } else if (el.classList.contains('re-math') || (el.querySelector('.katex') && isMathOnly(el))) {
+  } else if (el.classList.contains('re-math') ||
+             (!el.classList.contains('re-text') && el.querySelector('.katex') && isMathOnly(el))) {
+    // A dedicated math box (and a foreign element that is nothing but a
+    // formula) gets the LaTeX popover. A text box never does, even when it
+    // happens to hold only math: its editor handles prose and math together.
     if (!viaClick) openMathEditor(el)
   } else if (tag === 'pre' || el.querySelector('pre > code')) {
     if (!viaClick) openCodeEditor(el)

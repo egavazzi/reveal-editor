@@ -50,30 +50,46 @@ function cleanSection(section) {
   removeStyleProps(section, ['display', 'top'])
 }
 
+/**
+ * KaTeX auto-render wraps every expression it renders in an anonymous span of
+ * its own, and a re-render can nest another one outside that. Replacing those
+ * wrappers — not just the .katex node inside them — is what keeps a box of
+ * mixed text and math from gaining a span layer on every render/save cycle.
+ * Only bare spans holding this one expression and nothing else count as
+ * wrappers; any attribute means the span is the author's, and it stays.
+ */
+function mathHost(node) {
+  let host = node
+  for (;;) {
+    const parent = host.parentElement
+    const isWrapper = parent != null &&
+      parent.tagName === 'SPAN' &&
+      parent.attributes.length === 0 &&
+      parent.childElementCount === 1 &&
+      parent.textContent === host.textContent
+    if (!isWrapper) return host
+    host = parent
+  }
+}
+
 export function restoreMath(root) {
   // KaTeX keeps the original TeX in a MathML annotation; restore the
   // delimited source text. Delimiters normalize to \( \) inline, $$ $$
-  // display (documented in README).
+  // display (documented in README) — authored $ … $ comes back as \( … \).
+  const replace = (node, source) => {
+    mathHost(node).replaceWith(root.ownerDocument.createTextNode(source))
+  }
   for (const display of root.querySelectorAll('.katex-display')) {
     const tex = display.querySelector('annotation[encoding="application/x-tex"]')?.textContent
-    if (tex != null) display.replaceWith(root.ownerDocument.createTextNode(`$$${tex}$$`))
+    if (tex != null) replace(display, `$$${tex}$$`)
   }
   for (const inline of root.querySelectorAll('.katex')) {
     const tex = inline.querySelector('annotation[encoding="application/x-tex"]')?.textContent
-    if (tex != null) inline.replaceWith(root.ownerDocument.createTextNode(`\\(${tex}\\)`))
+    if (tex != null) replace(inline, `\\(${tex}\\)`)
   }
-
-  // KaTeX auto-render surrounds rendered expressions with anonymous spans.
-  // Editor-managed math boxes have a plain-text source contract, so remove
-  // those renderer wrappers after restoring their delimiters.
-  const managed = [...root.querySelectorAll('.re-math')]
-  if (root.matches?.('.re-math')) managed.unshift(root)
-  for (const box of managed) {
-    const descendants = [...box.querySelectorAll('*')]
-    if (descendants.length && descendants.every((el) => el.tagName === 'SPAN' && el.attributes.length === 0)) {
-      box.textContent = box.textContent
-    }
-  }
+  // Restoring leaves the source split across adjacent text nodes; a math box
+  // whose contract is plain text must end up as exactly one of them.
+  root.normalize()
 }
 
 function restoreCode(root) {

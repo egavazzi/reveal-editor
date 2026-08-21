@@ -91,8 +91,13 @@ workflows and the one-way eject tradeoff.
   math (∑), code block (`{}`)
 - **Text**: double-click to edit in place; bold/italic/underline/lists in
   the context bar; font size, color, and vertical alignment apply to the whole box
-- **Math**: double-click a formula → popover with raw LaTeX, live preview
-  on the slide; `\( … \)` inline, `$$ … $$` display
+- **Math in text**: type LaTeX between delimiters anywhere in a text box —
+  `$ … $` or `\( … \)` inline, `$$ … $$` display — and it renders when you
+  finish editing. The ∑ button in the context bar wraps the selection for you.
+  While a box is being edited it shows its LaTeX source rather than the
+  rendered formula, so the caret never lands inside KaTeX markup
+- **Math (standalone)**: the toolbar's ∑ inserts a formula box; double-click
+  one → popover with raw LaTeX and live preview on the slide
 - **Code**: double-click a code block → popover with raw source + language
   (Julia included), highlighted by the deck's own highlight.js
 - **Slides**: sidebar thumbnails — click to jump, drag to reorder, buttons
@@ -103,8 +108,13 @@ workflows and the one-way eject tradeoff.
 - **Fragments**: select an element → "fragment" checkbox (+ optional
   explicit order) to make it appear step-by-step
 - **Layers**: open the Layers panel to select, reorder, show/hide, and
-  lock/unlock objects; quick bring-to-front/send-to-back buttons remain in
-  the context bar
+  lock/unlock objects; Ctrl-click adds to the selection and Shift-click picks
+  a run, so several objects can be picked there and then grouped, aligned or
+  moved together; quick bring-to-front/send-to-back buttons remain in the
+  context bar
+- **Inside groups**: a group unfolds into its members in the Layers panel —
+  select a member, rename it, hide or lock it, or step it forward/backward
+  within the group without taking it out
 - **Composition**: align/distribute multi-selections, group/ungroup elements,
   edit exact geometry and rotation, lock resize aspect ratios (on by default
   for images and videos), and give layers accessible names
@@ -147,7 +157,8 @@ delimiters), so the files stay obvious to hand-edit and other reveal decks
 open fine (their elements become draggable the first time you move them).
 
 Saved files always contain raw LaTeX and raw code source — never rendered
-KaTeX markup or highlight spans.
+KaTeX markup or highlight spans. Math delimiters normalize on save: whatever
+you typed comes back as `\( … \)` inline and `$$ … $$` display.
 
 ## Maintenance
 

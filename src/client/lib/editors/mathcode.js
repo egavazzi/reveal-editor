@@ -5,13 +5,22 @@
 import { restoreMath } from '../model/clean.js'
 import { CODE_SRC_ATTR } from '../model/stash.js'
 
-// Delimiters the deck's KaTeX auto-render understands. We render inline
-// \( \) and display $$ $$ — matching what the save cleaner emits.
-const DELIMITERS = [
+// Delimiters the deck's KaTeX auto-render understands. These mirror reveal's
+// math plugin defaults, so what the editor renders is exactly what presents.
+// Order matters: auto-render tries them in sequence, so $$ must precede $.
+// The save cleaner emits the \( \) / $$ $$ subset (see restoreMath).
+const DEFAULT_DELIMITERS = [
   { left: '$$', right: '$$', display: true },
+  { left: '$', right: '$', display: false },
   { left: '\\(', right: '\\)', display: false },
   { left: '\\[', right: '\\]', display: true }
 ]
+
+/** A deck may configure its own delimiters; follow them when it does. */
+function delimiters(bridge) {
+  const configured = bridge.config?.().katex?.delimiters
+  return Array.isArray(configured) && configured.length ? configured : DEFAULT_DELIMITERS
+}
 
 export function canRenderMath(bridge) {
   return typeof bridge.win.renderMathInElement === 'function'
@@ -19,8 +28,18 @@ export function canRenderMath(bridge) {
 
 export function renderMath(bridge, el) {
   if (canRenderMath(bridge)) {
-    bridge.win.renderMathInElement(el, { delimiters: DELIMITERS, throwOnError: false })
+    bridge.win.renderMathInElement(el, { delimiters: delimiters(bridge), throwOnError: false })
   }
+}
+
+/**
+ * Turn rendered KaTeX inside a LIVE element back into its authored, delimited
+ * source text, in place. Rendered math is hostile to contenteditable, so the
+ * in-place text editor swaps a box into this source form while it is being
+ * edited and re-renders it on commit.
+ */
+export function showMathSource(el) {
+  restoreMath(el)
 }
 
 /**

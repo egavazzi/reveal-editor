@@ -3,6 +3,14 @@
 // round-trip stays clean by construction. Formatting commands use
 // execCommand with styleWithCSS off, which produces plain semantic tags
 // (<b>, <i>, <ul>…) that are exactly what belongs in the file.
+//
+// Math mixes into ordinary prose the same way it does in the file: the box
+// holds delimited LaTeX ($ … $, \( … \), $$ … $$) as plain text, and the
+// deck's own KaTeX renders it. Rendered KaTeX is a deep tree of spans that
+// contenteditable would happily let the user type into and destroy, so an
+// edit session swaps the box back to its source form on entry and re-renders
+// it on commit — the same two forms the rest of the editor already uses.
+import { renderMath, showMathSource } from './mathcode.js'
 
 let active = null
 
@@ -18,6 +26,7 @@ export function startTextEdit(el, bridge, { onDone } = {}) {
   if (active) stopTextEdit()
   const doc = bridge.doc
   doc.execCommand('styleWithCSS', false, false)
+  showMathSource(el)
   el.setAttribute('contenteditable', 'true')
   el.setAttribute('spellcheck', 'false')
   el.focus()
@@ -65,7 +74,7 @@ export function startTextEdit(el, bridge, { onDone } = {}) {
 
 export function stopTextEdit() {
   if (!active) return
-  const { el, onDone, finish, onKeydown, onDocMousedown, onParentMousedown, doc } = active
+  const { el, bridge, onDone, finish, onKeydown, onDocMousedown, onParentMousedown, doc } = active
   active = null
   el.removeEventListener('blur', finish)
   el.removeEventListener('keydown', onKeydown)
@@ -75,7 +84,35 @@ export function stopTextEdit() {
   el.removeAttribute('spellcheck')
   cleanupMarkup(el)
   const removed = maybeRemoveEmpty(el)
+  // after the markup cleanup, so KaTeX's own spans are never its business
+  if (!removed) renderMath(bridge, el)
   onDone?.({ el, removed })
+}
+
+/**
+ * Wrap the selected text (or open an empty pair at the caret) in inline math
+ * delimiters. Plain text insertion — the box is in source form for as long as
+ * the edit lasts, so this is all it takes; committing renders it.
+ */
+export function insertInlineMath() {
+  if (!active) return
+  const { bridge, doc, el } = active
+  const sel = bridge.win.getSelection()
+  const selected = sel && !sel.isCollapsed ? sel.toString() : ''
+  doc.execCommand('insertText', false, `\\(${selected}\\)`)
+  // With nothing selected the caret lands after the closing delimiter; put it
+  // between the two so the next keystroke is the formula.
+  if (!selected) {
+    const node = sel?.anchorNode
+    if (node?.nodeType === 3 && sel.anchorOffset >= 2) {
+      const range = doc.createRange()
+      range.setStart(node, sel.anchorOffset - 2)
+      range.collapse(true)
+      sel.removeAllRanges()
+      sel.addRange(range)
+    }
+  }
+  el.focus()
 }
 
 // Commands whose semantic-tag output is deprecated markup (<font>, align="")
