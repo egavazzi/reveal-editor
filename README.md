@@ -91,8 +91,13 @@ workflows and the one-way eject tradeoff.
   math (∑), code block (`{}`)
 - **Text**: double-click to edit in place; bold/italic/underline/lists in
   the context bar; font size, color, and vertical alignment apply to the whole box
-- **Math**: double-click a formula → popover with raw LaTeX, live preview
-  on the slide; `\( … \)` inline, `$$ … $$` display
+- **Math in text**: type LaTeX between delimiters anywhere in a text box —
+  `$ … $` or `\( … \)` inline, `$$ … $$` display — and it renders when you
+  finish editing. The ∑ button in the context bar wraps the selection for you.
+  While a box is being edited it shows its LaTeX source rather than the
+  rendered formula, so the caret never lands inside KaTeX markup
+- **Math (standalone)**: the toolbar's ∑ inserts a formula box; double-click
+  one → popover with raw LaTeX and live preview on the slide
 - **Code**: double-click a code block → popover with raw source + language
   (Julia included), highlighted by the deck's own highlight.js
 - **Slides**: sidebar thumbnails — click to jump, drag to reorder, buttons
@@ -127,13 +132,18 @@ workflows and the one-way eject tradeoff.
   content for Reveal's speaker view
 - **Custom HTML**: insert a trusted HTML/CSS/JS block with `</>`; scripts are
   preserved but intentionally execute only after opening the saved presentation
-- **Present/PDF**: open the standalone deck or Reveal's `?print-pdf` view from
-  the toolbar
+- **Present/PDF**: open the standalone deck, start it on the slide you are
+  editing (▶| , which opens the deck at Reveal's `#/h/v` hash), or open
+  Reveal's `?print-pdf` view — all from the toolbar. These open the deck file
+  **on disk**, so save first to present unsaved edits
 - **Save**: Ctrl+S or the Save button; optional autosave toggle
 - **Undo/redo**: Ctrl+Z / Ctrl+Shift+Z, ~100 steps
 - **Copy/paste/duplicate elements**: Ctrl+C / Ctrl+V / Ctrl+D. Copied
   elements go on the system clipboard, so pasting an image or text copied
-  in another application works too — text arrives as a new text box
+  in another application works too — text arrives as a new text box. A paste
+  onto another slide keeps the coordinates it was copied from, so an element
+  can hold the same spot across slides; pasting onto the slide it came from,
+  or onto the same slide twice, steps each copy off the last one
 
 ## File conventions (what the editor writes)
 
@@ -147,7 +157,8 @@ delimiters), so the files stay obvious to hand-edit and other reveal decks
 open fine (their elements become draggable the first time you move them).
 
 Saved files always contain raw LaTeX and raw code source — never rendered
-KaTeX markup or highlight spans.
+KaTeX markup or highlight spans. Math delimiters normalize on save: whatever
+you typed comes back as `\( … \)` inline and `$$ … $$` display.
 
 ## Maintenance
 

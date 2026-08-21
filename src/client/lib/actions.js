@@ -55,6 +55,9 @@ export function redoAction() {
 
 function afterHistory(entry) {
   if (entry.scope.type === 'deck') initializeSettings(runtime.bridge, entry.settings)
+  // undo takes pasted copies back off their slides, so what the paste cascade
+  // counted is no longer what is there — start it over
+  resetPasteRun()
   runtime.overlay.setSelection([])
   editor.slideCount = runtime.bridge.getSlideEntries?.().length ?? runtime.bridge.getSections().length
   editor.slideIndex = runtime.bridge.getIndex()
@@ -320,7 +323,11 @@ export function editElement(el, event = null, { viaClick = false } = {}) {
   if (tag === 'svg' || tag === 'video') return
   if (el.classList.contains('re-html')) {
     if (!viaClick) openHtmlEditor(el)
-  } else if (el.classList.contains('re-math') || (el.querySelector('.katex') && isMathOnly(el))) {
+  } else if (el.classList.contains('re-math') ||
+             (!el.classList.contains('re-text') && el.querySelector('.katex') && isMathOnly(el))) {
+    // A dedicated math box (and a foreign element that is nothing but a
+    // formula) gets the LaTeX popover. A text box never does, even when it
+    // happens to hold only math: its editor handles prose and math together.
     if (!viaClick) openMathEditor(el)
   } else if (tag === 'pre' || el.querySelector('pre > code')) {
     if (!viaClick) openCodeEditor(el)
@@ -759,10 +766,20 @@ export function setSpeakerNotes(notes) {
   markDirty()
 }
 
-export function openPresentation({ pdf = false } = {}) {
+/**
+ * Open the standalone deck in a new tab. `fromCurrent` starts the show on the
+ * slide being edited, via reveal's own #/h/v location hash — the presentation
+ * view runs with hash navigation on, so it reads that on load. Like Present
+ * from the start, this opens the file ON DISK: unsaved edits are not in it.
+ */
+export function openPresentation({ pdf = false, fromCurrent = false } = {}) {
   if (!editor.deckFile) return
   const file = encodeURIComponent(editor.deckFile)
-  const suffix = pdf ? '?print-pdf' : ''
+  let suffix = pdf ? '?print-pdf' : ''
+  if (!pdf && fromCurrent) {
+    const { h, v } = editor.slideIndex
+    suffix = `#/${h}${v ? `/${v}` : ''}`
+  }
   window.open(`/deck/${file}${suffix}`, '_blank', 'noopener')
 }
 
@@ -1230,7 +1247,36 @@ export function setImageProperties(values) {
 // session. The in-memory copy is only a fallback for browsers that hand us an
 // empty clipboard for a copy made in this page.
 const CLIPBOARD_MARKER = 'data-re-clipboard'
+const PASTE_STEP = 24
 let elementClipboard = []
+
+// A paste keeps the coordinates it was copied from, so the same element can be
+// given the same place on several slides — what PowerPoint and Keynote do, and
+// the usual way a deck keeps a logo or a footnote aligned. That only works
+// where the copy is not already sitting: pasting onto the slide it came from,
+// or pasting one clipboard onto the same slide twice, steps the new element
+// off by PASTE_STEP per copy already there instead of hiding it under its
+// twin. The run is remembered per clipboard payload; a copy made anywhere else
+// replaces it and starts at the original coordinates.
+let pasteRun = { html: '', source: null, counts: new WeakMap() }
+
+function resetPasteRun(html = '', source = null) {
+  pasteRun = { html, source, counts: new WeakMap() }
+}
+
+/**
+ * How many steps this paste is off its source, and record it in the run.
+ * `source` is the slide the elements come from when the caller knows it —
+ * a duplicate always does, a system-clipboard paste only for a copy made here.
+ */
+function pasteSteps(htmlList, source, section) {
+  const html = htmlList.join('')
+  if (html !== pasteRun.html) resetPasteRun(html, source)
+  else if (source) pasteRun.source = source
+  const already = pasteRun.counts.get(section) ?? 0
+  pasteRun.counts.set(section, already + 1)
+  return already + (pasteRun.source === section ? 1 : 0)
+}
 
 export function deleteSelection() {
   const sel = runtime.overlay.getSelection()
@@ -1251,6 +1297,7 @@ export function copySelection(event = null) {
   const sel = runtime.overlay.getSelection()
   if (!sel.length) return false
   elementClipboard = sel.map(cleanElementHtml)
+  resetPasteRun(elementClipboard.join(''), runtime.bridge.currentSection)
   const data = event?.clipboardData
   if (data) {
     data.setData('text/html', `<div ${CLIPBOARD_MARKER}>${elementClipboard.join('')}</div>`)
@@ -1270,20 +1317,23 @@ export function clipboardElements(html) {
   return holder ? [...holder.children].map((el) => el.outerHTML) : []
 }
 
-export function pasteElements(htmlList = elementClipboard) {
+export function pasteElements(htmlList = elementClipboard, { source = null } = {}) {
   if (!htmlList.length) return false
   snapshotSlide()
   const bridge = runtime.bridge
   const section = bridge.currentSection
+  const offset = PASTE_STEP * pasteSteps(htmlList, source, section)
   const pasted = []
   for (const html of htmlList) {
     const tmp = bridge.doc.createElement('div')
     tmp.innerHTML = html
     const el = tmp.firstElementChild
     if (!el) continue
-    for (const prop of ['left', 'top']) {
-      const v = parseFloat(el.style[prop])
-      if (!Number.isNaN(v)) el.style[prop] = `${v + 24}px`
+    if (offset) {
+      for (const prop of ['left', 'top']) {
+        const v = parseFloat(el.style[prop])
+        if (!Number.isNaN(v)) el.style[prop] = `${v + offset}px`
+      }
     }
     section.appendChild(el)
     rehydrate(bridge, el)
@@ -1298,7 +1348,9 @@ export function duplicateSelection() {
   // deliberately not via the clipboard: duplicating must not throw away what
   // the user has copied
   const sel = runtime.overlay.getSelection()
-  if (sel.length) pasteElements(sel.map(cleanElementHtml))
+  if (!sel.length) return
+  // a duplicate is in place by definition, so it always steps off its source
+  pasteElements(sel.map(cleanElementHtml), { source: runtime.bridge.currentSection })
 }
 
 let lastNudge = 0

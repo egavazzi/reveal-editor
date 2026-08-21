@@ -7,7 +7,7 @@
     slideBackground, selectionInfo, arrangeSelection, groupSelection, ungroupSelection,
     currentFontSize, applyBlockStyle, setTextVAlign, currentTextVAlign
   } from '../lib/actions.js'
-  import { queryFormatState, saveTextSelection, applyLink } from '../lib/editors/text.js'
+  import { queryFormatState, saveTextSelection, applyLink, insertInlineMath } from '../lib/editors/text.js'
   import { icon } from '../lib/icons.js'
 
   // Prevent toolbar clicks from stealing focus/selection from the
@@ -155,6 +155,9 @@
       <span class="sep"></span>
       <button class:active={fmt?.link} title={fmt?.link ? 'Remove link' : 'Insert link'} onclick={toggleLink}>
         {@html icon(fmt?.link ? 'unlink' : 'link')}
+      </button>
+      <button title="Inline math — wraps the selection in \( … \); renders when you finish editing" onclick={insertInlineMath}>
+        {@html icon('math')}
       </button>
       {#if linkOpen}
         <input
