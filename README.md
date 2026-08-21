@@ -106,8 +106,8 @@ workflows and the one-way eject tradeoff.
   lock/unlock objects; quick bring-to-front/send-to-back buttons remain in
   the context bar
 - **Composition**: align/distribute multi-selections, group/ungroup elements,
-  edit exact geometry and rotation, lock resize aspect ratios, and give layers
-  accessible names
+  edit exact geometry and rotation, lock resize aspect ratios (on by default
+  for images and videos), and give layers accessible names
 - **Layouts/templates**: create slides from built-in layouts or save the
   current slide as a reusable browser-local template
 - **Images**: select an image to set exact dimensions, border, corner
