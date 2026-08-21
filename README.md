@@ -122,13 +122,18 @@ workflows and the one-way eject tradeoff.
   content for Reveal's speaker view
 - **Custom HTML**: insert a trusted HTML/CSS/JS block with `</>`; scripts are
   preserved but intentionally execute only after opening the saved presentation
-- **Present/PDF**: open the standalone deck or Reveal's `?print-pdf` view from
-  the toolbar
+- **Present/PDF**: open the standalone deck, start it on the slide you are
+  editing (▶| , which opens the deck at Reveal's `#/h/v` hash), or open
+  Reveal's `?print-pdf` view — all from the toolbar. These open the deck file
+  **on disk**, so save first to present unsaved edits
 - **Save**: Ctrl+S or the Save button; optional autosave toggle
 - **Undo/redo**: Ctrl+Z / Ctrl+Shift+Z, ~100 steps
 - **Copy/paste/duplicate elements**: Ctrl+C / Ctrl+V / Ctrl+D. Copied
   elements go on the system clipboard, so pasting an image or text copied
-  in another application works too — text arrives as a new text box
+  in another application works too — text arrives as a new text box. A paste
+  onto another slide keeps the coordinates it was copied from, so an element
+  can hold the same spot across slides; pasting onto the slide it came from,
+  or onto the same slide twice, steps each copy off the last one
 
 ## File conventions (what the editor writes)
 

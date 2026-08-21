@@ -759,10 +759,20 @@ export function setSpeakerNotes(notes) {
   markDirty()
 }
 
-export function openPresentation({ pdf = false } = {}) {
+/**
+ * Open the standalone deck in a new tab. `fromCurrent` starts the show on the
+ * slide being edited, via reveal's own #/h/v location hash — the presentation
+ * view runs with hash navigation on, so it reads that on load. Like Present
+ * from the start, this opens the file ON DISK: unsaved edits are not in it.
+ */
+export function openPresentation({ pdf = false, fromCurrent = false } = {}) {
   if (!editor.deckFile) return
   const file = encodeURIComponent(editor.deckFile)
-  const suffix = pdf ? '?print-pdf' : ''
+  let suffix = pdf ? '?print-pdf' : ''
+  if (!pdf && fromCurrent) {
+    const { h, v } = editor.slideIndex
+    suffix = `#/${h}${v ? `/${v}` : ''}`
+  }
   window.open(`/deck/${file}${suffix}`, '_blank', 'noopener')
 }
 
