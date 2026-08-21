@@ -10,6 +10,7 @@ import {
 import { DEFAULT_SETTINGS } from '../../src/client/lib/model/settings.js'
 import { getCanvasSize } from '../../src/client/lib/overlay/editmode.js'
 import { createShape } from '../../src/client/lib/model/shapes.js'
+import { wrapImage } from '../../src/client/lib/model/crop.js'
 
 function makeBridge() {
   const slidesEl = document.querySelector('.slides')
@@ -187,6 +188,52 @@ describe('settings actions', () => {
     expect(selection).toHaveLength(2)
     expect(selection[0].style.left).toBe('25px')
     expect(selection[1].style.left).toBe('150px')
+  })
+
+  it('locks the aspect ratio of pictures by default and records only departures from it', () => {
+    const img = document.createElement('img')
+    img.className = 're-el'
+    Object.assign(img.style, { position: 'absolute', left: '10px', top: '10px', width: '200px', height: '100px' })
+    const box = document.createElement('div')
+    box.className = 're-el'
+    Object.assign(box.style, { position: 'absolute', left: '10px', top: '10px', width: '200px', height: '100px' })
+    runtime.bridge.getSections()[0].append(img, box)
+
+    let selection = [img]
+    runtime.overlay.getSelection = () => selection
+    expect(selectedElementInfo().lockRatio).toBe(true)
+    expect(img.hasAttribute('data-re-lock-ratio')).toBe(false)
+
+    // unlocking a picture has to be recorded, since it is the exception
+    setElementProperties({ lockRatio: false })
+    expect(img.getAttribute('data-re-lock-ratio')).toBe('off')
+    expect(selectedElementInfo().lockRatio).toBe(false)
+
+    setElementProperties({ lockRatio: true })
+    expect(img.hasAttribute('data-re-lock-ratio')).toBe(false)
+
+    selection = [box]
+    expect(selectedElementInfo().lockRatio).toBe(false)
+    setElementProperties({ lockRatio: true })
+    expect(box.getAttribute('data-re-lock-ratio')).toBe('')
+  })
+
+  it('keeps a cropped image locked by default, and carries an explicit unlock across the crop frame', () => {
+    const img = document.createElement('img')
+    img.className = 're-el'
+    Object.assign(img.style, { position: 'absolute', left: '10px', top: '10px', width: '200px', height: '100px' })
+    runtime.bridge.getSections()[0].append(img)
+
+    // a crop frame stands in for its picture: resizing it scales the
+    // picture too, so it must default to a locked ratio just the same
+    let selection = [wrapImage(img)]
+    runtime.overlay.getSelection = () => selection
+    expect(selectedElementInfo().lockRatio).toBe(true)
+    expect(selection[0].hasAttribute('data-re-lock-ratio')).toBe(false)
+
+    setElementProperties({ lockRatio: false })
+    expect(selection[0].getAttribute('data-re-lock-ratio')).toBe('off')
+    expect(selectedElementInfo().lockRatio).toBe(false)
   })
 
   it('undoes selected-object color and size changes without deleting the object', () => {

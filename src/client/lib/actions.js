@@ -31,6 +31,7 @@ import {
 import { setShapeColors, shapeColors, syncShapeGeometry } from './model/shapes.js'
 import { videoInfo, applyVideoProperties } from './model/media.js'
 import { imageOf, isImageFrame, readRect, removeCrop, resizeFrameContents, rotationOf } from './model/crop.js'
+import { isRatioLocked, setRatioLocked } from './model/ratio.js'
 export { saveDeck } from './model/save.js'
 export { slideSummaries } from './model/slides.js'
 
@@ -951,7 +952,7 @@ export function selectedElementInfo() {
     width: Math.round(parseFloat(el.style.width) || rect.width),
     height: Math.round(parseFloat(el.style.height) || rect.height),
     rotation: rotationOf(el),
-    lockRatio: el.hasAttribute('data-re-lock-ratio'),
+    lockRatio: isRatioLocked(el),
     group: el.classList.contains('re-group')
   }
 }
@@ -971,7 +972,7 @@ export function setElementProperties(values) {
   if (values.height != null) el.style.height = `${Math.max(1, Number(values.height) || 1)}px`
   if (frameStart) resizeFrameContents(el, frameStart, parseFloat(el.style.width), parseFloat(el.style.height))
   if (values.rotation != null) el.style.transform = `rotate(${Number(values.rotation) || 0}deg)`
-  if (values.lockRatio != null) el.toggleAttribute('data-re-lock-ratio', Boolean(values.lockRatio))
+  if (values.lockRatio != null) setRatioLocked(el, values.lockRatio)
   runtime.overlay.reconfigure()
   markDirty()
   bumpSelection()

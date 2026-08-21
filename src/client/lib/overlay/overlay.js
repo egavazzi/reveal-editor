@@ -6,6 +6,7 @@ import { ensurePositioned, roundGeometry } from '../model/position.js'
 import { syncShapeGeometry } from '../model/shapes.js'
 import { imageOf, isImageFrame, readRect, resizeFrameContents } from '../model/crop.js'
 import { createCropMode } from './crop.js'
+import { isRatioLocked } from '../model/ratio.js'
 import { isEditingText, activeElement } from '../editors/text.js'
 import { editor } from '../../stores/editor.svelte.js'
 import { getCanvasSize } from './editmode.js'
@@ -116,7 +117,7 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
       resizable: targets.length === 1 && !targets[0]?.classList.contains('re-group'),
       rotatable: targets.length === 1 && !endpointShape,
       renderDirections: endpointShape ? [startCorner, oppositeCorner(startCorner)] : ['n', 'nw', 'ne', 's', 'se', 'sw', 'e', 'w'],
-      keepRatio: targets.length === 1 && targets[0]?.hasAttribute('data-re-lock-ratio'),
+      keepRatio: targets.length === 1 && isRatioLocked(targets[0]),
       origin: false,
       snappable: true,
       elementGuidelines: guidelines,
