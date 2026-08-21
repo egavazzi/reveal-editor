@@ -5,7 +5,7 @@
 // handles zoom it. Enter/Escape or clicking elsewhere commits.
 import Moveable from 'moveable'
 import {
-  imageOf, isImageFrame, wrapImage, unwrapImage, isTrivialCrop, readRect, writeRect
+  imageOf, isImageFrame, wrapImage, unwrapImage, isTrivialCrop, readRect, writeRect, rotationOf
 } from '../model/crop.js'
 import { roundGeometry } from '../model/position.js'
 
@@ -51,19 +51,29 @@ export function createCropMode(bridge, { onDone }) {
       snappable: false,
       className: 're-crop-frame'
     })
+    // clamping through Moveable keeps e.drag consistent with the clamped
+    // size (a bare Math.max would desync the anchored edge)
+    frameBox.on('resizeStart', (e) => e.setMin([12, 12]))
     frameBox.on('resize', (e) => {
       const before = readRect(frame)
-      frame.style.width = `${Math.max(12, e.width)}px`
-      frame.style.height = `${Math.max(12, e.height)}px`
+      frame.style.width = `${e.width}px`
+      frame.style.height = `${e.height}px`
       frame.style.left = `${e.drag.left}px`
       frame.style.top = `${e.drag.top}px`
       // cropping moves the frame, never the picture: compensate the
-      // picture's frame-relative offset by the frame's displacement
+      // picture's frame-local offset for the frame's displacement — the
+      // frame-center shift, mapped into the frame's (possibly rotated) axes
+      const after = readRect(frame)
       const rect = readRect(img)
+      const angle = -rotationOf(frame) * Math.PI / 180
+      const cdx = after.left - before.left + (after.width - before.width) / 2
+      const cdy = after.top - before.top + (after.height - before.height) / 2
       writeRect(img, {
         ...rect,
-        left: rect.left - (e.drag.left - before.left),
-        top: rect.top - (e.drag.top - before.top)
+        left: rect.left + (after.width - before.width) / 2 -
+          (cdx * Math.cos(angle) - cdy * Math.sin(angle)),
+        top: rect.top + (after.height - before.height) / 2 -
+          (cdx * Math.sin(angle) + cdy * Math.cos(angle))
       })
       mutated = true
       sync(img)
@@ -89,9 +99,10 @@ export function createCropMode(bridge, { onDone }) {
         mutated = true
         sync(img)
       })
+      .on('resizeStart', (e) => e.setMin([12, 12]))
       .on('resize', (e) => {
-        img.style.width = `${Math.max(12, e.width)}px`
-        img.style.height = `${Math.max(12, e.height)}px`
+        img.style.width = `${e.width}px`
+        img.style.height = `${e.height}px`
         img.style.left = `${e.drag.left}px`
         img.style.top = `${e.drag.top}px`
         mutated = true
@@ -130,6 +141,11 @@ export function createCropMode(bridge, { onDone }) {
 
   function onKey(e) {
     if (e.key !== 'Escape' && e.key !== 'Enter') return
+    // keys typed into a form field (the Inspector panels) keep their
+    // native behavior; crop mode only claims keys pressed on the canvas
+    const t = e.target
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' ||
+      t.tagName === 'SELECT' || t.isContentEditable)) return
     e.preventDefault()
     e.stopImmediatePropagation()
     commit()

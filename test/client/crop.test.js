@@ -59,6 +59,33 @@ describe('image crop frames', () => {
     expect(document.querySelector('.re-image-frame')).toBe(null)
   })
 
+  it('parses px object-position offsets as edge distances, not percentages', () => {
+    const img = makeImage('object-fit: cover; object-position: 10px 20px;', { natural: { w: 100, h: 100 } })
+    wrapImage(img)
+    expect(readRect(img)).toEqual({ left: 10, top: 20, width: 400, height: 400 })
+  })
+
+  it('resolves keyword object-position values', () => {
+    const img = makeImage('object-fit: contain; object-position: right;', { natural: { w: 100, h: 100 } })
+    wrapImage(img)
+    // contain scale for a 400×300 frame over a square picture is 3;
+    // 'right' pins the 300×300 picture to the right edge, y stays centered
+    expect(readRect(img)).toEqual({ left: 100, top: 0, width: 300, height: 300 })
+  })
+
+  it('keeps a rotated picture in place when the crop is removed', () => {
+    const img = makeImage('transform: rotate(90deg);')
+    const frame = wrapImage(img)
+    writeRect(img, { left: -60, top: -20, width: 400, height: 300 })
+    const back = removeCrop(frame)
+    expect(back.style.transform).toBe('rotate(90deg)')
+    // the restored picture's center must land where the rotated frame
+    // rendered it: frame center (300,200) + rotate90(-60,-20) = (320,140)
+    const rect = readRect(back)
+    expect(rect.left + rect.width / 2).toBeCloseTo(320)
+    expect(rect.top + rect.height / 2).toBeCloseTo(140)
+  })
+
   it('crops when the frame shrinks and the picture holds still', () => {
     const img = makeImage()
     const frame = wrapImage(img)

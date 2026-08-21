@@ -30,7 +30,7 @@ import {
 } from './model/settings.js'
 import { setShapeColors, shapeColors, syncShapeGeometry } from './model/shapes.js'
 import { videoInfo, applyVideoProperties } from './model/media.js'
-import { imageOf, isImageFrame, readRect, removeCrop, resizeFrameContents } from './model/crop.js'
+import { imageOf, isImageFrame, readRect, removeCrop, resizeFrameContents, rotationOf } from './model/crop.js'
 export { saveDeck } from './model/save.js'
 export { slideSummaries } from './model/slides.js'
 
@@ -944,14 +944,13 @@ export function selectedElementInfo() {
   if (selection.length !== 1) return null
   const el = selection[0]
   const rect = el.getBoundingClientRect()
-  const rotation = el.style.transform.match(/rotate\((-?[\d.]+)deg\)/)?.[1] || 0
   return {
     el,
     x: Math.round(parseFloat(el.style.left) || 0),
     y: Math.round(parseFloat(el.style.top) || 0),
     width: Math.round(parseFloat(el.style.width) || rect.width),
     height: Math.round(parseFloat(el.style.height) || rect.height),
-    rotation: Number(rotation),
+    rotation: rotationOf(el),
     lockRatio: el.hasAttribute('data-re-lock-ratio'),
     group: el.classList.contains('re-group')
   }
@@ -964,8 +963,13 @@ export function setElementProperties(values) {
   const { el } = info
   if (values.x != null) el.style.left = `${Number(values.x) || 0}px`
   if (values.y != null) el.style.top = `${Number(values.y) || 0}px`
+  // resizing a cropped image scales the picture with its frame
+  const frameStart = isImageFrame(el) && (values.width != null || values.height != null)
+    ? { frame: readRect(el), img: readRect(imageOf(el)) }
+    : null
   if (values.width != null) el.style.width = `${Math.max(1, Number(values.width) || 1)}px`
   if (values.height != null) el.style.height = `${Math.max(1, Number(values.height) || 1)}px`
+  if (frameStart) resizeFrameContents(el, frameStart, parseFloat(el.style.width), parseFloat(el.style.height))
   if (values.rotation != null) el.style.transform = `rotate(${Number(values.rotation) || 0}deg)`
   if (values.lockRatio != null) el.toggleAttribute('data-re-lock-ratio', Boolean(values.lockRatio))
   runtime.overlay.reconfigure()
@@ -1087,12 +1091,13 @@ export function setImageProperties(values) {
   const { el } = info
   const img = imageOf(el)
   if (values.width != null || values.height != null) {
+    // write only the edited dimension: a foreign-deck image may have no
+    // inline height (or width), and that auto dimension must stay auto
     const start = { frame: readRect(el), img: readRect(img) }
-    const w = Math.max(1, Number(values.width ?? start.frame.width))
-    const h = Math.max(1, Number(values.height ?? start.frame.height))
-    el.style.width = `${w}px`
-    el.style.height = `${h}px`
-    if (info.cropped) resizeFrameContents(el, start, w, h)
+    if (values.width != null) el.style.width = `${Math.max(1, Number(values.width))}px`
+    if (values.height != null) el.style.height = `${Math.max(1, Number(values.height))}px`
+    // a frame always carries both inline dimensions (wrapImage sets them)
+    if (info.cropped) resizeFrameContents(el, start, parseFloat(el.style.width), parseFloat(el.style.height))
   }
   if (values.borderWidth != null) el.style.borderWidth = `${Math.max(0, Number(values.borderWidth))}px`
   if (values.borderWidth != null) el.style.borderStyle = Number(values.borderWidth) ? 'solid' : ''
@@ -1193,6 +1198,9 @@ export function duplicateSelection() {
 let lastNudge = 0
 
 export function nudgeSelection(dx, dy) {
+  // the crop controller owns the geometry while cropping; a nudge would
+  // move the element under its handles without updating them
+  if (runtime.overlay.isCropping?.()) return false
   const sel = runtime.overlay.getSelection()
   if (!sel.length) return false
   const now = Date.now()

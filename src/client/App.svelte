@@ -7,6 +7,7 @@
   import { enterEditMode } from './lib/overlay/editmode.js'
   import { initializeSettings, settingsFromRevealConfig } from './lib/model/settings.js'
   import { isSlideEmpty } from './lib/model/layouts.js'
+  import { isImageFrame } from './lib/model/crop.js'
   import { createOverlay } from './lib/overlay/overlay.js'
   import {
     editElement, handlePaste, snapshotSlide, undoAction, redoAction,
@@ -96,7 +97,7 @@
         onSelectionChange(targets) {
           editor.selectionCount = targets.length
           // a crop frame is an image as far as the UI is concerned
-          editor.selectionTag = targets[0]?.classList?.contains('re-image-frame')
+          editor.selectionTag = isImageFrame(targets[0])
             ? 'img'
             : targets[0]?.tagName.toLowerCase() ?? ''
           editor.selectionVersion++

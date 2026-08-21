@@ -61,7 +61,11 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
 
   /** Enter PowerPoint-style crop mode on an image (bare img or frame). */
   function beginCrop(el) {
-    if (!imageOf(el) || !el.isConnected || cropMode.active()) return
+    const img = imageOf(el)
+    if (!img || !el.isConnected || cropMode.active()) return
+    // an unloaded/broken picture can't be cropped faithfully: converting a
+    // legacy object-fit crop to frame geometry needs the natural size
+    if (!isImageFrame(el) && !(img.naturalWidth > 0)) return
     onBeforeEdit?.()
     ensurePositioned(el, bridge)
     moveable?.destroy()

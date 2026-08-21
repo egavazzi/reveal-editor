@@ -102,6 +102,36 @@ describe('settings actions', () => {
     expect(selectedImageInfo()).toMatchObject({ cropped: false })
   })
 
+  it('leaves an auto height alone when only the width is edited', () => {
+    const image = document.createElement('img')
+    image.style.position = 'absolute'
+    image.style.width = '400px' // no inline height, as ensurePositioned leaves it
+    runtime.bridge.getSections()[0].appendChild(image)
+    runtime.overlay.getSelection = () => [image]
+
+    setImageProperties({ width: 500 })
+    expect(image.style.width).toBe('500px')
+    expect(image.style.height).toBe('')
+  })
+
+  it('scales the picture when a crop frame is resized via element properties', () => {
+    const frame = document.createElement('div')
+    frame.className = 're-el re-image-frame'
+    Object.assign(frame.style, { position: 'absolute', left: '0px', top: '0px', width: '400px', height: '300px', overflow: 'hidden' })
+    const image = document.createElement('img')
+    Object.assign(image.style, { position: 'absolute', left: '-60px', top: '-20px', width: '400px', height: '300px' })
+    frame.appendChild(image)
+    runtime.bridge.getSections()[0].appendChild(frame)
+    runtime.overlay.getSelection = () => [frame]
+
+    setElementProperties({ width: 800, height: 150 })
+    expect(frame.style.width).toBe('800px')
+    expect(image.style.left).toBe('-120px')
+    expect(image.style.top).toBe('-10px')
+    expect(image.style.width).toBe('800px')
+    expect(image.style.height).toBe('150px')
+  })
+
   it('adds link runtime support explicitly and removes it again on undo', () => {
     const image = document.createElement('img')
     runtime.bridge.getSections()[0].appendChild(image)

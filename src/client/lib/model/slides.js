@@ -1,6 +1,8 @@
 // Slide-level structure operations on the live .slides DOM.
 // All of them call Reveal.sync() so reveal's internal state follows.
 
+import { imageOf, isImageFrame } from './crop.js'
+
 const RUNTIME_CLASSES = ['past', 'present', 'future', 'stack', 'overflowing']
 
 export function scrubRuntimeState(section) {
@@ -239,13 +241,13 @@ export function slideSummaries(bridge, canvas) {
         y: ((offsetY + top) / canvas.height) * 100,
         w: Math.min(100, (width / canvas.width) * 100),
         h: Math.min(100, (height / canvas.height) * 100),
-        kind: tag === 'img' || el.classList.contains('re-image-frame') ? 'img'
+        kind: tag === 'img' || isImageFrame(el) ? 'img'
           : tag === 'video' ? 'video'
             : tag === 'svg' ? 'shape'
               : tag === 'pre' || el.querySelector?.('pre > code') ? 'code' : 'text'
       }
       if (box.kind === 'img') {
-        const img = tag === 'img' ? el : el.querySelector(':scope > img')
+        const img = imageOf(el)
         box.src = resolveUrl(img?.getAttribute('src'), img ?? el)
       } else if (box.kind === 'shape') {
         box.svg = el.outerHTML
