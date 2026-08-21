@@ -73,7 +73,16 @@
     {@html icon('save')}{editor.saving ? 'Saving…' : 'Save'}
   </button>
   <div class="group seg">
-    <button class="ic wide" title="Open presentation" onclick={() => openPresentation()} disabled={!editor.ready}>{@html icon('play')}Present</button>
+    <button class="ic wide" title="Open presentation from the first slide" onclick={() => openPresentation()} disabled={!editor.ready}>{@html icon('play')}Present</button>
+    <button
+      class="ic"
+      title={editor.ready
+        ? `Open presentation from this slide (${editor.slideIndex.h + 1}${editor.slideIndex.v ? `.${editor.slideIndex.v + 1}` : ''})`
+        : 'Open presentation from this slide'}
+      aria-label="Open presentation from this slide"
+      onclick={() => openPresentation({ fromCurrent: true })}
+      disabled={!editor.ready}
+    >{@html icon('playFrom')}</button>
     <button class="ic wide" title="Open PDF/print view" onclick={() => openPresentation({ pdf: true })} disabled={!editor.ready}>{@html icon('print')}PDF</button>
   </div>
   <div class="group seg nav">

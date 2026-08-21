@@ -323,7 +323,11 @@ export function editElement(el, event = null, { viaClick = false } = {}) {
   if (tag === 'svg' || tag === 'video') return
   if (el.classList.contains('re-html')) {
     if (!viaClick) openHtmlEditor(el)
-  } else if (el.classList.contains('re-math') || (el.querySelector('.katex') && isMathOnly(el))) {
+  } else if (el.classList.contains('re-math') ||
+             (!el.classList.contains('re-text') && el.querySelector('.katex') && isMathOnly(el))) {
+    // A dedicated math box (and a foreign element that is nothing but a
+    // formula) gets the LaTeX popover. A text box never does, even when it
+    // happens to hold only math: its editor handles prose and math together.
     if (!viaClick) openMathEditor(el)
   } else if (tag === 'pre' || el.querySelector('pre > code')) {
     if (!viaClick) openCodeEditor(el)
@@ -762,10 +766,20 @@ export function setSpeakerNotes(notes) {
   markDirty()
 }
 
-export function openPresentation({ pdf = false } = {}) {
+/**
+ * Open the standalone deck in a new tab. `fromCurrent` starts the show on the
+ * slide being edited, via reveal's own #/h/v location hash — the presentation
+ * view runs with hash navigation on, so it reads that on load. Like Present
+ * from the start, this opens the file ON DISK: unsaved edits are not in it.
+ */
+export function openPresentation({ pdf = false, fromCurrent = false } = {}) {
   if (!editor.deckFile) return
   const file = encodeURIComponent(editor.deckFile)
-  const suffix = pdf ? '?print-pdf' : ''
+  let suffix = pdf ? '?print-pdf' : ''
+  if (!pdf && fromCurrent) {
+    const { h, v } = editor.slideIndex
+    suffix = `#/${h}${v ? `/${v}` : ''}`
+  }
   window.open(`/deck/${file}${suffix}`, '_blank', 'noopener')
 }
 
