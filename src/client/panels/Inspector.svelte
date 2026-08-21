@@ -2,7 +2,8 @@
   import { editor } from '../stores/editor.svelte.js'
   import { REVEAL_THEMES, TYPOGRAPHY_PRESETS } from '../lib/model/settings.js'
   import {
-    currentLayers, selectLayer, toggleLayerHidden, toggleLayerLocked, moveLayer, setLayerName,
+    currentLayers, selectLayer, selectLayers, toggleLayerSelection,
+    toggleLayerHidden, toggleLayerLocked, moveLayer, setLayerName,
     currentSpeakerNotes, selectedElementInfo, selectedImageInfo, setElementProperties,
     selectedShapeInfo, setShapeProperties, resizeDeck,
     selectedVideoInfo, setVideoProperties,
@@ -107,6 +108,45 @@
   }
 
   const KIND_GLYPHS = { math: '∑', code: '{ }', html: '</>', video: '▶', group: '▣' }
+
+  // Groups the user has folded shut, by element. Entries for elements that
+  // no longer exist (undo, slide change) are simply never matched again.
+  let collapsed = $state([])
+
+  function toggleCollapsed(el) {
+    collapsed = collapsed.includes(el) ? collapsed.filter((c) => c !== el) : [...collapsed, el]
+  }
+
+  // The tree as the panel actually shows it: a group's members follow it,
+  // indented, unless the group is folded. Shift-click ranges run over this
+  // same visible order.
+  const rows = $derived.by(() => flatten(layers, []))
+
+  function flatten(list, out) {
+    for (const layer of list) {
+      out.push(layer)
+      if (layer.children.length && !collapsed.includes(layer.el)) flatten(layer.children, out)
+    }
+    return out
+  }
+
+  // anchor for shift-click ranges
+  let lastClicked = $state(null)
+
+  function onLayerClick(e, layer) {
+    if (e.ctrlKey || e.metaKey) {
+      toggleLayerSelection(layer.el)
+    } else if (e.shiftKey && lastClicked && lastClicked !== layer.el) {
+      const from = rows.findIndex((r) => r.el === lastClicked)
+      const to = rows.findIndex((r) => r.el === layer.el)
+      if (from === -1 || to === -1) selectLayer(layer.el)
+      else selectLayers(rows.slice(Math.min(from, to), Math.max(from, to) + 1).map((r) => r.el))
+      return
+    } else {
+      selectLayer(layer.el)
+    }
+    lastClicked = layer.el
+  }
 
   // Live playback preview of the selected video, driven directly from the
   // panel. Firefox's native controls misplace their hit zones inside the
@@ -217,14 +257,33 @@
   {#if editor.sidePanel === 'layers'}
     <section class="panel layers">
       <h3>Slide layers</h3>
-      <p class="hint">Frontmost objects are listed first. Double-click a layer to rename it.</p>
+      <p class="hint">
+        Frontmost objects are listed first; a group unfolds into its own members.
+        Ctrl-click to add to the selection, Shift-click for a run, double-click to rename.
+      </p>
       {#if layers.length === 0}<p class="empty">This slide is empty.</p>{/if}
-      {#each layers as layer (layer.el)}
-        <div class:selected={layer.selected} class:hidden={layer.hidden} class:locked={layer.locked} class="layer">
+      {#each rows as layer (layer.el)}
+        <div
+          class:selected={layer.selected}
+          class:hidden={layer.hidden}
+          class:locked={layer.locked}
+          class:child={layer.depth > 0}
+          class="layer"
+          style:padding-left="{2 + layer.depth * 14}px"
+        >
+          {#if layer.children.length}
+            <button
+              class="ctl twisty"
+              title={collapsed.includes(layer.el) ? 'Show group members' : 'Hide group members'}
+              onclick={() => toggleCollapsed(layer.el)}
+            >{@html icon(collapsed.includes(layer.el) ? 'chevronRight' : 'chevronDown')}</button>
+          {:else if layer.depth > 0}
+            <span class="twisty-spacer"></span>
+          {/if}
           <button
             class="row"
             title={layer.label}
-            onclick={() => selectLayer(layer.el)}
+            onclick={(e) => onLayerClick(e, layer)}
             ondblclick={() => (renaming = layer.el)}
           >
             <span class="icon {layer.kind}">
@@ -258,8 +317,18 @@
             {/if}
           </button>
           <span class="controls">
-            <button class="ctl move" title="Move forward one level" onclick={() => moveLayer(layer.el, 'up')}>{@html icon('chevronUp')}</button>
-            <button class="ctl move" title="Move backward one level" onclick={() => moveLayer(layer.el, 'down')}>{@html icon('chevronDown')}</button>
+            <button
+              class="ctl move"
+              disabled={layer.isFront}
+              title={layer.depth > 0 ? 'Move forward one level inside the group' : 'Move forward one level'}
+              onclick={() => moveLayer(layer.el, 'up')}
+            >{@html icon('chevronUp')}</button>
+            <button
+              class="ctl move"
+              disabled={layer.isBack}
+              title={layer.depth > 0 ? 'Move backward one level inside the group' : 'Move backward one level'}
+              onclick={() => moveLayer(layer.el, 'down')}
+            >{@html icon('chevronDown')}</button>
             <button class="ctl" class:on={layer.locked} title={layer.locked ? 'Unlock layer' : 'Lock layer'} onclick={() => toggleLayerLocked(layer.el)}>{@html icon(layer.locked ? 'lock' : 'unlock')}</button>
             <button class="ctl" class:on={layer.hidden} title={layer.hidden ? 'Show layer' : 'Hide layer'} onclick={() => toggleLayerHidden(layer.el)}>{@html icon(layer.hidden ? 'eyeOff' : 'eye')}</button>
           </span>
@@ -554,6 +623,21 @@
   .ctl.on { color: var(--ui-accent); }
   .ctl.move { visibility: hidden; }
   .layer:hover .ctl.move { visibility: visible; }
+  .ctl:disabled { opacity: .3; cursor: default; }
+  .ctl:disabled:hover { background: none; color: var(--ui-faint); }
+  /* group members: indented, on a rail that ties them to their group */
+  .layer.child { position: relative; }
+  .layer.child::before {
+    content: '';
+    position: absolute;
+    left: 9px;
+    top: 0;
+    bottom: 0;
+    border-left: 1px solid var(--ui-border);
+  }
+  .ctl.twisty { width: 16px; flex: none; }
+  .ctl.twisty :global(svg) { width: 12px; height: 12px; }
+  .twisty-spacer { flex: none; width: 16px; }
 
   .image-panel, .shape-panel, .video-panel { background: var(--ui-surface); }
   .preview-row { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
