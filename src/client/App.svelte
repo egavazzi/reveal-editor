@@ -95,7 +95,10 @@
       runtime.overlay = createOverlay(bridge, {
         onSelectionChange(targets) {
           editor.selectionCount = targets.length
-          editor.selectionTag = targets[0]?.tagName.toLowerCase() ?? ''
+          // a crop frame is an image as far as the UI is concerned
+          editor.selectionTag = targets[0]?.classList?.contains('re-image-frame')
+            ? 'img'
+            : targets[0]?.tagName.toLowerCase() ?? ''
           editor.selectionVersion++
           // A pinned panel keeps whatever the user chose; otherwise it
           // follows the selection.

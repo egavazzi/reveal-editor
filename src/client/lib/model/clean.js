@@ -110,6 +110,9 @@ function stripLazyLoading(root) {
 function cleanContainer(container) {
   for (const el of container.querySelectorAll(EDITOR_ELEMENT_SELECTOR)) el.remove()
 
+  // crop mode may be live while saving; its marker class is runtime-only
+  for (const el of container.querySelectorAll('.re-cropping')) removeClasses(el, ['re-cropping'])
+
   for (const section of container.querySelectorAll('section')) cleanSection(section)
   cleanFragments(container)
   restoreCode(container)

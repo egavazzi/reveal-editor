@@ -239,13 +239,14 @@ export function slideSummaries(bridge, canvas) {
         y: ((offsetY + top) / canvas.height) * 100,
         w: Math.min(100, (width / canvas.width) * 100),
         h: Math.min(100, (height / canvas.height) * 100),
-        kind: tag === 'img' ? 'img'
+        kind: tag === 'img' || el.classList.contains('re-image-frame') ? 'img'
           : tag === 'video' ? 'video'
             : tag === 'svg' ? 'shape'
               : tag === 'pre' || el.querySelector?.('pre > code') ? 'code' : 'text'
       }
       if (box.kind === 'img') {
-        box.src = resolveUrl(el.getAttribute('src'), el)
+        const img = tag === 'img' ? el : el.querySelector(':scope > img')
+        box.src = resolveUrl(img?.getAttribute('src'), img ?? el)
       } else if (box.kind === 'shape') {
         box.svg = el.outerHTML
       } else {

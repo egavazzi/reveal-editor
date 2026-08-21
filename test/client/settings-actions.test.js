@@ -84,12 +84,22 @@ describe('settings actions', () => {
     expect(getCanvasSize(runtime.bridge)).toEqual({ width: 1280, height: 720 })
   })
 
-  it('keeps valid zero-percent crop positions', () => {
+  it('reports crop frames as images', () => {
+    const frame = document.createElement('div')
+    frame.className = 're-el re-image-frame'
+    frame.style.width = '200px'
+    frame.style.height = '100px'
     const image = document.createElement('img')
-    image.style.objectPosition = '0% 0%'
-    runtime.overlay.getSelection = () => [image]
+    image.setAttribute('data-re-href', 'https://example.com')
+    frame.appendChild(image)
+    runtime.overlay.getSelection = () => [frame]
 
-    expect(selectedImageInfo()).toMatchObject({ cropX: 0, cropY: 0 })
+    expect(selectedImageInfo()).toMatchObject({
+      cropped: true, width: 200, height: 100, href: 'https://example.com'
+    })
+
+    runtime.overlay.getSelection = () => [image]
+    expect(selectedImageInfo()).toMatchObject({ cropped: false })
   })
 
   it('adds link runtime support explicitly and removes it again on undo', () => {

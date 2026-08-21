@@ -30,6 +30,7 @@ import {
 } from './model/settings.js'
 import { setShapeColors, shapeColors, syncShapeGeometry } from './model/shapes.js'
 import { videoInfo, applyVideoProperties } from './model/media.js'
+import { imageOf, isImageFrame, readRect, removeCrop, resizeFrameContents } from './model/crop.js'
 export { saveDeck } from './model/save.js'
 export { slideSummaries } from './model/slides.js'
 
@@ -309,7 +310,13 @@ function placeCaretAtPoint(el, { x, y }) {
 export function editElement(el, event = null, { viaClick = false } = {}) {
   if (isEditingText() && activeElement() === el) return
   const tag = el.tagName.toLowerCase()
-  if (tag === 'img' || tag === 'svg' || tag === 'video') return
+  if (tag === 'img' || isImageFrame(el)) {
+    // double-clicking an image edits its crop (a plain click on the
+    // selected image must not — too easy to hit while moving it)
+    if (!viaClick) runtime.overlay.beginCrop(el)
+    return
+  }
+  if (tag === 'svg' || tag === 'video') return
   if (el.classList.contains('re-html')) {
     if (!viaClick) openHtmlEditor(el)
   } else if (el.classList.contains('re-math') || (el.querySelector('.katex') && isMathOnly(el))) {
@@ -835,7 +842,7 @@ const LAYER_KIND_LABELS = {
 /** Classify a slide element for the layers panel. */
 export function layerKind(el) {
   const tag = el.tagName.toLowerCase()
-  if (tag === 'img') return 'image'
+  if (tag === 'img' || isImageFrame(el)) return 'image'
   if (tag === 'video') return 'video'
   if (tag === 'svg') return 'shape'
   if (el.classList.contains('re-math') || el.querySelector?.(':scope .katex')) return 'math'
@@ -851,7 +858,8 @@ export function currentLayers() {
   const children = [...section.children].filter((el) => !el.matches('aside.notes, .re-transient'))
   return children.reverse().map((el, reverseIndex) => {
     const kind = layerKind(el)
-    const name = el.getAttribute('aria-label') || el.getAttribute('alt') || ''
+    const name = el.getAttribute('aria-label') || el.getAttribute('alt') ||
+      (kind === 'image' ? imageOf(el)?.getAttribute('alt') : '') || ''
     const text = kind === 'text' || kind === 'math' || kind === 'code'
       ? el.textContent?.trim().replace(/\s+/g, ' ').slice(0, 40) || ''
       : ''
@@ -1032,22 +1040,36 @@ export function setVideoProperties(values) {
 
 export function selectedImageInfo() {
   const sel = runtime.overlay?.getSelection() ?? []
-  const el = sel.length === 1 && sel[0].tagName.toLowerCase() === 'img' ? sel[0] : null
-  if (!el) return null
-  const position = (el.style.objectPosition || '50% 50%').split(/\s+/)
+  const el = sel.length === 1 ? sel[0] : null
+  const img = el ? imageOf(el) : null
+  if (!img) return null
   return {
     el,
+    cropped: isImageFrame(el),
     width: Math.round(parseFloat(el.style.width) || el.getBoundingClientRect().width),
     height: Math.round(parseFloat(el.style.height) || el.getBoundingClientRect().height),
-    crop: el.style.objectFit === 'cover',
-    cropX: Number.isFinite(parseFloat(position[0])) ? parseFloat(position[0]) : 50,
-    cropY: Number.isFinite(parseFloat(position[1])) ? parseFloat(position[1]) : 50,
     borderWidth: parseFloat(el.style.borderWidth) || 0,
     borderColor: el.style.borderColor || '#000000',
     radius: parseFloat(el.style.borderRadius) || 0,
     shadow: el.style.boxShadow !== '' && el.style.boxShadow !== 'none',
-    href: el.getAttribute('data-re-href') || ''
+    href: img.getAttribute('data-re-href') || ''
   }
+}
+
+/** Enter PowerPoint-style crop mode on the selected image. */
+export function cropSelectedImage() {
+  const sel = runtime.overlay?.getSelection() ?? []
+  if (sel.length === 1 && imageOf(sel[0])) runtime.overlay.beginCrop(sel[0])
+}
+
+/** Restore the full picture of a cropped image at its current size. */
+export function removeImageCrop() {
+  const info = selectedImageInfo()
+  if (!info?.cropped) return
+  snapshotSlide()
+  const img = removeCrop(info.el)
+  runtime.overlay.setSelection([img])
+  markDirty()
 }
 
 export function setImageProperties(values) {
@@ -1063,20 +1085,23 @@ export function setImageProperties(values) {
   if (href) snapshotDeck()
   else snapshotSlide()
   const { el } = info
-  if (values.width != null) el.style.width = `${Math.max(1, Number(values.width))}px`
-  if (values.height != null) el.style.height = `${Math.max(1, Number(values.height))}px`
-  if (values.crop != null) el.style.objectFit = values.crop ? 'cover' : 'contain'
-  const x = values.cropX ?? info.cropX
-  const y = values.cropY ?? info.cropY
-  if (values.cropX != null || values.cropY != null) el.style.objectPosition = `${x}% ${y}%`
+  const img = imageOf(el)
+  if (values.width != null || values.height != null) {
+    const start = { frame: readRect(el), img: readRect(img) }
+    const w = Math.max(1, Number(values.width ?? start.frame.width))
+    const h = Math.max(1, Number(values.height ?? start.frame.height))
+    el.style.width = `${w}px`
+    el.style.height = `${h}px`
+    if (info.cropped) resizeFrameContents(el, start, w, h)
+  }
   if (values.borderWidth != null) el.style.borderWidth = `${Math.max(0, Number(values.borderWidth))}px`
   if (values.borderWidth != null) el.style.borderStyle = Number(values.borderWidth) ? 'solid' : ''
   if (values.borderColor != null) el.style.borderColor = values.borderColor
   if (values.radius != null) el.style.borderRadius = `${Math.max(0, Number(values.radius))}px`
   if (values.shadow != null) el.style.boxShadow = values.shadow ? '0 8px 24px rgba(0,0,0,.35)' : ''
   if (values.href != null) {
-    if (href) el.setAttribute('data-re-href', href)
-    else el.removeAttribute('data-re-href')
+    if (href) img.setAttribute('data-re-href', href)
+    else img.removeAttribute('data-re-href')
     if (href) writeSettings(runtime.bridge.slidesEl, editor.settings)
   }
   runtime.overlay.refresh()
