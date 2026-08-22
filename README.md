@@ -86,6 +86,10 @@ workflows and the one-way eject tradeoff.
 - **Select**: click; shift-click or rubber-band for multi-select; Escape clears
 - **Move/resize/rotate**: drag the handles; snapping to slide edges/centers
   and sibling elements; arrow keys nudge (Shift = 10 px)
+- **Lines/arrows**: drag either endpoint handle to aim them; hold Shift to lock
+  the angle to 15° steps, and a near-flat drag snaps level on its own (Ctrl
+  drags freely). The Shape panel also has "Make horizontal"/"Make vertical",
+  which straighten an existing line without changing its length or centre
 - **Insert** (toolbar): text box, image (file picker, drop, or just Ctrl+V a
   screenshot), video (MP4/WebM picker or drop), rectangle/ellipse/line/arrow, LaTeX
   math (∑), code block (`{}`)

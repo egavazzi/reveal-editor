@@ -138,7 +138,44 @@ function lineEndpoints(svg, w, h) {
   const start = svg.getAttribute('data-re-line-start') || 'nw'
   const x1 = start.includes('w') ? 0 : w
   const y1 = start.includes('n') ? 0 : h
-  return { x1, y1, x2: w - x1, y2: h - y1 }
+  const points = { x1, y1, x2: w - x1, y2: h - y1 }
+  // A box a single pixel tall (or wide) is a segment meant to be flat: draw
+  // it dead level down the middle rather than with a 1px tilt.
+  if (h <= 1) points.y1 = points.y2 = h / 2
+  if (w <= 1) points.x1 = points.x2 = w / 2
+  return points
+}
+
+// Dragging an endpoint free-hand almost never lands exactly flat. Holding
+// Shift constrains the segment to 15deg steps (PowerPoint's behavior);
+// otherwise a small magnet pulls near-flat segments onto the horizontal or
+// vertical, and Ctrl (the editor's usual snap override) turns that off.
+export const ANGLE_SNAP_STEP = 15
+export const FLAT_SNAP_TOLERANCE = 4
+
+/**
+ * Move `moving` onto a constrained angle around `fixed`, keeping the segment
+ * length. With `step` the angle snaps to that many degrees; otherwise a
+ * segment within `tolerance` degrees of flat is pulled onto the axis. Returns
+ * `moving` unchanged when neither applies.
+ */
+export function constrainSegmentAngle(fixed, moving, { step = 0, tolerance = 0 } = {}) {
+  const dx = moving.x - fixed.x
+  const dy = moving.y - fixed.y
+  const length = Math.hypot(dx, dy)
+  if (!length) return { ...moving }
+  const degrees = (Math.atan2(dy, dx) * 180) / Math.PI
+  let snapped
+  if (step > 0) {
+    snapped = Math.round(degrees / step) * step
+  } else if (tolerance > 0) {
+    snapped = Math.round(degrees / 90) * 90
+    if (Math.abs(degrees - snapped) > tolerance) return { ...moving }
+  } else {
+    return { ...moving }
+  }
+  const radians = (snapped * Math.PI) / 180
+  return { x: fixed.x + Math.cos(radians) * length, y: fixed.y + Math.sin(radians) * length }
 }
 
 export function shapeColors(svg) {

@@ -568,6 +568,40 @@ export function setShapeProperties(values) {
   bumpSelection()
 }
 
+/**
+ * Straighten the selected line/arrow onto the horizontal or vertical, keeping
+ * its length, its centre, and the direction it points in.
+ */
+export function flattenSelectedLine(axis) {
+  const info = selectedShapeInfo()
+  if (!info || (info.kind !== 'line' && info.kind !== 'arrow')) return
+  snapshotSlide()
+  const { el, x, y, width, height } = info
+  const length = Math.round(Math.hypot(width, height))
+  const start = el.getAttribute('data-re-line-start') || 'nw'
+  // A flat box is 1px thick, and its segment runs down the middle of that
+  // pixel; ignoring the thickness keeps repeated flattening idempotent.
+  const cx = x + (width <= 1 ? 0 : width / 2)
+  const cy = y + (height <= 1 ? 0 : height / 2)
+  if (axis === 'vertical') {
+    el.style.left = `${Math.round(cx)}px`
+    el.style.top = `${Math.round(cy - length / 2)}px`
+    el.style.width = '1px'
+    el.style.height = `${Math.max(1, length)}px`
+    el.setAttribute('data-re-line-start', `${start.includes('n') ? 'n' : 's'}w`)
+  } else {
+    el.style.left = `${Math.round(cx - length / 2)}px`
+    el.style.top = `${Math.round(cy)}px`
+    el.style.width = `${Math.max(1, length)}px`
+    el.style.height = '1px'
+    el.setAttribute('data-re-line-start', `n${start.includes('w') ? 'w' : 'e'}`)
+  }
+  syncShapeGeometry(el)
+  runtime.overlay.refresh()
+  markDirty()
+  bumpSelection()
+}
+
 // --- slides ---
 
 export function slideAdd(layout = 'blank') {

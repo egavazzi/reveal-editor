@@ -5,7 +5,7 @@
     currentLayers, selectLayer, selectLayers, toggleLayerSelection,
     toggleLayerHidden, toggleLayerLocked, moveLayer, setLayerName,
     currentSpeakerNotes, selectedElementInfo, selectedImageInfo, setElementProperties,
-    selectedShapeInfo, setShapeProperties, resizeDeck,
+    selectedShapeInfo, setShapeProperties, flattenSelectedLine, resizeDeck,
     selectedVideoInfo, setVideoProperties,
     setImageProperties, cropSelectedImage, removeImageCrop,
     setSpeakerNotes, updateDeckSettings as updateSettings
@@ -562,7 +562,13 @@
       {#if shape.kind !== 'line' && shape.kind !== 'arrow'}
         <label>Rotation (°)<input type="number" step="0.1" value={shape.rotation} onchange={(e) => setShapeProperties({ rotation: +e.currentTarget.value })} /></label>
       {:else}
-        <p class="hint">Drag either blue endpoint on the canvas to change direction and length.</p>
+        <div class="row flatten">
+          <button onclick={() => flattenSelectedLine('horizontal')}>Make horizontal</button>
+          <button onclick={() => flattenSelectedLine('vertical')}>Make vertical</button>
+        </div>
+        <p class="hint">Drag either blue endpoint on the canvas to change direction and
+          length. Hold Shift while dragging to lock the angle to 15° steps; near-flat
+          drags snap level on their own (hold Ctrl to drag freely).</p>
       {/if}
       <h3>Appearance</h3>
       {#if shape.fill}
@@ -600,6 +606,7 @@
   input[type='checkbox'] { width: auto; accent-color: var(--ui-primary); } input[type='color'] { height: 30px; padding: 1px; }
   .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .hint, .empty { margin: 4px 0 10px; color: var(--ui-faint); font-size: 11px; }
+  .row.flatten { margin: 10px 0 6px; }
 
   /* layers */
   .layer { display: flex; align-items: center; gap: 2px; margin: 2px 0; border-radius: 6px; padding: 2px; }
