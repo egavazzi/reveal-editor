@@ -3,7 +3,7 @@
 import Moveable from 'moveable'
 import Selecto from 'selecto'
 import { ensurePositioned, roundGeometry } from '../model/position.js'
-import { syncShapeGeometry } from '../model/shapes.js'
+import { ANGLE_SNAP_STEP, FLAT_SNAP_TOLERANCE, constrainSegmentAngle, syncShapeGeometry } from '../model/shapes.js'
 import { imageOf, isImageFrame, readRect, resizeFrameContents } from '../model/crop.js'
 import { createCropMode } from './crop.js'
 import { isRatioLocked } from '../model/ratio.js'
@@ -235,10 +235,16 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
     const rect = section.getBoundingClientRect()
     const canvas = getCanvasSize(bridge)
     const scale = rect.width / canvas.width || 1
-    const moving = {
+    const pointer = {
       x: (inputEvent.clientX - rect.left) / scale,
       y: (inputEvent.clientY - rect.top) / scale
     }
+    // Shift = strict 15deg steps; otherwise a near-flat drag lands flat
+    // unless Ctrl (the snap override) is down.
+    const moving = constrainSegmentAngle(state.fixed, pointer, {
+      step: inputEvent.shiftKey ? ANGLE_SNAP_STEP : 0,
+      tolerance: inputEvent.shiftKey || snapOverride(inputEvent) ? 0 : FLAT_SNAP_TOLERANCE
+    })
     const start = state.movingStart ? moving : state.fixed
     const end = state.movingStart ? state.fixed : moving
     const left = Math.min(start.x, end.x)
@@ -292,6 +298,10 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
     if (cropMode.active()) return // the crop controller owns the pointer
     // Ignore clicks on moveable handles, and leave text editing alone
     if (e.target.closest?.('.moveable-control-box, .re-moveable')) return
+    // The trailing click of a gesture is not a selection click. It usually
+    // lands back on the element, but a snapped endpoint drag leaves the
+    // pointer off it — that click must not clear the selection.
+    if (Date.now() - lastRealDrag < 300) return
     if (isEditingText() && activeElement()?.contains(e.target)) return
     // Ctrl+click on a video is native player interaction, not selection
     if (e.ctrlKey && e.target.closest?.('video')) return

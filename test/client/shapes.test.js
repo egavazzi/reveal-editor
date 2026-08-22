@@ -2,10 +2,10 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { editor, runtime } from '../../src/client/stores/editor.svelte.js'
 import {
-  selectedShapeInfo, setShapeProperties, setTextColor
+  flattenSelectedLine, selectedShapeInfo, setShapeProperties, setTextColor
 } from '../../src/client/lib/actions.js'
 import {
-  createShape, setShapeColors, shapeColors, syncShapeGeometry
+  ANGLE_SNAP_STEP, constrainSegmentAngle, createShape, setShapeColors, shapeColors, syncShapeGeometry
 } from '../../src/client/lib/model/shapes.js'
 import { DEFAULT_SETTINGS } from '../../src/client/lib/model/settings.js'
 
@@ -47,6 +47,58 @@ describe('shape editing', () => {
     arrow.style.height = '80px'
     syncShapeGeometry(arrow)
     expect(arrow.querySelector('polygon').getAttribute('points').startsWith('120,80 ')).toBe(true)
+  })
+
+  it('draws a one-pixel-thin box as a dead level segment', () => {
+    const line = createShape(document, 'line')
+    syncShapeGeometry(line)
+    const el = line.querySelector('line')
+    expect(el.getAttribute('y1')).toBe(el.getAttribute('y2'))
+
+    line.style.width = '1px'
+    line.style.height = '200px'
+    syncShapeGeometry(line)
+    expect(el.getAttribute('x1')).toBe(el.getAttribute('x2'))
+  })
+
+  it('constrains an endpoint to 15° steps, and only near-flat ones otherwise', () => {
+    const fixed = { x: 100, y: 100 }
+    // 4° off horizontal, dragged with Shift → exactly horizontal, same length
+    const stepped = constrainSegmentAngle(fixed, { x: 300, y: 114 }, { step: ANGLE_SNAP_STEP })
+    expect(stepped.y).toBeCloseTo(100)
+    expect(stepped.x).toBeCloseTo(100 + Math.hypot(200, 14))
+
+    // 40° off horizontal with Shift → nearest 15° step (45°), not flattened
+    const diagonal = constrainSegmentAngle(fixed, { x: 200, y: 184 }, { step: ANGLE_SNAP_STEP })
+    expect(diagonal.x - fixed.x).toBeCloseTo(diagonal.y - fixed.y)
+
+    // without Shift only a near-flat drag is pulled level
+    expect(constrainSegmentAngle(fixed, { x: 300, y: 106 }, { tolerance: 4 }).y).toBeCloseTo(100)
+    expect(constrainSegmentAngle(fixed, { x: 300, y: 160 }, { tolerance: 4 })).toEqual({ x: 300, y: 160 })
+    // …and nothing moves when snapping is overridden
+    expect(constrainSegmentAngle(fixed, { x: 300, y: 106 }, {})).toEqual({ x: 300, y: 106 })
+  })
+
+  it('flattens a crooked arrow while keeping its length, centre and direction', () => {
+    const arrow = createShape(document, 'arrow')
+    arrow.style.position = 'absolute'
+    arrow.style.left = '100px'
+    arrow.style.top = '100px'
+    arrow.style.width = '160px'
+    arrow.style.height = '120px'
+    arrow.setAttribute('data-re-line-start', 'ne')
+    document.querySelector('section').appendChild(arrow)
+    runtime.overlay.getSelection = () => [arrow]
+
+    flattenSelectedLine('horizontal')
+    // centre stays at (180, 160), length 200 is preserved, box is flat
+    expect(selectedShapeInfo()).toMatchObject({ x: 80, y: 160, width: 200, height: 1 })
+    // it still points west, as it did before
+    expect(arrow.getAttribute('data-re-line-start')).toBe('ne')
+
+    flattenSelectedLine('vertical')
+    expect(selectedShapeInfo()).toMatchObject({ x: 180, y: 60, width: 1, height: 200 })
+    expect(arrow.getAttribute('data-re-line-start')).toBe('nw')
   })
 
   it('round-trips fill, stroke, and stroke width', () => {
