@@ -471,8 +471,8 @@ body.no-uit-logo .reveal .slides::after {
 /*********************************************
  * ANIMATED CLOSING EMBLEM ("Björn’s special" closing slide)
  * The emblem grows from a dot to full size over 12 s, then starts spinning.
- * The spin's angular velocity grows exponentially (theta ~ 360^x, from
- * ~2 deg/s to ~708 deg/s over 60 s, sampled into keyframes below); the ramp
+ * The spin's angular velocity grows exponentially (theta ~ 3600^x, from
+ * ~0.5 deg/s to ~1770 deg/s = ~5 rev/s over 30 s, sampled below); the ramp
  * ends on a whole turn at the steady spin's speed, so the infinite spin that
  * takes over continues seamlessly. Zoom and spin run on the individual
  * scale/rotate properties so neither overrides the other. The animations
@@ -483,8 +483,8 @@ body.no-uit-logo .reveal .slides::after {
   transform-origin: center;
   animation:
     uit-emblem-zoom 12s ease-in-out both,
-    uit-emblem-spin-up 60s linear 12s forwards,
-    uit-emblem-spin 0.508s linear 72s infinite;
+    uit-emblem-spin-up 30s linear 12s forwards,
+    uit-emblem-spin 0.2035s linear 42s infinite;
 }
 
 body.re-edit-mode .reveal .slides section .uit-emblem-zoom-spin {
@@ -504,46 +504,56 @@ body.re-edit-mode .reveal .slides section .uit-emblem-zoom-spin {
 
 @keyframes uit-emblem-spin-up {
   0% { rotate: 0.0deg; }
-  2.5% { rotate: 3.2deg; }
-  5% { rotate: 6.9deg; }
-  7.5% { rotate: 11.1deg; }
-  10% { rotate: 16.1deg; }
-  12.5% { rotate: 21.8deg; }
-  15% { rotate: 28.4deg; }
-  17.5% { rotate: 36.1deg; }
-  20% { rotate: 45.0deg; }
-  22.5% { rotate: 55.4deg; }
-  25% { rotate: 67.3deg; }
-  27.5% { rotate: 81.2deg; }
-  30% { rotate: 97.2deg; }
-  32.5% { rotate: 115.8deg; }
-  35% { rotate: 137.3deg; }
-  37.5% { rotate: 162.3deg; }
-  40% { rotate: 191.2deg; }
-  42.5% { rotate: 224.7deg; }
-  45% { rotate: 263.5deg; }
-  47.5% { rotate: 308.4deg; }
-  50% { rotate: 360.5deg; }
-  52.5% { rotate: 420.8deg; }
-  55% { rotate: 490.7deg; }
-  57.5% { rotate: 571.7deg; }
-  60% { rotate: 665.5deg; }
-  62.5% { rotate: 774.1deg; }
-  65% { rotate: 900.0deg; }
-  67.5% { rotate: 1045.9deg; }
-  70% { rotate: 1214.9deg; }
-  72.5% { rotate: 1410.7deg; }
-  75% { rotate: 1637.5deg; }
-  77.5% { rotate: 1900.3deg; }
-  80% { rotate: 2204.7deg; }
-  82.5% { rotate: 2557.4deg; }
-  85% { rotate: 2966.0deg; }
-  87.5% { rotate: 3439.4deg; }
-  90% { rotate: 3987.8deg; }
-  92.5% { rotate: 4623.1deg; }
-  95% { rotate: 5359.2deg; }
-  97.5% { rotate: 6212.0deg; }
-  100% { rotate: 7200.0deg; }
+  2% { rotate: 0.3deg; }
+  4% { rotate: 0.7deg; }
+  6% { rotate: 1.1deg; }
+  8% { rotate: 1.7deg; }
+  10% { rotate: 2.3deg; }
+  12% { rotate: 3.0deg; }
+  14% { rotate: 3.9deg; }
+  16% { rotate: 4.9deg; }
+  18% { rotate: 6.1deg; }
+  20% { rotate: 7.5deg; }
+  22% { rotate: 9.1deg; }
+  24% { rotate: 11.0deg; }
+  26% { rotate: 13.3deg; }
+  28% { rotate: 16.0deg; }
+  30% { rotate: 19.2deg; }
+  32% { rotate: 22.9deg; }
+  34% { rotate: 27.3deg; }
+  36% { rotate: 32.5deg; }
+  38% { rotate: 38.6deg; }
+  40% { rotate: 45.8deg; }
+  42% { rotate: 54.3deg; }
+  44% { rotate: 64.3deg; }
+  46% { rotate: 76.1deg; }
+  48% { rotate: 89.9deg; }
+  50% { rotate: 106.2deg; }
+  52% { rotate: 125.5deg; }
+  54% { rotate: 148.1deg; }
+  56% { rotate: 174.8deg; }
+  58% { rotate: 206.2deg; }
+  60% { rotate: 243.2deg; }
+  62% { rotate: 286.8deg; }
+  64% { rotate: 338.2deg; }
+  66% { rotate: 398.7deg; }
+  68% { rotate: 469.9deg; }
+  70% { rotate: 553.9deg; }
+  72% { rotate: 652.7deg; }
+  74% { rotate: 769.2deg; }
+  76% { rotate: 906.4deg; }
+  78% { rotate: 1068.0deg; }
+  80% { rotate: 1258.4deg; }
+  82% { rotate: 1482.6deg; }
+  84% { rotate: 1746.8deg; }
+  86% { rotate: 2057.9deg; }
+  88% { rotate: 2424.5deg; }
+  90% { rotate: 2856.2deg; }
+  92% { rotate: 3364.8deg; }
+  94% { rotate: 3963.9deg; }
+  96% { rotate: 4669.6deg; }
+  98% { rotate: 5500.8deg; }
+  100% { rotate: 6480.0deg; }
 }
 
 @keyframes uit-emblem-spin {
