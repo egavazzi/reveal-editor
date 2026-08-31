@@ -2,7 +2,7 @@
 // small JSON <template>, so they are covered by the existing lossless save
 // path and remain easy to inspect or edit by hand.
 import { editor, runtime } from '../../stores/editor.svelte.js'
-import { VIDEO_CONTROLS_CSS, VIDEO_CONTROLS_SCRIPT } from './videocontrols.js'
+import { VIDEO_AUTOPLAY_SCRIPT, VIDEO_CONTROLS_CSS, VIDEO_CONTROLS_SCRIPT } from './videocontrols.js'
 
 export const REVEAL_THEMES = Object.freeze([
   'black', 'white', 'league', 'beige', 'sky', 'night', 'serif', 'simple',
@@ -320,8 +320,8 @@ export function writeSettings(slidesEl, settings) {
     script.setAttribute('data-re-settings-runtime', '')
     style.after(script)
   }
-  // one node carries both runtimes, so repeated writes never stack up
-  script.textContent = `${RUNTIME_SCRIPT}\n${VIDEO_CONTROLS_SCRIPT}`
+  // one node carries every runtime, so repeated writes never stack up
+  script.textContent = `${RUNTIME_SCRIPT}\n${VIDEO_CONTROLS_SCRIPT}\n${VIDEO_AUTOPLAY_SCRIPT}`
 }
 
 export function initializeSettings(bridge, fallbackSettings = null) {

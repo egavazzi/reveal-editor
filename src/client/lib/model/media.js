@@ -1,11 +1,17 @@
 // Video/media playback properties. Persisted as plain attributes on the
 // <video> element: native `loop`/`muted`/`playsinline`, reveal.js's
-// `data-autoplay` (plays when the slide becomes visible), and
-// `data-re-controls` for the control bar the deck runtime draws (see
-// videocontrols.js). Playback settings live on the <video> even when a crop
-// frame wraps it; size and decorations belong to the outer element.
+// `data-autoplay` (plays when the slide becomes visible) or the editor's
+// `data-re-autoplay-delay` in its place, and `data-re-controls` for the
+// control bar the deck runtime draws (see videocontrols.js). Playback
+// settings live on the <video> even when a crop frame wraps it; size and
+// decorations belong to the outer element.
 import { isImageFrame, readRect, resizeFrameContents, videoOf } from './crop.js'
-import { VIDEO_CONTROLS_ATTR } from './videocontrols.js'
+import { VIDEO_CONTROLS_ATTR, VIDEO_DELAY_ATTR } from './videocontrols.js'
+
+/** Autoplay is on whichever way it is written: at once, or after a delay. */
+function autoplayDelayOf(video) {
+  return Math.max(0, parseFloat(video.getAttribute(VIDEO_DELAY_ATTR)) || 0)
+}
 
 export function videoInfo(el) {
   const video = videoOf(el)
@@ -19,7 +25,8 @@ export function videoInfo(el) {
     height: Math.round(parseFloat(el.style.height) || el.getBoundingClientRect().height),
     // decode failure (codec/container the browser can't play)
     broken: Boolean(video.error),
-    autoplay: video.hasAttribute('data-autoplay'),
+    autoplay: video.hasAttribute('data-autoplay') || video.hasAttribute(VIDEO_DELAY_ATTR),
+    autoplayDelay: autoplayDelayOf(video),
     loop: video.hasAttribute('loop'),
     muted: video.hasAttribute('muted'),
     controls: video.hasAttribute(VIDEO_CONTROLS_ATTR)
@@ -38,7 +45,19 @@ export function applyVideoProperties(el, values) {
       resizeFrameContents(el, start, parseFloat(el.style.width), parseFloat(el.style.height))
     }
   }
-  if (values.autoplay != null) video.toggleAttribute('data-autoplay', Boolean(values.autoplay))
+  if (values.autoplay != null || values.autoplayDelay != null) {
+    const autoplay = values.autoplay != null
+      ? Boolean(values.autoplay)
+      : video.hasAttribute('data-autoplay') || video.hasAttribute(VIDEO_DELAY_ATTR)
+    const delay = values.autoplayDelay != null
+      ? Math.max(0, Number(values.autoplayDelay) || 0)
+      : autoplayDelayOf(video)
+    // the two attributes are exclusive: reveal starts a data-autoplay video
+    // the moment the slide opens, which is not what a delay asks for
+    video.toggleAttribute('data-autoplay', autoplay && delay === 0)
+    if (autoplay && delay > 0) video.setAttribute(VIDEO_DELAY_ATTR, String(delay))
+    else video.removeAttribute(VIDEO_DELAY_ATTR)
+  }
   if (values.loop != null) {
     video.toggleAttribute('loop', Boolean(values.loop))
     video.loop = Boolean(values.loop)

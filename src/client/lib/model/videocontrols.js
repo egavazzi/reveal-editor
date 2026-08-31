@@ -16,6 +16,12 @@
 
 export const VIDEO_CONTROLS_ATTR = 'data-re-controls'
 
+// Seconds between a slide appearing and its video starting. reveal.js starts
+// a `data-autoplay` video the moment the slide opens, so a delayed video
+// carries this attribute *instead* of `data-autoplay`: the runtime below owns
+// its start.
+export const VIDEO_DELAY_ATTR = 'data-re-autoplay-delay'
+
 export const VIDEO_CONTROLS_CLASS = 're-video-controls'
 
 const SCRIPT_ID = 're-video-controls-runtime'
@@ -396,6 +402,49 @@ export const VIDEO_CONTROLS_SCRIPT = `(() => {
   } else {
     start();
   }
+})();`
+
+// Delayed autoplay, for the presented deck only: the edit canvas is not a
+// presentation, and a slide opening there must not start playing. Ships in
+// the deck's runtime script, which the editor never injects into its canvas.
+export const VIDEO_AUTOPLAY_SCRIPT = `(() => {
+  if (location.search.includes('editmode=1') || location.search.includes('print-pdf')) return;
+  const ATTR = '${VIDEO_DELAY_ATTR}';
+  let timers = [];
+  const clear = () => {
+    for (const timer of timers) clearTimeout(timer);
+    timers = [];
+  };
+  // The delay counts from the slide opening, and a video restarts on every
+  // entry — the same contract reveal gives data-autoplay.
+  const arm = () => {
+    clear();
+    const slide = Reveal.getCurrentSlide();
+    if (!slide) return;
+    for (const video of slide.querySelectorAll('video[' + ATTR + ']')) {
+      const seconds = parseFloat(video.getAttribute(ATTR));
+      if (!(seconds >= 0)) continue;
+      video.pause();
+      video.currentTime = 0;
+      timers.push(setTimeout(() => {
+        // a delay can outlast the slide it was armed on
+        if (Reveal.getCurrentSlide() !== slide) return;
+        const started = video.play();
+        if (started && typeof started.catch === 'function') {
+          started.catch((error) => {
+            console.warn('reveal-editor: delayed autoplay was blocked', error);
+          });
+        }
+      }, seconds * 1000));
+    }
+  };
+  const install = () => {
+    if (!window.Reveal || typeof Reveal.on !== 'function') return;
+    Reveal.on('ready', arm);
+    Reveal.on('slidechanged', arm);
+    if (Reveal.isReady && Reveal.isReady()) arm();
+  };
+  addEventListener('load', () => setTimeout(install, 0), { once: true });
 })();`
 
 /**

@@ -533,6 +533,19 @@
       {/if}
       <h3>Playback</h3>
       <label class="check"><input type="checkbox" checked={video.autoplay} onchange={(e) => setVideoProperties({ autoplay: e.currentTarget.checked })} /> Autoplay when the slide appears</label>
+      {#if video.autoplay}
+        <label>Start delay (seconds, 0 = at once)<input
+          type="number"
+          min="0"
+          max="600"
+          step="0.5"
+          value={video.autoplayDelay}
+          onchange={(e) => setVideoProperties({ autoplayDelay: Math.max(0, +e.currentTarget.value || 0) })}
+        /></label>
+        {#if video.autoplayDelay > 0}
+          <p class="hint">The video starts {video.autoplayDelay}&nbsp;s after the slide opens, and restarts on every visit. Only while presenting — the editing canvas never plays on its own.</p>
+        {/if}
+      {/if}
       <label class="check"><input type="checkbox" checked={video.loop} onchange={(e) => setVideoProperties({ loop: e.currentTarget.checked })} /> Loop</label>
       <label class="check"><input type="checkbox" checked={video.muted} onchange={(e) => setVideoProperties({ muted: e.currentTarget.checked })} /> Start muted</label>
       <label class="check"><input type="checkbox" checked={video.controls} onchange={(e) => setVideoProperties({ controls: e.currentTarget.checked })} /> Show player controls</label>

@@ -139,7 +139,9 @@ workflows and the one-way eject tradeoff.
   clicking the picture plays or pauses it. Controls are recorded as
   `data-re-controls`, and a video
   that arrives with the native `controls` attribute is converted the first
-  time the deck is opened
+  time the deck is opened. Autoplay can wait: a start delay in seconds
+  (`data-re-autoplay-delay`, written instead of reveal's `data-autoplay`)
+  starts the video that long after its slide opens, while presenting only
 - **Deck setup**: the Deck panel controls the reveal theme, canvas format/size
   and margins, editor grid display/snapping, navigation-arrow visibility, and
   slide number format/position, typography, and transitions

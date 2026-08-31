@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest'
 import { videoInfo, applyVideoProperties } from '../../src/client/lib/model/media.js'
-import { VIDEO_CONTROLS_ATTR } from '../../src/client/lib/model/videocontrols.js'
+import { VIDEO_CONTROLS_ATTR, VIDEO_DELAY_ATTR } from '../../src/client/lib/model/videocontrols.js'
 import { cleanElementHtml } from '../../src/client/lib/model/clean.js'
 
 function makeVideo(attrs = '') {
@@ -34,6 +34,38 @@ describe('video media properties', () => {
     expect(el.hasAttribute('data-autoplay')).toBe(false)
     expect(el.hasAttribute('loop')).toBe(false)
     expect(el.hasAttribute('muted')).toBe(false)
+  })
+
+  it('records a start delay in place of reveal\'s immediate autoplay', () => {
+    const el = makeVideo()
+    applyVideoProperties(el, { autoplay: true })
+    expect(el.hasAttribute('data-autoplay')).toBe(true)
+    expect(videoInfo(el)).toMatchObject({ autoplay: true, autoplayDelay: 0 })
+
+    // reveal starts a data-autoplay video the moment the slide opens, so a
+    // delayed one must not carry it
+    applyVideoProperties(el, { autoplayDelay: 2.5 })
+    expect(el.getAttribute(VIDEO_DELAY_ATTR)).toBe('2.5')
+    expect(el.hasAttribute('data-autoplay')).toBe(false)
+    expect(videoInfo(el)).toMatchObject({ autoplay: true, autoplayDelay: 2.5 })
+
+    // back to zero: immediate autoplay again
+    applyVideoProperties(el, { autoplayDelay: 0 })
+    expect(el.hasAttribute(VIDEO_DELAY_ATTR)).toBe(false)
+    expect(el.hasAttribute('data-autoplay')).toBe(true)
+
+    // turning autoplay off clears both spellings
+    applyVideoProperties(el, { autoplayDelay: 3 })
+    applyVideoProperties(el, { autoplay: false })
+    expect(el.hasAttribute(VIDEO_DELAY_ATTR)).toBe(false)
+    expect(el.hasAttribute('data-autoplay')).toBe(false)
+    expect(videoInfo(el)).toMatchObject({ autoplay: false, autoplayDelay: 0 })
+  })
+
+  it('saves the start delay', () => {
+    const el = makeVideo()
+    applyVideoProperties(el, { autoplay: true, autoplayDelay: 1.5 })
+    expect(cleanElementHtml(el.closest('section'))).toContain(`${VIDEO_DELAY_ATTR}="1.5"`)
   })
 
   it('rejects non-video elements', () => {

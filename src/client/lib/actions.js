@@ -32,7 +32,7 @@ import { setShapeColors, shapeColors, syncShapeGeometry } from './model/shapes.j
 import { videoInfo, applyVideoProperties } from './model/media.js'
 import { imageOf, isImageFrame, mediaOf, readRect, removeCrop, resizeFrameContents, rotationOf, videoOf } from './model/crop.js'
 import { isRatioLocked, setRatioLocked } from './model/ratio.js'
-import { VIDEO_CONTROLS_ATTR } from './model/videocontrols.js'
+import { VIDEO_CONTROLS_ATTR, VIDEO_DELAY_ATTR } from './model/videocontrols.js'
 export { saveDeck } from './model/save.js'
 export { slideSummaries } from './model/slides.js'
 
@@ -68,15 +68,16 @@ function afterHistory(entry) {
 let autosaveTimer = null
 
 /**
- * A video's control bar is built by the deck runtime, so a deck that holds
- * one needs the support nodes even if its settings were never touched.
+ * A video's control bar and its delayed start are built by the deck runtime,
+ * so a deck that asks for either needs the support nodes even if its settings
+ * were never touched.
  * writeSettings is idempotent and the nodes are shared with every other
  * runtime feature, so this adds them once and never churns.
  */
 function ensureVideoControlsRuntime() {
   const slides = runtime.bridge?.slidesEl
   if (!slides || hasStoredSettings(slides)) return
-  if (slides.querySelector(`video[${VIDEO_CONTROLS_ATTR}]`)) {
+  if (slides.querySelector(`video[${VIDEO_CONTROLS_ATTR}], video[${VIDEO_DELAY_ATTR}]`)) {
     writeSettings(slides, editor.settings)
   }
 }
@@ -1210,7 +1211,7 @@ export function setVideoProperties(values) {
   if (!info) return
   // A video's controls are the deck runtime's bar. Capture the whole deck so
   // undo can also remove the support nodes the first one adds.
-  const runtimeControls = values.controls === true
+  const runtimeControls = values.controls === true || Number(values.autoplayDelay) > 0
   if (runtimeControls) snapshotDeck()
   else snapshotSlide()
   applyVideoProperties(info.el, values)
