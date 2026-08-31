@@ -173,11 +173,12 @@ function fileNameOf(path) {
 
 /**
  * Convert a just-uploaded asset the browser can't show into one it can,
- * reporting progress in the status bar. Resolves to the new deck-relative
- * path, or null when the needed tool is missing or the conversion failed
- * (the status bar then says why).
+ * reporting progress in the status bar (and to `onProgress`, for the box on
+ * the slide). Resolves to the new deck-relative path, or null when the
+ * needed tool is missing or the conversion failed (the status bar then
+ * says why).
  */
-export async function convertIfPossible(path, name = fileNameOf(path)) {
+export async function convertIfPossible(path, name = fileNameOf(path), { onProgress } = {}) {
   const video = isVideoPath(path)
   converters ??= converterStatus().catch(() => ({ ffmpeg: null, imagemagick: null }))
   const status = await converters
@@ -195,7 +196,9 @@ export async function convertIfPossible(path, name = fileNameOf(path)) {
   try {
     const converted = await convertAsset(path, {
       onProgress: (fraction) => {
-        if (editor.conversion && video) editor.conversion.progress = fraction
+        if (!video) return
+        if (editor.conversion) editor.conversion.progress = fraction
+        onProgress?.(fraction)
       }
     })
     editor.conversion = null

@@ -145,6 +145,29 @@ function injectEditStyles(doc) {
     /* selection frame handles overlap the player's control bar; get them
        fully out of the way while the native player is live */
     body.re-media-live .moveable-control-box { display: none !important; }
+    /* stand-in box while a dropped file is being converted server-side */
+    .reveal .slides section .re-converting {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 14px; box-sizing: border-box; padding: 16px; overflow: hidden;
+      border: 3px dashed rgba(47,111,186,.8); border-radius: 10px;
+      background: rgba(232,240,250,.96); color: #2f6fba;
+      box-shadow: 0 4px 18px rgba(0,0,0,.18);
+      font: 600 20px/1.3 system-ui, sans-serif; text-align: center;
+      pointer-events: none; z-index: 2147483645;
+    }
+    .re-converting .re-spinner {
+      width: 40px; height: 40px; border-radius: 50%;
+      border: 5px solid rgba(47,111,186,.25); border-top-color: #2f6fba;
+      animation: re-spin 0.8s linear infinite;
+    }
+    .re-converting .re-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .re-converting .re-progress {
+      width: 70%; height: 8px; border-radius: 4px; overflow: hidden;
+      background: rgba(47,111,186,.2);
+    }
+    .re-converting .re-progress[hidden] { display: none; }
+    .re-converting .re-progress > span { display: block; height: 100%; width: 0; background: #2f6fba; transition: width 0.2s; }
+    @keyframes re-spin { to { transform: rotate(360deg); } }
     body { overflow: hidden; }
   `
   doc.head.appendChild(style)

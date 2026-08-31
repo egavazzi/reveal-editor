@@ -7,15 +7,58 @@ import { uploadAsset } from '../api.js'
 
 let cascade = 0
 
-function placeAt(bridge, el, width, height) {
+function placeAt(bridge, el, width, height, { center } = {}) {
   const { width: cw, height: ch } = getCanvasSize(bridge)
   const offset = (cascade++ % 5) * 24
+  const cx = center ? center.x : cw / 2 + offset
+  const cy = center ? center.y : ch / 2 + offset
   el.style.position = 'absolute'
-  el.style.left = `${Math.round((cw - width) / 2) + offset}px`
-  el.style.top = `${Math.round((ch - height) / 2) + offset}px`
+  el.style.left = `${Math.round(cx - width / 2)}px`
+  el.style.top = `${Math.round(cy - height / 2)}px`
   const section = bridge.currentSection
   section.appendChild(el)
   return el
+}
+
+/**
+ * A box on the slide, where the media will land, showing that a conversion
+ * is running: dashed frame, spinner, file name, and a progress bar once
+ * `setProgress` is called with a fraction. Editor-only (`.re-transient`):
+ * never saved, never selectable. `center` is where the converted media
+ * should be placed to take the box's spot.
+ */
+function showConvertingBox(bridge, name, width, height) {
+  const doc = bridge.doc
+  const box = doc.createElement('div')
+  box.className = 're-transient re-converting'
+  box.style.width = `${width}px`
+  box.style.height = `${height}px`
+  const spinner = doc.createElement('div')
+  spinner.className = 're-spinner'
+  const label = doc.createElement('div')
+  label.className = 're-label'
+  label.textContent = `Converting ${name}…`
+  const bar = doc.createElement('div')
+  bar.className = 're-progress'
+  bar.hidden = true
+  const fill = doc.createElement('span')
+  bar.appendChild(fill)
+  box.append(spinner, label, bar)
+  placeAt(bridge, box, width, height)
+  return {
+    center: {
+      x: parseFloat(box.style.left) + width / 2,
+      y: parseFloat(box.style.top) + height / 2
+    },
+    setProgress(fraction) {
+      bar.hidden = false
+      fill.style.width = `${Math.round(fraction * 100)}%`
+      label.textContent = `Converting ${name}… ${Math.round(fraction * 100)}%`
+    },
+    remove() {
+      box.remove()
+    }
+  }
 }
 
 export function insertTextBox(bridge) {
@@ -38,7 +81,7 @@ export function insertShape(bridge, kind) {
 /**
  * Upload an image blob to the deck's assets/ dir and insert it, scaled to
  * fit comfortably on the canvas at natural aspect ratio. When the browser
- * cannot decode the file, `convert(path, name)` gets a chance to produce a
+ * cannot decode the file, `convert(path, name, { onProgress })` gets a chance to produce a
  * displayable copy; the insert fails when it cannot.
  */
 export async function insertImageBlob(bridge, blob, name, { convert } = {}) {
@@ -52,14 +95,21 @@ export async function insertImageBlob(bridge, blob, name, { convert } = {}) {
     probe.src = src
   })
   let natural
+  let center
   try {
     natural = await measure(path)
   } catch (err) {
     if (!convert) throw err
-    const converted = await convert(path, name)
-    if (!converted) throw err
-    path = converted
-    natural = await measure(path)
+    const box = showConvertingBox(bridge, name, 400, 300)
+    try {
+      const converted = await convert(path, name, { onProgress: box.setProgress })
+      if (!converted) throw err
+      path = converted
+      natural = await measure(path)
+      center = box.center
+    } finally {
+      box.remove()
+    }
   }
   const { width: cw, height: ch } = getCanvasSize(bridge)
   const scale = Math.min(1, (cw * 0.5) / natural.w, (ch * 0.6) / natural.h)
@@ -71,12 +121,12 @@ export async function insertImageBlob(bridge, blob, name, { convert } = {}) {
   img.src = path
   img.style.width = `${w}px`
   img.style.height = `${h}px`
-  return placeAt(bridge, img, w, h)
+  return placeAt(bridge, img, w, h, { center })
 }
 
 /**
  * Upload and insert an HTML5 video with its intrinsic aspect ratio. When
- * the browser can't decode the file, `convert(path, name)` gets a chance to
+ * the browser can't decode the file, `convert(path, name, { onProgress })` gets a chance to
  * produce a playable copy.
  */
 export async function insertVideoBlob(bridge, blob, name, { convert } = {}) {
@@ -94,18 +144,26 @@ export async function insertVideoBlob(bridge, blob, name, { convert } = {}) {
     probe.src = src
   })
   let natural
+  let center
   try {
     natural = await measure(path)
   } catch {
     // Undecodable here: convert if we can, otherwise insert the original
     // anyway (another browser may play it); the video panel explains.
-    const converted = convert ? await convert(path, name) : null
-    if (converted) {
-      path = converted
-      natural = await measure(path).catch(() => ({ w: 640, h: 360 }))
-    } else {
-      natural = { w: 640, h: 360 }
+    if (convert) {
+      const box = showConvertingBox(bridge, name, 480, 270)
+      try {
+        const converted = await convert(path, name, { onProgress: box.setProgress })
+        if (converted) {
+          path = converted
+          natural = await measure(path).catch(() => ({ w: 640, h: 360 }))
+        }
+        center = box.center
+      } finally {
+        box.remove()
+      }
     }
+    natural ??= { w: 640, h: 360 }
   }
   const { width: cw, height: ch } = getCanvasSize(bridge)
   const scale = Math.min(1, (cw * 0.6) / natural.w, (ch * 0.6) / natural.h)
@@ -118,7 +176,7 @@ export async function insertVideoBlob(bridge, blob, name, { convert } = {}) {
   video.preload = 'metadata'
   video.style.width = `${w}px`
   video.style.height = `${h}px`
-  return placeAt(bridge, video, w, h)
+  return placeAt(bridge, video, w, h, { center })
 }
 
 export function insertMathBox(bridge) {
