@@ -139,7 +139,12 @@ export const VIDEO_CONTROLS_SCRIPT = `(() => {
   const onPointerMove = (e) => {
     for (const entry of entries) entry.hover(e.clientX, e.clientY);
   };
-  const onPointerOut = () => {
+  // Only the document's own pointerleave means the pointer has left the page.
+  // pointerleave does not bubble, but it is still dispatched down to every
+  // ancestor in the capture phase, and the picture fires one the instant the
+  // bar appears under the pointer and takes the hover from it.
+  const onPointerOut = (e) => {
+    if (e.target !== document && e.target !== document.documentElement) return;
     for (const entry of entries) entry.hide();
   };
 

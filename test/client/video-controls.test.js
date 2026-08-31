@@ -194,6 +194,28 @@ describe('cropped video controls', () => {
     expect(bar.hasAttribute('data-show')).toBe(false)
   })
 
+  it('ignores the leave the picture fires when the bar takes the hover', () => {
+    const { video } = makeDeck({
+      cropped: false,
+      picture: 'left:100px; top:50px; width:400px; height:300px'
+    })
+    runRuntime()
+    const bar = video.nextElementSibling
+    pointerAt(300, 320)
+    expect(bar.hasAttribute('data-show')).toBe(true)
+
+    // Showing the bar puts it under the pointer, and the picture reports a
+    // pointerleave for that. It does not bubble, but it still reaches a
+    // capture listener on the document — and it does not mean the pointer
+    // left the media.
+    video.dispatchEvent(new Event('pointerleave'))
+    expect(bar.hasAttribute('data-show')).toBe(true)
+
+    // the pointer genuinely leaving the page does hide it
+    document.dispatchEvent(new Event('pointerleave'))
+    expect(bar.hasAttribute('data-show')).toBe(false)
+  })
+
   it('fades out over a playing video the pointer rests on', () => {
     vi.useFakeTimers()
     const { frame, video } = makeDeck()
