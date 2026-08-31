@@ -468,6 +468,41 @@ body.no-uit-logo .reveal .slides::after {
   display: none;
 }
 
+/*********************************************
+ * ANIMATED CLOSING EMBLEM ("Björn version" closing slide)
+ * The emblem grows from a dot to full size over 12 s, then from 2 min on
+ * rotates continuously. Both run on the individual scale/rotate properties
+ * so neither overrides the other. The animations restart every time the
+ * slide becomes the present one; edit mode and reduced-motion users get the
+ * static emblem.
+ *********************************************/
+.reveal .slides section.present .uit-emblem-zoom-spin {
+  transform-origin: center;
+  animation:
+    uit-emblem-zoom 12s ease-in-out both,
+    uit-emblem-spin 6s linear 120s infinite;
+}
+
+body.re-edit-mode .reveal .slides section .uit-emblem-zoom-spin {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal .slides section.present .uit-emblem-zoom-spin {
+    animation: none;
+  }
+}
+
+@keyframes uit-emblem-zoom {
+  from { scale: 0.02; }
+  to { scale: 1; }
+}
+
+@keyframes uit-emblem-spin {
+  from { rotate: 0deg; }
+  to { rotate: 360deg; }
+}
+
 @media print {
   .backgrounds {
     background-color: var(--r-background-color);

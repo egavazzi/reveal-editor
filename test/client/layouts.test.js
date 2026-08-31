@@ -106,6 +106,17 @@ describe('slide layouts', () => {
     expect(section.querySelector('svg[aria-label="UiT emblem"] path')).not.toBeNull()
   })
 
+  it('marks the emblem of the Björn closing slide for the theme animation', () => {
+    document.body.innerHTML = '<div class="slides"><section class="re-slide"></section></div>'
+    const section = document.querySelector('section')
+    applyLayout(section, 'uit-closing-bjorn', { width: 960, height: 700, theme: 'uit' })
+
+    expect(section.getAttribute('data-background-color')).toBe('#003349')
+    const emblem = section.querySelector('svg[aria-label="UiT emblem"]')
+    expect(emblem.classList.contains('uit-emblem-zoom-spin')).toBe(true)
+    expect(section.querySelector('svg.uit-emblem-zoom-spin path')).not.toBeNull()
+  })
+
   it('treats speaker notes and transient guidance as empty slide metadata', () => {
     document.body.innerHTML = '<section><aside class="notes">private</aside><div class="re-transient">hint</div></section>'
     expect(isSlideEmpty(document.querySelector('section'))).toBe(true)

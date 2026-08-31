@@ -10,6 +10,7 @@
 //     small round emblem bottom-right (the theme adds that emblem to every
 //     slide; slides that bring their own footer opt out via .uit-own-footer)
 //   - closing slides: centered emblem, motto bottom-left, uit.no bottom-right
+//     (the "Björn version" is the dark closing slide with an animated emblem)
 import {
   UIT_EMBLEM_VIEWBOX, UIT_EMBLEM_INNER, UIT_EMBLEM_PETROL_INNER,
   UIT_WORDMARK_VIEWBOX, UIT_WORDMARK_INNER
@@ -35,8 +36,13 @@ export const UIT_LAYOUTS = Object.freeze([
   { id: 'uit-content-red', label: 'UiT — Content (red)' },
   { id: 'uit-content-dark', label: 'UiT — Content (dark blue)' },
   { id: 'uit-closing', label: 'UiT — Closing (dark)' },
-  { id: 'uit-closing-light', label: 'UiT — Closing (light)' }
+  { id: 'uit-closing-light', label: 'UiT — Closing (light)' },
+  { id: 'uit-closing-bjorn', label: 'UiT — Closing (Björn version)' }
 ])
+
+// Class on the emblem of the "Björn" closing slide; the theme CSS animates it
+// (zoom in over 12 s, then spin from 2 min) while the slide is presented.
+export const UIT_EMBLEM_ANIMATED_CLASS = 'uit-emblem-zoom-spin'
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
 
@@ -46,9 +52,9 @@ const FRAME_BOTTOM_X = 0.576 // …and at the bottom of the colored field
 const BAND_TOP = 0.884 // white footer band starts here
 const WORDMARK = { x: 0.021, y: 0.912, w: 0.330 }
 
-function svgEl(doc, { viewBox, inner, label, x, y, w, h, preserve }) {
+function svgEl(doc, { viewBox, inner, label, x, y, w, h, preserve, className }) {
   const svg = doc.createElementNS(SVG_NS, 'svg')
-  svg.setAttribute('class', 're-el')
+  svg.setAttribute('class', className ? `re-el ${className}` : 're-el')
   svg.setAttribute('viewBox', viewBox)
   if (preserve) svg.setAttribute('preserveAspectRatio', preserve)
   if (label) svg.setAttribute('aria-label', label)
@@ -228,7 +234,8 @@ export function buildUitLayout(section, layout, _box, { sx = 1, sy = 1 } = {}) {
     elements.at(-1).className = 're-el re-text'
     elements.at(-1).style.height = `${Math.round(0.634 * H)}px`
   } else if (layout.startsWith('uit-closing')) {
-    const dark = layout === 'uit-closing'
+    const dark = layout !== 'uit-closing-light'
+    const animated = layout === 'uit-closing-bjorn'
     section.setAttribute('data-background-color', dark ? UIT_COLORS.petrol : UIT_COLORS.ice)
     section.classList.add('uit-own-footer')
     const size = 0.185 * W
@@ -237,7 +244,8 @@ export function buildUitLayout(section, layout, _box, { sx = 1, sy = 1 } = {}) {
         viewBox: UIT_EMBLEM_VIEWBOX,
         inner: dark ? UIT_EMBLEM_INNER : UIT_EMBLEM_PETROL_INNER,
         label: 'UiT emblem',
-        x: 0.408 * W, y: 0.275 * H, w: size, h: size
+        x: 0.408 * W, y: 0.275 * H, w: size, h: size,
+        className: animated ? UIT_EMBLEM_ANIMATED_CLASS : undefined
       }),
       textEl(doc, 'p', { text: 'Drivkraft i nord', x: 0.030 * W, y: 0.918 * H,
         w: 0.352 * W, size: fs(15), bold: true,
