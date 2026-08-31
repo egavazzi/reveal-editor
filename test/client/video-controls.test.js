@@ -5,6 +5,7 @@ import {
 } from '../../src/client/lib/model/videocontrols.js'
 import { wrapImage, unwrapImage } from '../../src/client/lib/model/crop.js'
 import { cleanElementHtml } from '../../src/client/lib/model/clean.js'
+import { DEFAULT_SETTINGS, writeSettings } from '../../src/client/lib/model/settings.js'
 
 function makeDeck({
   attrs = VIDEO_CONTROLS_ATTR,
@@ -422,6 +423,36 @@ describe('cropped video controls', () => {
     expect(bar.style.left).toBe('50px')
     expect(bar.style.width).toBe('300px')
     expect(bar.style.top).toBe('260px')
+  })
+
+  it('runs as the deck ships it, from the settings script node', () => {
+    makeDeck()
+    const slides = document.querySelector('.slides')
+    writeSettings(slides, { ...DEFAULT_SETTINGS })
+    // exactly the text a saved deck carries: every runtime in one node
+    new Function(slides.querySelector('script[data-re-settings-runtime]').textContent)()
+    window.dispatchEvent(new Event('load'))
+    expect(document.querySelectorAll('.re-video-controls')).toHaveLength(1)
+  })
+
+  it('takes over from the runtime an earlier build left running', () => {
+    const { frame } = makeDeck()
+    // that build's object may offer nothing this one knows about; the takeover
+    // still has to happen, or the deck loses its controls entirely
+    let disconnected = false
+    window.__reVideoControls = { observer: { disconnect() { disconnected = true } } }
+    const stale = document.createElement('div')
+    stale.className = 're-transient re-video-controls'
+    frame.querySelector('video').after(stale)
+
+    runRuntime()
+    expect(disconnected).toBe(true)
+    const bars = frame.querySelectorAll('.re-video-controls')
+    expect(bars).toHaveLength(1)
+    expect(bars[0]).not.toBe(stale)
+    // and the fresh bar works
+    pointerAt(50, 50)
+    expect(bars[0].hasAttribute('data-show')).toBe(true)
   })
 
   it('installs its editor copy exactly once', () => {

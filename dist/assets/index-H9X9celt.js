@@ -326,7 +326,13 @@ Choose Cancel to keep the disk version — then reload this page and redo your e
       // here and rebuilt below, so every bar on the page is this one's
       if (kept && bar.reOwner === OWNER) bar.rePlace();
       else {
-        if (bar.reTeardown) bar.reTeardown();
+        // an earlier build's teardown is its own code: it may fail, and the
+        // bar goes either way
+        try {
+          if (bar.reTeardown) bar.reTeardown();
+        } catch (error) {
+          console.warn('reveal-editor: a stale control bar would not tear down', error);
+        }
         bar.remove();
       }
     }
@@ -345,8 +351,21 @@ Choose Cancel to keep the disk version — then reload this page and redo your e
   const start = () => {
     const slides = document.querySelector('.reveal .slides');
     if (!slides) return;
+    // A deck carries the runtime of the build that saved it, and the editor
+    // then runs the current one over it. Taking over must not depend on what
+    // that earlier build left behind: whatever it offers, this run continues.
+    // A deck carries the runtime of the build that saved it, and the editor
+    // then runs the current one over it. Taking over must not depend on what
+    // that earlier build left behind: whatever it offers, this run continues.
     const previous = window.__reVideoControls;
-    if (previous) { previous.observer.disconnect(); previous.stop(); }
+    if (previous) {
+      try {
+        if (previous.observer) previous.observer.disconnect();
+        if (previous.stop) previous.stop();
+      } catch (error) {
+        console.warn('reveal-editor: the previous video runtime would not stop', error);
+      }
+    }
     document.addEventListener('pointermove', onPointerMove, true);
     document.addEventListener('pointerleave', onPointerOut, true);
     const stop = () => {
