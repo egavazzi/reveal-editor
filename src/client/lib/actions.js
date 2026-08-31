@@ -803,10 +803,13 @@ export function setSpeakerNotes(notes) {
 /**
  * Open the standalone deck in a new tab. `fromCurrent` starts the show on the
  * slide being edited, via reveal's own #/h/v location hash — the presentation
- * view runs with hash navigation on, so it reads that on load. Like Present
- * from the start, this opens the file ON DISK: unsaved edits are not in it.
+ * view runs with hash navigation on, so it reads that on load.
+ *
+ * This serves the file ON DISK, so unsaved edits have to be written out first
+ * or the show is of an older deck. The tab is opened inside the click that
+ * asked for it — a popup blocker refuses one opened after the `await`.
  */
-export function openPresentation({ pdf = false, fromCurrent = false } = {}) {
+export async function openPresentation({ pdf = false, fromCurrent = false } = {}) {
   if (!editor.deckFile) return
   const file = encodeURIComponent(editor.deckFile)
   let suffix = pdf ? '?print-pdf' : ''
@@ -814,7 +817,19 @@ export function openPresentation({ pdf = false, fromCurrent = false } = {}) {
     const { h, v } = editor.slideIndex
     suffix = `#/${h}${v ? `/${v}` : ''}`
   }
-  window.open(`/deck/${file}${suffix}`, '_blank', 'noopener')
+  const url = `/deck/${file}${suffix}`
+  if (!editor.dirty) {
+    window.open(url, '_blank', 'noopener')
+    return
+  }
+  const tab = window.open('', '_blank')
+  // 'noopener' would return no handle to navigate later; sever the link instead
+  if (tab) tab.opener = null
+  await saveDeck()
+  if (!tab) return
+  // a failed save leaves the deck dirty — show the error, not a stale deck
+  if (editor.dirty) tab.close()
+  else tab.location = url
 }
 
 function refreshSlideState() {
@@ -830,7 +845,10 @@ export function toggleFragment() {
   snapshotSlide()
   for (const el of runtime.overlay.getSelection()) {
     if (el.classList.contains('fragment')) {
-      el.classList.remove('fragment')
+      // reveal's runtime classes only mean something on a fragment; the save
+      // cleaner looks for them on .fragment elements, so drop them here or
+      // they end up in the file
+      el.classList.remove('fragment', 'visible', 'current-fragment')
       el.removeAttribute('data-fragment-index')
       el.removeAttribute('data-re-frag-auto')
       if (!el.classList.length) el.removeAttribute('class')
@@ -1111,6 +1129,12 @@ export function setElementProperties(values) {
 /**
  * An element inside a group is not its own editable unit on the canvas
  * (clicks select the group), while a top-level one is.
+ *
+ * Losing `re-el` also loses the deck's convention CSS that neutralizes the
+ * theme's box styling (`.reveal .re-el { margin: 0 }`, `img.re-el` max sizes),
+ * and reveal's own `.reveal section img { margin: 15px 0; ... }` would then
+ * push a grouped image off its stored coordinates. Carry the neutralization
+ * inline instead, so it holds in the standalone deck too.
  */
 function adoptInto(el, parent) {
   const nested = parent.classList.contains('re-group')
@@ -1118,7 +1142,22 @@ function adoptInto(el, parent) {
   // don't leave an empty class="" behind in the saved deck
   if (!el.getAttribute('class')) el.removeAttribute('class')
   el.toggleAttribute('data-re-group-child', nested)
+  if (nested) {
+    el.style.margin = '0'
+    if (SIZED_BY_THEME.has(el.tagName.toUpperCase())) {
+      el.style.maxWidth = 'none'
+      el.style.maxHeight = 'none'
+    }
+  } else {
+    el.style.removeProperty('margin')
+    el.style.removeProperty('max-width')
+    el.style.removeProperty('max-height')
+  }
 }
+
+// Elements reveal's theme caps to a share of the slide (.reveal img, video…);
+// inside a group they must keep the size the editor gave them.
+const SIZED_BY_THEME = new Set(['IMG', 'VIDEO', 'IFRAME', 'SVG'])
 
 export function groupSelection() {
   // Document order, not click order: the group must preserve the stacking

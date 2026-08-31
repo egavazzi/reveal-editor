@@ -138,6 +138,13 @@ function injectEditStyles(doc) {
       content: ''; position: absolute; pointer-events: none; z-index: 2147483646;
       inset: var(--re-safe-margin); border: 1px dashed rgba(47,111,186,.45);
     }
+    /* Shapes draw outside their layout box (overflow: visible carries stroke
+       joins and arrowheads past the viewBox). Firefox invalidates the box,
+       not the ink, so rescaling the canvas — a window or panel resize — can
+       leave the previous scale's stroke behind as a small ghost up and left
+       of the shape. Its own compositor layer turns that into a layer move,
+       which cannot smear. Edit mode only: presenting never rescales. */
+    .reveal .slides svg[data-shape] { will-change: transform; }
     /* videos are pointer-inert while editing so they behave like any other
        element; hold Ctrl to use the native player */
     body:not(.re-media-live) .reveal .slides section video { pointer-events: none; }
