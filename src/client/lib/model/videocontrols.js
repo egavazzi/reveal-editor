@@ -388,9 +388,6 @@ export const VIDEO_CONTROLS_SCRIPT = `(() => {
     // A deck carries the runtime of the build that saved it, and the editor
     // then runs the current one over it. Taking over must not depend on what
     // that earlier build left behind: whatever it offers, this run continues.
-    // A deck carries the runtime of the build that saved it, and the editor
-    // then runs the current one over it. Taking over must not depend on what
-    // that earlier build left behind: whatever it offers, this run continues.
     const previous = window.__reVideoControls;
     if (previous) {
       try {
