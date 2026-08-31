@@ -1,9 +1,6 @@
 # reveal-editor
 
-A local WYSIWYG editor for [reveal.js](https://revealjs.com/) presentations —
-drag elements around like slides.com, but the deck stays a **plain,
-hand-editable HTML file** that you own, keep in git, and present anywhere
-with nothing but a browser.
+A local WYSIWYG editor for [reveal.js](https://revealjs.com/) presentations. Heavily vibe-coded. Use at your own risk.
 
 ## How it works
 

@@ -55,9 +55,12 @@ export function duplicateCurrentSlide(bridge, h, v = 0) {
   // queries and authored links never become ambiguous.
   clone.removeAttribute('id')
   for (const identified of clone.querySelectorAll('[id]')) identified.removeAttribute('id')
+  const horizontal = current.parentElement.matches('.slides')
   current.after(clone)
   bridge.sync()
-  bridge.goTo(h, current.parentElement.matches('.slides') ? 0 : v + 1)
+  // land on the copy, wherever it went — a horizontal duplicate is the next
+  // slide across, a vertical one the next slide down
+  bridge.goTo(horizontal ? h + 1 : h, horizontal ? 0 : v + 1)
   return clone
 }
 
