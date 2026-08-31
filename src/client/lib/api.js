@@ -34,17 +34,21 @@ export async function listAssets() {
   return jsonOrThrow(await fetch('/api/assets'))
 }
 
-/** `{ available, version }` — whether the server can re-encode videos. */
-export async function ffmpegStatus() {
+/**
+ * `{ ffmpeg, imagemagick }` — the version of each converter the server can
+ * run, or null for a tool that isn't installed.
+ */
+export async function converterStatus() {
   return jsonOrThrow(await fetch('/api/assets/convert'))
 }
 
 /**
- * Re-encode a deck video (deck-relative `path`) as WebM on the server.
- * Resolves to the new deck-relative path; `onProgress` receives fractions
- * in [0, 1]. Aborting `signal` cancels the encode server-side.
+ * Convert a deck asset (deck-relative `path`) on the server: videos to
+ * WebM, images to JPEG or PNG. Resolves to the new deck-relative path;
+ * `onProgress` receives fractions in [0, 1]. Aborting `signal` cancels the
+ * conversion server-side.
  */
-export async function convertAssetToWebm(path, { onProgress = () => {}, signal, fetchImpl = fetch } = {}) {
+export async function convertAsset(path, { onProgress = () => {}, signal, fetchImpl = fetch } = {}) {
   const res = await fetchImpl('/api/assets/convert', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

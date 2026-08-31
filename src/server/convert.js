@@ -1,10 +1,14 @@
-// Re-encode a deck video as WebM (VP9 + Opus) with the system `ffmpeg`.
-// The browser-side codec sniffer tells the user *why* a video won't play;
-// this is the fix. It runs the same encoder settings the inspector shows
-// for manual use (WEBM_ENCODE_ARGS), so the two paths can't drift apart.
+// Re-encode deck media the browser can't show: videos as WebM (VP9 + Opus)
+// with the system `ffmpeg`, images as JPEG or PNG with ImageMagick. The
+// browser-side codec sniffer tells the user *why* a video won't play; this
+// is the fix. Videos run the same encoder settings the inspector shows for
+// manual use (WEBM_ENCODE_ARGS), so the two paths can't drift apart.
 import { execFile, spawn } from 'node:child_process'
 import { rename, unlink } from 'node:fs/promises'
-import { WEBM_ENCODE_ARGS } from '../client/lib/model/codecs.js'
+import { imageOutputName, isVideoPath, WEBM_ENCODE_ARGS } from '../client/lib/model/codecs.js'
+
+export { imageOutputName }
+export { isVideoPath as isVideoFile }
 
 /** Version of the ffmpeg on PATH (e.g. "6.1.1"), or null when there is none. */
 export function ffmpegVersion(bin = 'ffmpeg') {
@@ -81,6 +85,69 @@ export function convertToWebm({ input, output, onProgress = () => {}, bin = 'ffm
       try {
         await rename(partial, output)
         onProgress(1)
+        resolvePromise()
+      } catch (err) {
+        reject(err)
+      }
+    })
+  })
+  promise.abort = () => {
+    aborted = true
+    child.kill('SIGKILL')
+  }
+  return promise
+}
+
+/**
+ * The ImageMagick on PATH as `{ bin, version }` (bin is `magick` on
+ * ImageMagick 7 and `convert` on 6), or null when there is none.
+ */
+export async function imageMagickVersion() {
+  for (const bin of ['magick', 'convert']) {
+    const version = await new Promise((resolvePromise) => {
+      execFile(bin, ['-version'], { timeout: 5000 }, (err, stdout) => {
+        if (err) return resolvePromise(null)
+        const m = /^Version:\s*ImageMagick\s+(\S+)/.exec(String(stdout).split('\n')[0])
+        resolvePromise(m ? m[1] : null)
+      })
+    })
+    if (version) return { bin, version }
+  }
+  return null
+}
+
+/**
+ * Convert `input` to `output` with ImageMagick. ImageMagick chooses the
+ * output format from the extension, so the temporary file keeps it
+ * (`photo.part.jpg`); it is renamed onto `output` on success and removed on
+ * failure. `input` is read as `<path>[0]`, taking the first frame of a
+ * multi-page or layered file. Rejects with ImageMagick's stderr tail.
+ * The returned promise has an `abort()` method that kills the conversion.
+ */
+export function convertImage({ input, output, bin = 'convert' }) {
+  const partial = output.replace(/(\.[^.]*)$/, '.part$1')
+  const args = [`${input}[0]`, '-auto-orient']
+  if (/\.jpe?g$/i.test(output)) args.push('-quality', '90')
+  args.push(partial)
+  const child = spawn(bin, args, { stdio: ['ignore', 'ignore', 'pipe'] })
+  let stderr = ''
+  let aborted = false
+  child.stderr.setEncoding('utf8')
+  child.stderr.on('data', (chunk) => {
+    stderr += chunk
+    if (stderr.length > 64 * 1024) stderr = stderr.slice(-32 * 1024)
+  })
+  const promise = new Promise((resolvePromise, reject) => {
+    child.on('error', (err) => reject(new Error(`could not run ${bin}: ${err.message}`)))
+    child.on('close', async (code) => {
+      if (aborted || code !== 0) {
+        await unlink(partial).catch(() => {})
+        const tail = stderr.trim().split('\n').slice(-6).join('\n')
+        reject(new Error(aborted ? 'conversion aborted' : `${bin} exited with code ${code}\n${tail}`))
+        return
+      }
+      try {
+        await rename(partial, output)
         resolvePromise()
       } catch (err) {
         reject(err)

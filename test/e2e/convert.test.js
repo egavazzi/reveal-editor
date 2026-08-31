@@ -11,7 +11,9 @@ import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createServer } from '../../src/server/index.js'
 import { scaffoldDeck } from '../../src/server/scaffold.js'
-import { ffmpegVersion, parseDuration, parseOutTime } from '../../src/server/convert.js'
+import {
+  ffmpegVersion, imageMagickVersion, imageOutputName, isVideoFile, parseDuration, parseOutTime
+} from '../../src/server/convert.js'
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
 const run = promisify(execFile)
@@ -30,7 +32,22 @@ describe('ffmpeg output parsing', () => {
   })
 })
 
+describe('media classification', () => {
+  it('routes paths to the video or image converter by extension', () => {
+    expect(isVideoFile('/deck/assets/clip.MOV')).toBe(true)
+    expect(isVideoFile('/deck/assets/clip.webm')).toBe(true)
+    expect(isVideoFile('/deck/assets/photo.heic')).toBe(false)
+  })
+
+  it('targets JPEG for photo formats and PNG for the rest', () => {
+    expect(imageOutputName('/deck/assets/IMG_1.heic')).toBe('/deck/assets/IMG_1.jpg')
+    expect(imageOutputName('/deck/assets/scan.tiff')).toBe('/deck/assets/scan.png')
+    expect(imageOutputName('/deck/assets/a.png')).toBe('/deck/assets/a.png')
+  })
+})
+
 const haveFfmpeg = (await ffmpegVersion()) !== null
+const magick = await imageMagickVersion()
 
 describe.skipIf(!haveFfmpeg)('POST /api/assets/convert', () => {
   let dir, deckPath, deckDir, server, base
@@ -60,10 +77,10 @@ describe.skipIf(!haveFfmpeg)('POST /api/assets/convert', () => {
     await rm(dir, { recursive: true, force: true })
   })
 
-  it('reports that ffmpeg is available', async () => {
+  it('reports the converters this machine has', async () => {
     const body = await (await fetch(`${base}api/assets/convert`)).json()
-    expect(body.available).toBe(true)
-    expect(body.version).toBeTypeOf('string')
+    expect(body.ffmpeg).toBeTypeOf('string')
+    expect(body.imagemagick).toBe(magick?.version ?? null)
   })
 
   it('re-encodes a deck video as WebM, streaming progress', async () => {
@@ -113,4 +130,49 @@ describe.skipIf(!haveFfmpeg)('POST /api/assets/convert', () => {
     expect(existsSync(join(deckDir, 'assets', 'bogus.webm'))).toBe(false)
     expect(existsSync(join(deckDir, 'assets', 'bogus.webm.part'))).toBe(false)
   }, 30_000)
+})
+
+describe.skipIf(!magick)('POST /api/assets/convert (images)', () => {
+  let dir, deckPath, deckDir, server, base
+
+  beforeAll(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'reveal-editor-convert-img-'))
+    deckPath = await scaffoldDeck(join(dir, 'deck'))
+    deckDir = join(dir, 'deck')
+    await mkdir(join(deckDir, 'assets'), { recursive: true })
+    // a TIFF: readable by ImageMagick, not displayable by browsers
+    await run(magick.bin, ['-size', '8x8', 'xc:red', join(deckDir, 'assets', 'pic.tiff')])
+    const started = await createServer({ deckPath, port: 0, dev: false, repoRoot })
+    server = started.server
+    base = started.url
+  }, 30_000)
+
+  afterAll(async () => {
+    server?.close()
+    await rm(dir, { recursive: true, force: true })
+  })
+
+  it('converts a deck image to PNG', async () => {
+    const res = await fetch(`${base}api/assets/convert`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: 'assets/pic.tiff' })
+    })
+    expect(res.status).toBe(200)
+    const lines = (await res.text()).trim().split('\n').map((l) => JSON.parse(l))
+    expect(lines[lines.length - 1]).toEqual({ path: 'assets/pic.png' })
+    const out = await readFile(join(deckDir, 'assets', 'pic.png'))
+    expect([...out.subarray(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47])
+    expect(existsSync(join(deckDir, 'assets', 'pic.part.png'))).toBe(false)
+    expect(existsSync(join(deckDir, 'assets', 'pic.tiff'))).toBe(true)
+  }, 30_000)
+
+  it('refuses an image that is already displayable', async () => {
+    const res = await fetch(`${base}api/assets/convert`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: 'assets/pic.png' })
+    })
+    expect(res.status).toBe(400)
+  })
 })

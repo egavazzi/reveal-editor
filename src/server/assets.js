@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { extname, resolve, sep } from 'node:path'
-import { convertToWebm, ffmpegVersion } from './convert.js'
+import { convertImage, convertToWebm, ffmpegVersion, imageMagickVersion, imageOutputName, isVideoFile } from './convert.js'
 import { webmOutputName } from '../client/lib/model/codecs.js'
 
 const EXT_BY_MIME = {
@@ -76,43 +76,21 @@ export function assetsRouter(deckDir) {
     return abs.startsWith(deckDir + sep) ? abs : null
   }
 
-  // Whether the server can re-encode videos itself.
+  // Which converters this machine has: ffmpeg for video, ImageMagick for
+  // images. Each field is a version string, or null when the tool is absent.
   router.get('/convert', async (req, res) => {
-    const version = await ffmpegVersion()
-    res.json({ available: version !== null, version })
+    const [ffmpeg, magick] = await Promise.all([ffmpegVersion(), imageMagickVersion()])
+    res.json({ ffmpeg, imagemagick: magick?.version ?? null })
   })
 
-  // Re-encode a deck video as WebM next to the original. The response is a
-  // newline-delimited JSON stream: `{"progress": f}` lines while encoding,
-  // then `{"path": "…"}` or `{"error": "…"}`. Closing the request kills
-  // ffmpeg and removes the partial output.
-  router.post('/convert', async (req, res) => {
-    const input = deckFile(req.body?.path)
-    if (!input) return res.status(400).json({ error: 'path must point inside the deck folder' })
-    if (!existsSync(input)) return res.status(404).json({ error: `no such file: ${req.body.path}` })
-    if ((await ffmpegVersion()) === null) {
-      return res.status(501).json({ error: 'ffmpeg is not installed on this machine' })
-    }
-    const output = webmOutputName(input)
-    if (output === input) return res.status(400).json({ error: 'file is already a .webm' })
-    const outputRel = webmOutputName(String(req.body.path).split(/[?#]/)[0])
-
+  // Stream a conversion job as newline-delimited JSON: `{"progress": f}`
+  // lines while it runs, then `{"path": "…"}` or `{"error": "…"}`. Closing
+  // the request kills the converter and removes the partial output.
+  const streamJob = async (res, makeJob, outputRel, label) => {
     res.set({ 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-cache' })
     res.flushHeaders()
     const send = (obj) => res.write(`${JSON.stringify(obj)}\n`)
-    let lastSent = -1
-    const job = convertToWebm({
-      input,
-      output,
-      onProgress: (fraction) => {
-        // throttle to whole percents: ffmpeg reports several times a second
-        const pct = Math.floor(fraction * 100)
-        if (pct !== lastSent) {
-          lastSent = pct
-          send({ progress: pct / 100 })
-        }
-      }
-    })
+    const job = makeJob(send)
     let finished = false
     // the socket closing before the response completes is a client abort
     res.on('close', () => {
@@ -124,10 +102,59 @@ export function assetsRouter(deckDir) {
       send({ path: outputRel })
     } catch (err) {
       finished = true
-      console.error(`conversion of ${req.body.path} failed:`, err.message)
+      console.error(`conversion of ${label} failed:`, err.message)
       send({ error: String(err.message ?? err) })
     }
     res.end()
+  }
+
+  // Convert a deck video to WebM, or a deck image to JPEG/PNG, writing the
+  // result next to the original (which is kept).
+  router.post('/convert', async (req, res) => {
+    const input = deckFile(req.body?.path)
+    if (!input) return res.status(400).json({ error: 'path must point inside the deck folder' })
+    if (!existsSync(input)) return res.status(404).json({ error: `no such file: ${req.body.path}` })
+    const relPath = String(req.body.path).split(/[?#]/)[0]
+
+    if (isVideoFile(input)) {
+      if ((await ffmpegVersion()) === null) {
+        return res.status(501).json({ error: 'ffmpeg is not installed on this machine' })
+      }
+      const output = webmOutputName(input)
+      if (output === input) return res.status(400).json({ error: 'file is already a .webm' })
+      return streamJob(res, (send) => {
+        let lastSent = -1
+        return convertToWebm({
+          input,
+          output,
+          onProgress: (fraction) => {
+            // throttle to whole percents: ffmpeg reports several times a second
+            const pct = Math.floor(fraction * 100)
+            if (pct !== lastSent) {
+              lastSent = pct
+              send({ progress: pct / 100 })
+            }
+          }
+        })
+      }, webmOutputName(relPath), req.body.path)
+    }
+
+    const magick = await imageMagickVersion()
+    if (!magick) {
+      return res.status(501).json({ error: 'ImageMagick is not installed on this machine' })
+    }
+    const output = imageOutputName(input)
+    if (output === input) return res.status(400).json({ error: 'file is already a .png/.jpg' })
+    // ImageMagick reads a trailing [..] in a file name as a frame selector
+    if (/[[\]]/.test(input)) {
+      return res.status(400).json({ error: 'file names containing [ or ] cannot be converted; rename the file' })
+    }
+    return streamJob(res, (send) => {
+      const job = convertImage({ input, output, bin: magick.bin })
+      // ImageMagick reports no progress; one line keeps the envelope uniform
+      send({ progress: 1 })
+      return job
+    }, imageOutputName(relPath), req.body.path)
   })
 
   return router

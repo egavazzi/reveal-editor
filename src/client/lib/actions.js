@@ -25,7 +25,8 @@ import { cleanElementHtml } from './model/clean.js'
 import { loadSlideTemplates, storeSlideTemplate } from './model/templates.js'
 import { rehydrate } from './model/rehydrate.js'
 import { saveDeck } from './model/save.js'
-import { convertAssetToWebm } from './api.js'
+import { convertAsset, converterStatus } from './api.js'
+import { imageOutputName, isImagePath, isVideoPath } from './model/codecs.js'
 import {
   initializeSettings, updateSettings as updateSettingsModel, writeSettings
 } from './model/settings.js'
@@ -158,6 +159,55 @@ export function addShape(kind) {
   markDirty()
 }
 
+// The converters the server can run, fetched once per session.
+let converters = null
+
+function fileNameOf(path) {
+  const last = path.split('/').pop() || path
+  try {
+    return decodeURIComponent(last)
+  } catch {
+    return last
+  }
+}
+
+/**
+ * Convert a just-uploaded asset the browser can't show into one it can,
+ * reporting progress in the status bar. Resolves to the new deck-relative
+ * path, or null when the needed tool is missing or the conversion failed
+ * (the status bar then says why).
+ */
+export async function convertIfPossible(path, name = fileNameOf(path)) {
+  const video = isVideoPath(path)
+  converters ??= converterStatus().catch(() => ({ ffmpeg: null, imagemagick: null }))
+  const status = await converters
+  if (video && !status.ffmpeg) {
+    editor.statusMessage = `${name} can't be played here and ffmpeg isn't installed, so it wasn't converted.`
+    return null
+  }
+  if (!video && !status.imagemagick) {
+    editor.statusMessage = `${name} can't be displayed here; install ImageMagick to convert it automatically.`
+    return null
+  }
+  const target = video ? 'WebM' : (imageOutputName(name).endsWith('.jpg') ? 'JPEG' : 'PNG')
+  // images convert in one step, with no progress to report
+  editor.conversion = { name, target, progress: video ? 0 : null }
+  try {
+    const converted = await convertAsset(path, {
+      onProgress: (fraction) => {
+        if (editor.conversion && video) editor.conversion.progress = fraction
+      }
+    })
+    editor.conversion = null
+    editor.statusMessage = `Converted ${name} to ${fileNameOf(converted)}.`
+    return converted
+  } catch (err) {
+    editor.conversion = null
+    editor.statusMessage = `Conversion of ${name} failed: ${err.message}`
+    return null
+  }
+}
+
 export async function addImageBlob(blob, name) {
   try {
     const selection = runtime.overlay?.getSelection() ?? []
@@ -165,7 +215,7 @@ export async function addImageBlob(blob, name) {
       ? selection[0]
       : null
     snapshotSlide()
-    const el = await insertImageBlob(runtime.bridge, blob, name)
+    const el = await insertImageBlob(runtime.bridge, blob, name, { convert: convertIfPossible })
     if (placeholder?.isConnected) {
       for (const prop of ['left', 'top', 'width', 'height']) {
         if (placeholder.style[prop]) el.style[prop] = placeholder.style[prop]
@@ -187,7 +237,7 @@ export async function addImageBlob(blob, name) {
 export function pickImage() {
   const input = document.createElement('input')
   input.type = 'file'
-  input.accept = 'image/*'
+  input.accept = 'image/*,.heic,.heif,.avif,.jxl,.tif,.tiff,.psd'
   input.onchange = () => {
     const file = input.files?.[0]
     if (file) addImageBlob(file, file.name)
@@ -198,7 +248,7 @@ export function pickImage() {
 export async function addVideoBlob(blob, name) {
   try {
     snapshotSlide()
-    const el = await insertVideoBlob(runtime.bridge, blob, name)
+    const el = await insertVideoBlob(runtime.bridge, blob, name, { convert: convertIfPossible })
     el.addEventListener('error', () => {
       editor.statusMessage =
         'Video added, but this browser cannot decode it (unsupported codec) — it will not play here. Convert to WebM (VP9) or H.264 MP4.'
@@ -214,7 +264,7 @@ export async function addVideoBlob(blob, name) {
 export function pickVideo() {
   const input = document.createElement('input')
   input.type = 'file'
-  input.accept = 'video/mp4,video/webm,video/*'
+  input.accept = 'video/mp4,video/webm,video/*,.mov,.mkv,.avi,.m4v'
   input.onchange = () => {
     const file = input.files?.[0]
     if (file) addVideoBlob(file, file.name)
@@ -224,9 +274,16 @@ export function pickVideo() {
 
 export function handleFileDrop(event) {
   const file = [...(event.dataTransfer?.files ?? [])][0]
-  if (!file || (!file.type.startsWith('image/') && !file.type.startsWith('video/'))) return false
+  if (!file) return false
+  const type = file.type || ''
+  // Formats the browser doesn't know (HEIC, ProRes MOV, …) arrive with no
+  // type or as a generic binary; their extension decides where they go.
+  const untyped = type === '' || type === 'application/octet-stream'
+  const video = type.startsWith('video/') || (untyped && isVideoPath(file.name))
+  const image = type.startsWith('image/') || (untyped && isImagePath(file.name))
+  if (!video && !image) return false
   event.preventDefault()
-  if (file.type.startsWith('video/')) addVideoBlob(file, file.name)
+  if (video) addVideoBlob(file, file.name)
   else addImageBlob(file, file.name)
   return true
 }
@@ -1198,33 +1255,47 @@ export function setVideoProperties(values) {
   bumpSelection()
 }
 
+// The <video> or <img> the conversion actions work on: whichever of the two
+// the selection holds (an image may sit inside a crop frame).
+function selectedMediaElement() {
+  const video = selectedVideoInfo()?.el
+  if (video) return video
+  const sel = runtime.overlay?.getSelection() ?? []
+  return (sel.length === 1 ? imageOf(sel[0]) : null) || null
+}
+
 /**
- * Deck-relative source of the selected video as written in the markup, or
- * null when it is remote (http/data/blob URLs can't be converted server-side).
+ * Deck-relative source of the selected video or image as written in the
+ * markup, or null when it is remote (http/data/blob URLs can't be converted
+ * server-side).
  */
-export function selectedVideoLocalSrc() {
-  const src = selectedVideoInfo()?.el.getAttribute('src') ?? ''
+export function selectedMediaLocalSrc() {
+  const src = selectedMediaElement()?.getAttribute('src') ?? ''
   if (!src || /^[a-z][a-z0-9+.-]*:/i.test(src) || src.startsWith('//')) return null
   return src
 }
 
 /**
- * Re-encode the selected video as WebM on the server and point the element
+ * Convert the selected video or image on the server and point the element
  * at the result (an undoable edit). Resolves to the new path; rejects with
- * the server's message when ffmpeg fails.
+ * the server's message when the conversion fails.
  */
-export async function convertSelectedVideoToWebm({ onProgress, signal } = {}) {
-  const info = selectedVideoInfo()
-  const src = selectedVideoLocalSrc()
-  if (!info || !src) throw new Error('no local video selected')
-  const path = await convertAssetToWebm(src, { onProgress, signal })
-  // the selection may have moved on during a long encode
-  if (selectedVideoInfo()?.el !== info.el) return path
+export async function convertSelectedMedia({ onProgress, signal } = {}) {
+  const el = selectedMediaElement()
+  const src = selectedMediaLocalSrc()
+  if (!el || !src) throw new Error('no local media selected')
+  const path = await convertAsset(src, { onProgress, signal })
+  // the selection may have moved on during a long conversion
+  if (selectedMediaElement() !== el) return path
   snapshotSlide()
-  info.el.setAttribute('src', path)
-  // load() restarts resource selection, clearing the old decode error
-  info.el.load()
-  info.el.addEventListener('loadedmetadata', bumpSelection, { once: true })
+  el.setAttribute('src', path)
+  if (el.tagName === 'VIDEO') {
+    // load() restarts resource selection, clearing the old decode error
+    el.load()
+    el.addEventListener('loadedmetadata', bumpSelection, { once: true })
+  } else {
+    el.addEventListener('load', bumpSelection, { once: true })
+  }
   runtime.overlay.refresh()
   markDirty()
   bumpSelection()
@@ -1241,6 +1312,10 @@ export function selectedImageInfo() {
   return {
     el,
     cropped: isImageFrame(el),
+    fileName: fileNameOf(img.getAttribute('src') || ''),
+    // a finished load with no pixels: this browser can't decode the file
+    // (an SVG without explicit dimensions also reports no natural width)
+    broken: img.complete && img.naturalWidth === 0 && !/\.svgz?(?:[?#].*)?$/i.test(img.getAttribute('src') || ''),
     width: Math.round(parseFloat(el.style.width) || el.getBoundingClientRect().width),
     height: Math.round(parseFloat(el.style.height) || el.getBoundingClientRect().height),
     borderWidth: parseFloat(el.style.borderWidth) || 0,

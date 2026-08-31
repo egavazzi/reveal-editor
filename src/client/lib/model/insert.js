@@ -37,17 +37,30 @@ export function insertShape(bridge, kind) {
 
 /**
  * Upload an image blob to the deck's assets/ dir and insert it, scaled to
- * fit comfortably on the canvas at natural aspect ratio.
+ * fit comfortably on the canvas at natural aspect ratio. When the browser
+ * cannot decode the file, `convert(path, name)` gets a chance to produce a
+ * displayable copy; the insert fails when it cannot.
  */
-export async function insertImageBlob(bridge, blob, name) {
-  const { path } = await uploadAsset(blob, name)
+export async function insertImageBlob(bridge, blob, name, { convert } = {}) {
+  const upload = await uploadAsset(blob, name)
+  let path = upload.path
   const doc = bridge.doc
-  const natural = await new Promise((resolvePromise, reject) => {
+  const measure = (src) => new Promise((resolvePromise, reject) => {
     const probe = new bridge.win.Image()
     probe.onload = () => resolvePromise({ w: probe.naturalWidth, h: probe.naturalHeight })
-    probe.onerror = reject
-    probe.src = path
+    probe.onerror = () => reject(new Error(`this browser can't display ${name}`))
+    probe.src = src
   })
+  let natural
+  try {
+    natural = await measure(path)
+  } catch (err) {
+    if (!convert) throw err
+    const converted = await convert(path, name)
+    if (!converted) throw err
+    path = converted
+    natural = await measure(path)
+  }
   const { width: cw, height: ch } = getCanvasSize(bridge)
   const scale = Math.min(1, (cw * 0.5) / natural.w, (ch * 0.6) / natural.h)
   const w = Math.round(natural.w * scale)
@@ -61,22 +74,39 @@ export async function insertImageBlob(bridge, blob, name) {
   return placeAt(bridge, img, w, h)
 }
 
-/** Upload and insert an HTML5 video with its intrinsic aspect ratio. */
-export async function insertVideoBlob(bridge, blob, name) {
-  const { path } = await uploadAsset(blob, name)
+/**
+ * Upload and insert an HTML5 video with its intrinsic aspect ratio. When
+ * the browser can't decode the file, `convert(path, name)` gets a chance to
+ * produce a playable copy.
+ */
+export async function insertVideoBlob(bridge, blob, name, { convert } = {}) {
+  const upload = await uploadAsset(blob, name)
+  let path = upload.path
   const doc = bridge.doc
-  // A failed probe means this browser can't decode the file — still insert
-  // it (another browser may present it fine); the video panel explains.
-  const natural = await new Promise((resolvePromise) => {
+  const measure = (src) => new Promise((resolvePromise, reject) => {
     const probe = doc.createElement('video')
     probe.onloadedmetadata = () => resolvePromise({
       w: probe.videoWidth || 640,
       h: probe.videoHeight || 360
     })
-    probe.onerror = () => resolvePromise({ w: 640, h: 360 })
+    probe.onerror = () => reject(new Error(`this browser can't play ${name}`))
     probe.preload = 'metadata'
-    probe.src = path
+    probe.src = src
   })
+  let natural
+  try {
+    natural = await measure(path)
+  } catch {
+    // Undecodable here: convert if we can, otherwise insert the original
+    // anyway (another browser may play it); the video panel explains.
+    const converted = convert ? await convert(path, name) : null
+    if (converted) {
+      path = converted
+      natural = await measure(path).catch(() => ({ w: 640, h: 360 }))
+    } else {
+      natural = { w: 640, h: 360 }
+    }
+  }
   const { width: cw, height: ch } = getCanvasSize(bridge)
   const scale = Math.min(1, (cw * 0.6) / natural.w, (ch * 0.6) / natural.h)
   const w = Math.round(natural.w * scale)

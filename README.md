@@ -20,8 +20,9 @@ next GUI save.
 
 ## Install (per machine)
 
-Needs Node.js ≥ 20. Optional: `ffmpeg` on the PATH, for converting videos
-the browser can't play from inside the editor.
+Needs Node.js ≥ 20. Optional: `ffmpeg` and ImageMagick (`magick` or
+`convert`) on the PATH, for converting videos and images the browser can't
+show from inside the editor.
 
 ```sh
 git clone <your-repo-url> reveal-editor
@@ -135,7 +136,14 @@ workflows and the one-way eject tradeoff.
   old MPEG-4/DivX clip, ProRes, …) is flagged there with its codec; if
   `ffmpeg` is installed, a "Convert to WebM" button re-encodes it as
   VP9/Opus next to the original and swaps the slide over to the new file
-  (undoable). Without ffmpeg the panel shows the equivalent command to run
+  (undoable). Without ffmpeg the panel shows the equivalent command to run.
+  A video dropped or picked while ffmpeg is installed is converted right at
+  insert time, with progress in the status bar
+- **Image formats**: HEIC/HEIF, TIFF, PSD, camera raw and other formats
+  browsers don't display are converted on insert — photos to JPEG, the rest
+  to PNG — next to the original, when ImageMagick is installed. An image
+  already in a deck that this browser can't show is flagged in the Image
+  panel with a Convert button
 - **Deck setup**: the Deck panel controls the reveal theme, canvas format/size
   and margins, editor grid display/snapping, navigation-arrow visibility, and
   slide number format/position, typography, and transitions
