@@ -20,6 +20,8 @@ const RUNTIME_PRE_CLASSES = ['code-wrapper']
 // artifacts on detach, and foreign decks may author contenteditable.
 const TRANSIENT_ATTRS = [
   CODE_SRC_ATTR, FRAG_AUTO_ATTR, 'data-re-selected', 'data-highlighted', 'data-re-group-child',
+  // a crop frame wears this while its video plays with the pointer idle
+  'data-re-idle',
   // reveal.js marks media it paused at runtime; never ours to save
   'data-paused-by-reveal'
 ]

@@ -7,7 +7,7 @@
   import { enterEditMode } from './lib/overlay/editmode.js'
   import { initializeSettings, settingsFromRevealConfig } from './lib/model/settings.js'
   import { isSlideEmpty } from './lib/model/layouts.js'
-  import { isImageFrame } from './lib/model/crop.js'
+  import { isImageFrame, videoOf } from './lib/model/crop.js'
   import { createOverlay } from './lib/overlay/overlay.js'
   import {
     editElement, handlePaste, snapshotSlide, undoAction, redoAction,
@@ -96,9 +96,9 @@
       runtime.overlay = createOverlay(bridge, {
         onSelectionChange(targets, { keepPanel = false } = {}) {
           editor.selectionCount = targets.length
-          // a crop frame is an image as far as the UI is concerned
+          // a crop frame stands in for the picture it wraps
           editor.selectionTag = isImageFrame(targets[0])
-            ? 'img'
+            ? (videoOf(targets[0]) ? 'video' : 'img')
             : targets[0]?.tagName.toLowerCase() ?? ''
           editor.selectionVersion++
           // A pinned panel keeps whatever the user chose, and a selection

@@ -126,6 +126,19 @@ workflows and the one-way eject tradeoff.
   button) for PowerPoint-style cropping — drag the edge handles to crop,
   drag the picture to reposition it, drag its corners to zoom — and
   resizing a cropped image afterwards keeps the crop
+- **Videos**: the Video panel scrubs and previews playback, sets exact
+  dimensions and the saved autoplay/loop/muted/controls settings, and crops
+  the video with the same edge/corner handles as an image. Videos with
+  controls get a compact play/seek/mute bar drawn along the bottom of the
+  picture — including a cropped or letterboxed one, where the browser's own
+  player sits outside the visible picture — in the saved presentation as well
+  as in the editor. The bar appears while the pointer is over the picture and
+  clicking the picture plays or pauses it. Controls are recorded as
+  `data-re-controls`, and a video
+  that arrives with the native `controls` attribute is converted the first
+  time the deck is opened. Autoplay can wait: a start delay in seconds
+  (`data-re-autoplay-delay`, written instead of reveal's `data-autoplay`)
+  starts the video that long after its slide opens, while presenting only
 - **Deck setup**: the Deck panel controls the reveal theme, canvas format/size
   and margins, editor grid display/snapping, navigation-arrow visibility, and
   slide number format/position, typography, and transitions

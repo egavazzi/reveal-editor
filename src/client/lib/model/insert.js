@@ -4,6 +4,7 @@
 import { getCanvasSize } from '../overlay/editmode.js'
 import { createShape, SHAPE_DEFAULTS } from './shapes.js'
 import { uploadAsset } from '../api.js'
+import { VIDEO_CONTROLS_ATTR } from './videocontrols.js'
 
 let cascade = 0
 
@@ -84,7 +85,9 @@ export async function insertVideoBlob(bridge, blob, name) {
   const video = doc.createElement('video')
   video.className = 're-el'
   video.src = path
-  video.controls = true
+  // the deck runtime draws the controls, on the picture rather than on the
+  // element's box
+  video.setAttribute(VIDEO_CONTROLS_ATTR, '')
   video.preload = 'metadata'
   video.style.width = `${w}px`
   video.style.height = `${h}px`

@@ -1,7 +1,7 @@
 // Slide-level structure operations on the live .slides DOM.
 // All of them call Reveal.sync() so reveal's internal state follows.
 
-import { imageOf, isImageFrame } from './crop.js'
+import { imageOf, videoOf } from './crop.js'
 
 const RUNTIME_CLASSES = ['past', 'present', 'future', 'stack', 'overflowing']
 
@@ -228,6 +228,8 @@ export function slideSummaries(bridge, canvas) {
     const boxes = []
     const collect = (el, offsetX, offsetY) => {
       if (boxes.length >= 40) return
+      // runtime overlays (a video's control bar) are not slide content
+      if (el.classList.contains('re-transient')) return
       const left = parseFloat(el.style.left)
       const top = parseFloat(el.style.top)
       if (Number.isNaN(left) || Number.isNaN(top)) return
@@ -244,8 +246,8 @@ export function slideSummaries(bridge, canvas) {
         y: ((offsetY + top) / canvas.height) * 100,
         w: Math.min(100, (width / canvas.width) * 100),
         h: Math.min(100, (height / canvas.height) * 100),
-        kind: tag === 'img' || isImageFrame(el) ? 'img'
-          : tag === 'video' ? 'video'
+        kind: imageOf(el) ? 'img'
+          : videoOf(el) ? 'video'
             : tag === 'svg' ? 'shape'
               : tag === 'pre' || el.querySelector?.('pre > code') ? 'code' : 'text'
       }

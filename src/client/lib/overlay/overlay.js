@@ -4,7 +4,8 @@ import Moveable from 'moveable'
 import Selecto from 'selecto'
 import { ensurePositioned, roundGeometry } from '../model/position.js'
 import { ANGLE_SNAP_STEP, FLAT_SNAP_TOLERANCE, constrainSegmentAngle, syncShapeGeometry } from '../model/shapes.js'
-import { imageOf, isImageFrame, readRect, resizeFrameContents } from '../model/crop.js'
+import { intrinsicSize, isImageFrame, mediaOf, readRect, resizeFrameContents } from '../model/crop.js'
+import { VIDEO_CONTROLS_CLASS } from '../model/videocontrols.js'
 import { createCropMode } from './crop.js'
 import { isRatioLocked } from '../model/ratio.js'
 import { isEditingText, activeElement } from '../editors/text.js'
@@ -35,7 +36,7 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
   let moveable = null
   let selecto = null
   let endpointResize = null
-  // Resizing a cropped image scales the picture with its frame; geometry
+  // Resizing cropped media scales the picture with its frame; geometry
   // captured at gesture start.
   let frameResize = null
   // Mouse jitter between the clicks of a double-click must not count as a
@@ -60,13 +61,13 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
     }
   })
 
-  /** Enter PowerPoint-style crop mode on an image (bare img or frame). */
+  /** Enter PowerPoint-style crop mode on an image or video (bare or framed). */
   function beginCrop(el) {
-    const img = imageOf(el)
-    if (!img || !el.isConnected || cropMode.active()) return
+    const media = mediaOf(el)
+    if (!media || !el.isConnected || cropMode.active()) return
     // an unloaded/broken picture can't be cropped faithfully: converting a
-    // legacy object-fit crop to frame geometry needs the natural size
-    if (!isImageFrame(el) && !(img.naturalWidth > 0)) return
+    // legacy object-fit crop to frame geometry needs the intrinsic size
+    if (!isImageFrame(el) && !(intrinsicSize(media).width > 0)) return
     onBeforeEdit?.()
     ensurePositioned(el, bridge)
     moveable?.destroy()
@@ -87,7 +88,11 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
     const direct = resolveEditable(event.target, section)
     if (direct || event.clientX == null) return direct
     for (const video of section.querySelectorAll('video')) {
-      const r = video.getBoundingClientRect()
+      // the crop preview's clone is a picture of the video, not the video
+      if (video.closest('.re-transient')) continue
+      // a cropped video shows only through its frame; the frame's box is
+      // what the pointer can actually hit
+      const r = (video.closest('.re-image-frame') ?? video).getBoundingClientRect()
       if (event.clientX >= r.left && event.clientX <= r.right &&
           event.clientY >= r.top && event.clientY <= r.bottom) {
         return resolveEditable(video, section)
@@ -106,7 +111,8 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
     }
     const section = currentSection()
     const guidelines = targets.length
-      ? [section, ...[...section.children].filter((c) => !targets.includes(c))]
+      ? [section, ...[...section.children].filter(
+          (c) => !targets.includes(c) && !c.classList.contains('re-transient'))]
       : []
     const endpointShape = targets.length === 1 && ['line', 'arrow'].includes(targets[0].getAttribute('data-shape'))
     const startCorner = endpointShape ? targets[0].getAttribute('data-re-line-start') || 'nw' : null
@@ -174,7 +180,7 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
         ensurePositioned(e.target, bridge)
         if (endpointShape) endpointResize = beginEndpointResize(e.target, e.direction)
         frameResize = isImageFrame(e.target)
-          ? { frame: readRect(e.target), img: readRect(imageOf(e.target)) }
+          ? { frame: readRect(e.target), media: readRect(mediaOf(e.target)) }
           : null
       })
       .on('resize', (e) => {
@@ -185,7 +191,7 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
           e.target.style.height = `${e.height}px`
           e.target.style.left = `${e.drag.left}px`
           e.target.style.top = `${e.drag.top}px`
-          // a cropped image's picture scales with its frame, keeping the crop
+          // cropped media's picture scales with its frame, keeping the crop
           if (frameResize) resizeFrameContents(e.target, frameResize, e.width, e.height)
         }
         syncShapeGeometry(e.target)
@@ -194,7 +200,7 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
         moveable.snappable = true
         const wasEndpoint = Boolean(endpointResize)
         endpointResize = null
-        if (frameResize) roundGeometry(imageOf(e.target))
+        if (frameResize) roundGeometry(mediaOf(e.target))
         frameResize = null
         commit(e.target, endGesture(true))
         if (wasEndpoint) buildMoveable()
@@ -303,8 +309,8 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
     // pointer off it — that click must not clear the selection.
     if (Date.now() - lastRealDrag < 300) return
     if (isEditingText() && activeElement()?.contains(e.target)) return
-    // Ctrl+click on a video is native player interaction, not selection
-    if (e.ctrlKey && e.target.closest?.('video')) return
+    // Ctrl+click on a video or its control bar drives the player, not selection
+    if (e.ctrlKey && e.target.closest?.(`video, .${VIDEO_CONTROLS_CLASS}`)) return
     const section = currentSection()
     if (!section) return
     const el = resolveAtPointer(e, section)
@@ -326,7 +332,7 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
 
   function onDoubleClick(e) {
     if (cropMode.active()) return
-    if (e.ctrlKey && e.target.closest?.('video')) return
+    if (e.ctrlKey && e.target.closest?.(`video, .${VIDEO_CONTROLS_CLASS}`)) return
     const section = currentSection()
     if (!section) return
     let el = resolveAtPointer(e, section)
