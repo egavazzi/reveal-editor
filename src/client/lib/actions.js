@@ -823,6 +823,8 @@ export async function openPresentation({ pdf = false, fromCurrent = false } = {}
     return
   }
   const tab = window.open('', '_blank')
+  // 'noopener' would return no handle to navigate later; sever the link instead
+  if (tab) tab.opener = null
   await saveDeck()
   if (!tab) return
   // a failed save leaves the deck dirty — show the error, not a stale deck
@@ -1130,9 +1132,9 @@ export function setElementProperties(values) {
  *
  * Losing `re-el` also loses the deck's convention CSS that neutralizes the
  * theme's box styling (`.reveal .re-el { margin: 0 }`, `img.re-el` max sizes),
- * and reveal's own `.reveal section img { margin: 20px 0; max-width: 95% }`
- * would then push a grouped image off its stored coordinates. Carry the
- * neutralization inline instead, so it holds in the standalone deck too.
+ * and reveal's own `.reveal section img { margin: 15px 0; ... }` would then
+ * push a grouped image off its stored coordinates. Carry the neutralization
+ * inline instead, so it holds in the standalone deck too.
  */
 function adoptInto(el, parent) {
   const nested = parent.classList.contains('re-group')
