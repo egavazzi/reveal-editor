@@ -472,7 +472,7 @@ body.no-uit-logo .reveal .slides::after {
  * ANIMATED CLOSING EMBLEM ("Björn’s special" closing slide)
  * The emblem grows from a dot to full size over 12 s, then starts spinning.
  * The spin's angular velocity grows exponentially (theta ~ 3600^x, from
- * ~0.5 deg/s to ~1770 deg/s = ~5 rev/s over 30 s, sampled below); the ramp
+ * ~0.5 deg/s to ~1770 deg/s = ~5 rev/s over 40 s, sampled below); the ramp
  * ends on a whole turn at the steady spin's speed, so the infinite spin that
  * takes over continues seamlessly. Zoom and spin run on the individual
  * scale/rotate properties so neither overrides the other. The animations
@@ -483,8 +483,8 @@ body.no-uit-logo .reveal .slides::after {
   transform-origin: center;
   animation:
     uit-emblem-zoom 12s ease-in-out both,
-    uit-emblem-spin-up 30s linear 12s forwards,
-    uit-emblem-spin 0.2035s linear 42s infinite;
+    uit-emblem-spin-up 40s linear 12s forwards,
+    uit-emblem-spin 0.2035s linear 52s infinite;
 }
 
 body.re-edit-mode .reveal .slides section .uit-emblem-zoom-spin {
@@ -504,56 +504,56 @@ body.re-edit-mode .reveal .slides section .uit-emblem-zoom-spin {
 
 @keyframes uit-emblem-spin-up {
   0% { rotate: 0.0deg; }
-  2% { rotate: 0.3deg; }
-  4% { rotate: 0.7deg; }
-  6% { rotate: 1.1deg; }
-  8% { rotate: 1.7deg; }
-  10% { rotate: 2.3deg; }
-  12% { rotate: 3.0deg; }
-  14% { rotate: 3.9deg; }
-  16% { rotate: 4.9deg; }
-  18% { rotate: 6.1deg; }
-  20% { rotate: 7.5deg; }
-  22% { rotate: 9.1deg; }
-  24% { rotate: 11.0deg; }
-  26% { rotate: 13.3deg; }
-  28% { rotate: 16.0deg; }
-  30% { rotate: 19.2deg; }
-  32% { rotate: 22.9deg; }
-  34% { rotate: 27.3deg; }
-  36% { rotate: 32.5deg; }
-  38% { rotate: 38.6deg; }
-  40% { rotate: 45.8deg; }
-  42% { rotate: 54.3deg; }
-  44% { rotate: 64.3deg; }
-  46% { rotate: 76.1deg; }
-  48% { rotate: 89.9deg; }
-  50% { rotate: 106.2deg; }
-  52% { rotate: 125.5deg; }
-  54% { rotate: 148.1deg; }
-  56% { rotate: 174.8deg; }
-  58% { rotate: 206.2deg; }
-  60% { rotate: 243.2deg; }
-  62% { rotate: 286.8deg; }
-  64% { rotate: 338.2deg; }
-  66% { rotate: 398.7deg; }
-  68% { rotate: 469.9deg; }
-  70% { rotate: 553.9deg; }
-  72% { rotate: 652.7deg; }
-  74% { rotate: 769.2deg; }
-  76% { rotate: 906.4deg; }
-  78% { rotate: 1068.0deg; }
-  80% { rotate: 1258.4deg; }
-  82% { rotate: 1482.6deg; }
-  84% { rotate: 1746.8deg; }
-  86% { rotate: 2057.9deg; }
-  88% { rotate: 2424.5deg; }
-  90% { rotate: 2856.2deg; }
-  92% { rotate: 3364.8deg; }
-  94% { rotate: 3963.9deg; }
-  96% { rotate: 4669.6deg; }
-  98% { rotate: 5500.8deg; }
-  100% { rotate: 6480.0deg; }
+  2% { rotate: 0.4deg; }
+  4% { rotate: 0.9deg; }
+  6% { rotate: 1.5deg; }
+  8% { rotate: 2.2deg; }
+  10% { rotate: 3.0deg; }
+  12% { rotate: 4.0deg; }
+  14% { rotate: 5.2deg; }
+  16% { rotate: 6.5deg; }
+  18% { rotate: 8.1deg; }
+  20% { rotate: 9.9deg; }
+  22% { rotate: 12.1deg; }
+  24% { rotate: 14.7deg; }
+  26% { rotate: 17.8deg; }
+  28% { rotate: 21.4deg; }
+  30% { rotate: 25.6deg; }
+  32% { rotate: 30.6deg; }
+  34% { rotate: 36.5deg; }
+  36% { rotate: 43.4deg; }
+  38% { rotate: 51.5deg; }
+  40% { rotate: 61.1deg; }
+  42% { rotate: 72.4deg; }
+  44% { rotate: 85.7deg; }
+  46% { rotate: 101.4deg; }
+  48% { rotate: 119.9deg; }
+  50% { rotate: 141.6deg; }
+  52% { rotate: 167.3deg; }
+  54% { rotate: 197.5deg; }
+  56% { rotate: 233.0deg; }
+  58% { rotate: 274.9deg; }
+  60% { rotate: 324.3deg; }
+  62% { rotate: 382.4deg; }
+  64% { rotate: 450.9deg; }
+  66% { rotate: 531.5deg; }
+  68% { rotate: 626.6deg; }
+  70% { rotate: 738.5deg; }
+  72% { rotate: 870.3deg; }
+  74% { rotate: 1025.6deg; }
+  76% { rotate: 1208.5deg; }
+  78% { rotate: 1424.0deg; }
+  80% { rotate: 1677.8deg; }
+  82% { rotate: 1976.8deg; }
+  84% { rotate: 2329.0deg; }
+  86% { rotate: 2743.9deg; }
+  88% { rotate: 3232.6deg; }
+  90% { rotate: 3808.3deg; }
+  92% { rotate: 4486.4deg; }
+  94% { rotate: 5285.2deg; }
+  96% { rotate: 6226.1deg; }
+  98% { rotate: 7334.4deg; }
+  100% { rotate: 8640.0deg; }
 }
 
 @keyframes uit-emblem-spin {
