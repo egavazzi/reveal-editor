@@ -95,7 +95,10 @@ function moveStyles(from, to) {
  */
 function pictureRect(media, w, h) {
   const view = media.ownerDocument.defaultView
-  const fit = view?.getComputedStyle?.(media).objectFit || media.style.objectFit || 'fill'
+  // <video> letterboxes by default (the HTML rendering spec gives it
+  // object-fit: contain), <img> stretches
+  const initialFit = media.tagName === 'VIDEO' ? 'contain' : 'fill'
+  const fit = view?.getComputedStyle?.(media).objectFit || media.style.objectFit || initialFit
   const { width: nw, height: nh } = intrinsicSize(media)
   if (!(nw > 0 && nh > 0) || (fit !== 'cover' && fit !== 'contain')) {
     return { left: 0, top: 0, width: w, height: h }

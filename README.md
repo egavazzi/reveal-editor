@@ -133,8 +133,9 @@ workflows and the one-way eject tradeoff.
   dimensions and the saved autoplay/loop/muted/controls settings, and crops
   the video with the same edge/corner handles as an image. A crop frame clips
   the browser's own player away, so a cropped video with controls gets a
-  compact play/seek/mute bar along the bottom of the frame, in the saved
-  presentation as well as in the editor
+  compact play/seek/mute bar along the bottom of the visible picture, in the
+  saved presentation as well as in the editor; it fades out while the video
+  plays and comes back on pointer movement
 - **Deck setup**: the Deck panel controls the reveal theme, canvas format/size
   and margins, editor grid display/snapping, navigation-arrow visibility, and
   slide number format/position, typography, and transitions

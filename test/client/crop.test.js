@@ -174,6 +174,16 @@ describe('video crop frames', () => {
     expect(isTrivialCrop(frame)).toBe(false)
   })
 
+  it('wraps a letterboxed video to the picture the browser draws', () => {
+    const video = makeVideo('', { intrinsic: { w: 100, h: 100 } })
+    const frame = wrapImage(video)
+    // a video's default object-fit is contain, so a square picture in a
+    // 400×300 box is drawn 300×300, centered — the frame keeps the box
+    expect(readRect(frame)).toEqual({ left: 100, top: 50, width: 400, height: 300 })
+    expect(readRect(video)).toEqual({ left: 50, top: 0, width: 300, height: 300 })
+    expect(isTrivialCrop(frame)).toBe(false)
+  })
+
   it('keeps playback attributes on the video and decorations on the frame', () => {
     const video = makeVideo('border-radius: 8px; box-shadow: 0 0 4px #000;',
       { attrs: 'loop muted data-autoplay' })
