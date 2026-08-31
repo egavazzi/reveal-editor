@@ -446,7 +446,7 @@ export function applyBlockStyle(tag) {
   markDirty()
 }
 
-/** Font size applies to whole boxes (like slides.com), not text runs. */
+/** Font size is a box-level property: it applies to the whole element, not to individual text runs. */
 export function setFontSize(px) {
   if (!(Number.isFinite(px) && px > 0)) return
   const targets = isEditingText() ? [activeElement()] : runtime.overlay.getSelection()

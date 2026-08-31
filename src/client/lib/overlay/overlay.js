@@ -317,9 +317,9 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
     } else if (!targets.includes(el)) {
       setSelection([el])
     } else if (targets.length === 1 && Date.now() - lastRealDrag > 300) {
-      // Clicking the already-selected element enters its editor (slides.com
-      // behavior). This also rescues double-clicks whose second press
-      // jittered a few px — the browser never emits dblclick for those.
+      // Clicking the already-selected element enters its editor. This also
+      // rescues double-clicks whose second press jittered a few px — the
+      // browser never emits dblclick for those.
       onDblClick?.(el, e, { viaClick: true })
     }
   }
