@@ -20,7 +20,8 @@ next GUI save.
 
 ## Install (per machine)
 
-Needs Node.js ≥ 20.
+Needs Node.js ≥ 20. Optional: `ffmpeg` on the PATH, for converting videos
+the browser can't play from inside the editor.
 
 ```sh
 git clone <your-repo-url> reveal-editor
@@ -129,6 +130,12 @@ workflows and the one-way eject tradeoff.
   button) for PowerPoint-style cropping — drag the edge handles to crop,
   drag the picture to reposition it, drag its corners to zoom — and
   resizing a cropped image afterwards keeps the crop
+- **Videos**: the Video panel previews and controls playback (autoplay, loop,
+  mute, controls). A file the browser can't decode (HEVC from an iPhone, an
+  old MPEG-4/DivX clip, ProRes, …) is flagged there with its codec; if
+  `ffmpeg` is installed, a "Convert to WebM" button re-encodes it as
+  VP9/Opus next to the original and swaps the slide over to the new file
+  (undoable). Without ffmpeg the panel shows the equivalent command to run
 - **Deck setup**: the Deck panel controls the reveal theme, canvas format/size
   and margins, editor grid display/snapping, navigation-arrow visibility, and
   slide number format/position, typography, and transitions

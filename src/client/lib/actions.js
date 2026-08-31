@@ -25,6 +25,7 @@ import { cleanElementHtml } from './model/clean.js'
 import { loadSlideTemplates, storeSlideTemplate } from './model/templates.js'
 import { rehydrate } from './model/rehydrate.js'
 import { saveDeck } from './model/save.js'
+import { convertAssetToWebm } from './api.js'
 import {
   initializeSettings, updateSettings as updateSettingsModel, writeSettings
 } from './model/settings.js'
@@ -1195,6 +1196,39 @@ export function setVideoProperties(values) {
   runtime.overlay.refresh()
   markDirty()
   bumpSelection()
+}
+
+/**
+ * Deck-relative source of the selected video as written in the markup, or
+ * null when it is remote (http/data/blob URLs can't be converted server-side).
+ */
+export function selectedVideoLocalSrc() {
+  const src = selectedVideoInfo()?.el.getAttribute('src') ?? ''
+  if (!src || /^[a-z][a-z0-9+.-]*:/i.test(src) || src.startsWith('//')) return null
+  return src
+}
+
+/**
+ * Re-encode the selected video as WebM on the server and point the element
+ * at the result (an undoable edit). Resolves to the new path; rejects with
+ * the server's message when ffmpeg fails.
+ */
+export async function convertSelectedVideoToWebm({ onProgress, signal } = {}) {
+  const info = selectedVideoInfo()
+  const src = selectedVideoLocalSrc()
+  if (!info || !src) throw new Error('no local video selected')
+  const path = await convertAssetToWebm(src, { onProgress, signal })
+  // the selection may have moved on during a long encode
+  if (selectedVideoInfo()?.el !== info.el) return path
+  snapshotSlide()
+  info.el.setAttribute('src', path)
+  // load() restarts resource selection, clearing the old decode error
+  info.el.load()
+  info.el.addEventListener('loadedmetadata', bumpSelection, { once: true })
+  runtime.overlay.refresh()
+  markDirty()
+  bumpSelection()
+  return path
 }
 
 // --- image properties ---
