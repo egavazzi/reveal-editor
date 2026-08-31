@@ -41,7 +41,7 @@ export const UIT_LAYOUTS = Object.freeze([
 ])
 
 // Class on the emblem of the "Björn’s special" closing slide; the theme CSS animates it
-// (zoom in over 12 s, then spin from 1 min) while the slide is presented.
+// (zoom in over 12 s, then an exponentially accelerating spin) while the slide is presented.
 export const UIT_EMBLEM_ANIMATED_CLASS = 'uit-emblem-zoom-spin'
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
