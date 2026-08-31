@@ -7,6 +7,7 @@
 const EDIT_STYLE_ID = 're-edit-style'
 
 import { editor } from '../../stores/editor.svelte.js'
+import { installVideoControls } from '../model/videocontrols.js'
 
 export function getCanvasSize(bridge) {
   const config = bridge.config()
@@ -35,6 +36,7 @@ export function enterEditMode(bridge) {
   })
 
   injectEditStyles(bridge.doc)
+  installVideoControls(bridge.doc)
   const relayout = () => applyStageScale(bridge)
   relayout()
   bridge.win.addEventListener('resize', relayout)
@@ -56,7 +58,7 @@ function blockLinkNavigation(bridge) {
 }
 
 // While editing, videos are pointer-inert so they select/move like any
-// element. Holding Ctrl hands the pointer back to the native player
+// element. Holding Ctrl hands the pointer back to the player
 // (play, scrub, volume). Listen in both documents — focus can sit in
 // either — and clear on blur so the class never sticks.
 function watchMediaKey(bridge) {
@@ -138,12 +140,22 @@ function injectEditStyles(doc) {
       content: ''; position: absolute; pointer-events: none; z-index: 2147483646;
       inset: var(--re-safe-margin); border: 1px dashed rgba(47,111,186,.45);
     }
+    /* Shapes draw outside their layout box (overflow: visible carries stroke
+       joins and arrowheads past the viewBox). Firefox invalidates the box,
+       not the ink, so rescaling the canvas — a window or panel resize — can
+       leave the previous scale's stroke behind as a small ghost up and left
+       of the shape. Its own compositor layer turns that into a layer move,
+       which cannot smear. Edit mode only: presenting never rescales. */
+    .reveal .slides svg[data-shape] { will-change: transform; }
     /* videos are pointer-inert while editing so they behave like any other
-       element; hold Ctrl to use the native player */
+       element; hold Ctrl to use the player */
     body:not(.re-media-live) .reveal .slides section video { pointer-events: none; }
     body.re-media-live .reveal .slides section video { outline: 2px solid rgba(47,111,186,.65); }
-    /* selection frame handles overlap the player's control bar; get them
-       fully out of the way while the native player is live */
+    /* the control bar follows the same rule: out of the way of selection and
+       drag gestures until Ctrl hands the pointer to the player */
+    body:not(.re-media-live) .re-video-controls { display: none; }
+    /* selection frame handles overlap the control bar; get them fully out of
+       the way while the player is live */
     body.re-media-live .moveable-control-box { display: none !important; }
     /* stand-in box while a dropped file is being converted server-side */
     .reveal .slides section .re-converting {

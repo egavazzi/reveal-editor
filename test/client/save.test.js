@@ -45,14 +45,36 @@ describe('saveDeck', () => {
     editor.docVersion++
     editor.dirty = true
     first.resolve({ mtimeMs: 2 })
-    await initialSave
+    await vi.waitFor(() => expect(putDeck).toHaveBeenCalledTimes(2))
 
+    // the follow-up save is still in flight
     expect(editor.dirty).toBe(true)
-    expect(putDeck).toHaveBeenCalledTimes(2)
     expect(putDeck.mock.calls[1][0]).toContain('after')
 
     second.resolve({ mtimeMs: 3 })
-    await vi.waitFor(() => expect(editor.saving).toBe(false))
+    // the initial call resolves only once the follow-up has landed
+    await initialSave
+    expect(editor.saving).toBe(false)
+    expect(editor.dirty).toBe(false)
+    expect(editor.mtimeMs).toBe(3)
+  })
+
+  it('a call during an in-flight save resolves once the deck is clean', async () => {
+    const first = deferred()
+    const second = deferred()
+    putDeck.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
+
+    void saveDeck()
+    runtime.bridge.slidesEl.querySelector('p').textContent = 'after'
+    editor.docVersion++
+    editor.dirty = true
+    const concurrent = saveDeck() // e.g. Present clicked while autosave runs
+
+    first.resolve({ mtimeMs: 2 })
+    await vi.waitFor(() => expect(putDeck).toHaveBeenCalledTimes(2))
+    second.resolve({ mtimeMs: 3 })
+    await concurrent
+
     expect(editor.dirty).toBe(false)
     expect(editor.mtimeMs).toBe(3)
   })

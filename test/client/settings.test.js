@@ -23,6 +23,11 @@ describe('deck settings', () => {
     // edit mode must keep data-visibility="hidden" slides in the DOM
     expect(slides.querySelector('script[data-re-settings-runtime]').textContent).toContain('showHiddenSlides')
     expect(() => new Function(slides.querySelector('script[data-re-settings-runtime]').textContent)).not.toThrow()
+    // the cropped-video control bar ships with the same support nodes
+    expect(slides.querySelector('script[data-re-settings-runtime]').textContent)
+      .toContain('data-re-controls')
+    expect(slides.querySelector('style[data-re-settings-style]').textContent)
+      .toContain('.re-video-controls')
 
     const saved = cleanSlides(slides)
     expect(saved).toContain('data-re-settings')

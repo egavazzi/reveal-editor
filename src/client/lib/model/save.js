@@ -3,17 +3,38 @@ import { putDeck } from '../api.js'
 import { editor, runtime } from '../../stores/editor.svelte.js'
 
 let saveQueued = false
+let inflight = null
 
-export async function saveDeck() {
-  if (!runtime.bridge) return
+/**
+ * Resolves once the edits present at call time are on disk — or once the save
+ * has failed, in which case the deck is still dirty and the status bar carries
+ * the error. A call made while a save is in flight waits for that save and
+ * for the follow-up that picks up any newer edits, so `editor.dirty` is
+ * trustworthy as soon as the returned promise settles.
+ */
+export function saveDeck() {
+  if (!runtime.bridge) return Promise.resolve()
   if (!editor.dirty && !editor.saving) {
     editor.statusMessage = 'No changes to save.'
-    return
+    return Promise.resolve()
   }
   if (editor.saving) {
     saveQueued = true
-    return
+    return inflight ?? Promise.resolve()
   }
+  inflight = performSave().finally(() => {
+    inflight = null
+    editor.saving = false
+    if (saveQueued) {
+      saveQueued = false
+      // returning the promise makes earlier callers wait for this save too
+      if (editor.dirty) return saveDeck()
+    }
+  })
+  return inflight
+}
+
+async function performSave() {
   editor.saving = true
   const savedVersion = editor.docVersion
   try {
@@ -52,14 +73,6 @@ export async function saveDeck() {
       }
     } else {
       editor.statusMessage = `Save failed: ${err.message}`
-    }
-  } finally {
-    editor.saving = false
-    if (saveQueued && editor.dirty) {
-      saveQueued = false
-      void saveDeck()
-    } else {
-      saveQueued = false
     }
   }
 }

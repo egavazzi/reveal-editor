@@ -29,12 +29,13 @@ import { saveDeck } from './model/save.js'
 import { convertAsset, converterStatus } from './api.js'
 import { imageOutputName, isImagePath, isVideoPath } from './model/codecs.js'
 import {
-  initializeSettings, updateSettings as updateSettingsModel, writeSettings
+  hasStoredSettings, initializeSettings, updateSettings as updateSettingsModel, writeSettings
 } from './model/settings.js'
 import { setShapeColors, shapeColors, syncShapeGeometry } from './model/shapes.js'
 import { videoInfo, applyVideoProperties } from './model/media.js'
-import { imageOf, isImageFrame, readRect, removeCrop, resizeFrameContents, rotationOf } from './model/crop.js'
+import { imageOf, isImageFrame, mediaOf, readRect, removeCrop, resizeFrameContents, rotationOf, videoOf } from './model/crop.js'
 import { isRatioLocked, setRatioLocked } from './model/ratio.js'
+import { VIDEO_CONTROLS_ATTR, VIDEO_DELAY_ATTR } from './model/videocontrols.js'
 export { saveDeck } from './model/save.js'
 export { slideSummaries } from './model/slides.js'
 
@@ -69,7 +70,23 @@ function afterHistory(entry) {
 
 let autosaveTimer = null
 
+/**
+ * A video's control bar and its delayed start are built by the deck runtime,
+ * so a deck that asks for either needs the support nodes even if its settings
+ * were never touched.
+ * writeSettings is idempotent and the nodes are shared with every other
+ * runtime feature, so this adds them once and never churns.
+ */
+function ensureVideoControlsRuntime() {
+  const slides = runtime.bridge?.slidesEl
+  if (!slides || hasStoredSettings(slides)) return
+  if (slides.querySelector(`video[${VIDEO_CONTROLS_ATTR}], video[${VIDEO_DELAY_ATTR}]`)) {
+    writeSettings(slides, editor.settings)
+  }
+}
+
 export function markDirty() {
+  ensureVideoControlsRuntime()
   editor.dirty = true
   editor.docVersion++
   if (editor.autosave) {
@@ -416,13 +433,13 @@ function placeCaretAtPoint(el, { x, y }) {
 export function editElement(el, event = null, { viaClick = false } = {}) {
   if (isEditingText() && activeElement() === el) return
   const tag = el.tagName.toLowerCase()
-  if (tag === 'img' || isImageFrame(el)) {
-    // double-clicking an image edits its crop (a plain click on the
-    // selected image must not — too easy to hit while moving it)
+  if (mediaOf(el)) {
+    // double-clicking an image or video edits its crop (a plain click on
+    // the selected element must not — too easy to hit while moving it)
     if (!viaClick) runtime.overlay.beginCrop(el)
     return
   }
-  if (tag === 'svg' || tag === 'video') return
+  if (tag === 'svg') return
   if (el.classList.contains('re-html')) {
     if (!viaClick) openHtmlEditor(el)
   } else if (el.classList.contains('re-math') ||
@@ -548,7 +565,7 @@ export function applyBlockStyle(tag) {
   markDirty()
 }
 
-/** Font size applies to whole boxes (like slides.com), not text runs. */
+/** Font size is a box-level property: it applies to the whole element, not to individual text runs. */
 export function setFontSize(px) {
   if (!(Number.isFinite(px) && px > 0)) return
   const targets = isEditingText() ? [activeElement()] : runtime.overlay.getSelection()
@@ -905,10 +922,13 @@ export function setSpeakerNotes(notes) {
 /**
  * Open the standalone deck in a new tab. `fromCurrent` starts the show on the
  * slide being edited, via reveal's own #/h/v location hash — the presentation
- * view runs with hash navigation on, so it reads that on load. Like Present
- * from the start, this opens the file ON DISK: unsaved edits are not in it.
+ * view runs with hash navigation on, so it reads that on load.
+ *
+ * This serves the file ON DISK, so unsaved edits have to be written out first
+ * or the show is of an older deck. The tab is opened inside the click that
+ * asked for it — a popup blocker refuses one opened after the `await`.
  */
-export function openPresentation({ pdf = false, fromCurrent = false } = {}) {
+export async function openPresentation({ pdf = false, fromCurrent = false } = {}) {
   if (!editor.deckFile) return
   const file = encodeURIComponent(editor.deckFile)
   let suffix = pdf ? '?print-pdf' : ''
@@ -916,7 +936,19 @@ export function openPresentation({ pdf = false, fromCurrent = false } = {}) {
     const { h, v } = editor.slideIndex
     suffix = `#/${h}${v ? `/${v}` : ''}`
   }
-  window.open(`/deck/${file}${suffix}`, '_blank', 'noopener')
+  const url = `/deck/${file}${suffix}`
+  if (!editor.dirty) {
+    window.open(url, '_blank', 'noopener')
+    return
+  }
+  const tab = window.open('', '_blank')
+  // 'noopener' would return no handle to navigate later; sever the link instead
+  if (tab) tab.opener = null
+  await saveDeck()
+  if (!tab) return
+  // a failed save leaves the deck dirty — show the error, not a stale deck
+  if (editor.dirty) tab.close()
+  else tab.location = url
 }
 
 function refreshSlideState() {
@@ -932,7 +964,10 @@ export function toggleFragment() {
   snapshotSlide()
   for (const el of runtime.overlay.getSelection()) {
     if (el.classList.contains('fragment')) {
-      el.classList.remove('fragment')
+      // reveal's runtime classes only mean something on a fragment; the save
+      // cleaner looks for them on .fragment elements, so drop them here or
+      // they end up in the file
+      el.classList.remove('fragment', 'visible', 'current-fragment')
       el.removeAttribute('data-fragment-index')
       el.removeAttribute('data-re-frag-auto')
       if (!el.classList.length) el.removeAttribute('class')
@@ -1019,8 +1054,8 @@ const LAYER_KIND_LABELS = {
 /** Classify a slide element for the layers panel. */
 export function layerKind(el) {
   const tag = el.tagName.toLowerCase()
-  if (tag === 'img' || isImageFrame(el)) return 'image'
-  if (tag === 'video') return 'video'
+  if (imageOf(el)) return 'image'
+  if (videoOf(el)) return 'video'
   if (tag === 'svg') return 'shape'
   if (el.classList.contains('re-math') || el.querySelector?.(':scope .katex')) return 'math'
   if (el.classList.contains('re-html')) return 'html'
@@ -1196,9 +1231,9 @@ export function setElementProperties(values) {
   const { el } = info
   if (values.x != null) el.style.left = `${Number(values.x) || 0}px`
   if (values.y != null) el.style.top = `${Number(values.y) || 0}px`
-  // resizing a cropped image scales the picture with its frame
+  // resizing cropped media scales the picture with its frame
   const frameStart = isImageFrame(el) && (values.width != null || values.height != null)
-    ? { frame: readRect(el), img: readRect(imageOf(el)) }
+    ? { frame: readRect(el), media: readRect(mediaOf(el)) }
     : null
   if (values.width != null) el.style.width = `${Math.max(1, Number(values.width) || 1)}px`
   if (values.height != null) el.style.height = `${Math.max(1, Number(values.height) || 1)}px`
@@ -1213,6 +1248,12 @@ export function setElementProperties(values) {
 /**
  * An element inside a group is not its own editable unit on the canvas
  * (clicks select the group), while a top-level one is.
+ *
+ * Losing `re-el` also loses the deck's convention CSS that neutralizes the
+ * theme's box styling (`.reveal .re-el { margin: 0 }`, `img.re-el` max sizes),
+ * and reveal's own `.reveal section img { margin: 15px 0; ... }` would then
+ * push a grouped image off its stored coordinates. Carry the neutralization
+ * inline instead, so it holds in the standalone deck too.
  */
 function adoptInto(el, parent) {
   const nested = parent.classList.contains('re-group')
@@ -1220,7 +1261,22 @@ function adoptInto(el, parent) {
   // don't leave an empty class="" behind in the saved deck
   if (!el.getAttribute('class')) el.removeAttribute('class')
   el.toggleAttribute('data-re-group-child', nested)
+  if (nested) {
+    el.style.margin = '0'
+    if (SIZED_BY_THEME.has(el.tagName.toUpperCase())) {
+      el.style.maxWidth = 'none'
+      el.style.maxHeight = 'none'
+    }
+  } else {
+    el.style.removeProperty('margin')
+    el.style.removeProperty('max-width')
+    el.style.removeProperty('max-height')
+  }
 }
+
+// Elements reveal's theme caps to a share of the slide (.reveal img, video…);
+// inside a group they must keep the size the editor gave them.
+const SIZED_BY_THEME = new Set(['IMG', 'VIDEO', 'IFRAME', 'SVG'])
 
 export function groupSelection() {
   // Document order, not click order: the group must preserve the stacking
@@ -1269,7 +1325,9 @@ export function ungroupSelection() {
   const parent = group.parentElement
   const left = parseFloat(group.style.left) || 0
   const top = parseFloat(group.style.top) || 0
-  const children = [...group.children]
+  // runtime overlays (a video's control bar) belong to the runtime, not to
+  // the group's membership
+  const children = [...group.children].filter((el) => !el.matches('.re-transient'))
   for (const child of children) {
     child.style.left = `${left + (parseFloat(child.style.left) || 0)}px`
     child.style.top = `${top + (parseFloat(child.style.top) || 0)}px`
@@ -1292,8 +1350,13 @@ export function selectedVideoInfo() {
 export function setVideoProperties(values) {
   const info = selectedVideoInfo()
   if (!info) return
-  snapshotSlide()
+  // A video's controls are the deck runtime's bar. Capture the whole deck so
+  // undo can also remove the support nodes the first one adds.
+  const runtimeControls = values.controls === true || Number(values.autoplayDelay) > 0
+  if (runtimeControls) snapshotDeck()
+  else snapshotSlide()
   applyVideoProperties(info.el, values)
+  if (runtimeControls) writeSettings(runtime.bridge.slidesEl, editor.settings)
   runtime.overlay.refresh()
   markDirty()
   bumpSelection()
@@ -1370,19 +1433,20 @@ export function selectedImageInfo() {
   }
 }
 
-/** Enter PowerPoint-style crop mode on the selected image. */
-export function cropSelectedImage() {
+/** Enter PowerPoint-style crop mode on the selected image or video. */
+export function cropSelectedMedia() {
   const sel = runtime.overlay?.getSelection() ?? []
-  if (sel.length === 1 && imageOf(sel[0])) runtime.overlay.beginCrop(sel[0])
+  if (sel.length === 1 && mediaOf(sel[0])) runtime.overlay.beginCrop(sel[0])
 }
 
-/** Restore the full picture of a cropped image at its current size. */
-export function removeImageCrop() {
-  const info = selectedImageInfo()
-  if (!info?.cropped) return
+/** Restore the full picture of cropped media at its current size. */
+export function removeMediaCrop() {
+  const sel = runtime.overlay?.getSelection() ?? []
+  const el = sel.length === 1 ? sel[0] : null
+  if (!isImageFrame(el) || !mediaOf(el)) return
   snapshotSlide()
-  const img = removeCrop(info.el)
-  runtime.overlay.setSelection([img])
+  const media = removeCrop(el)
+  runtime.overlay.setSelection([media])
   markDirty()
 }
 
@@ -1403,7 +1467,7 @@ export function setImageProperties(values) {
   if (values.width != null || values.height != null) {
     // write only the edited dimension: a foreign-deck image may have no
     // inline height (or width), and that auto dimension must stay auto
-    const start = { frame: readRect(el), img: readRect(img) }
+    const start = { frame: readRect(el), media: readRect(img) }
     if (values.width != null) el.style.width = `${Math.max(1, Number(values.width))}px`
     if (values.height != null) el.style.height = `${Math.max(1, Number(values.height))}px`
     // a frame always carries both inline dimensions (wrapImage sets them)
