@@ -7,15 +7,26 @@ import { uploadAsset } from '../api.js'
 
 let cascade = 0
 
-function placeAt(bridge, el, width, height, { center } = {}) {
+/**
+ * Append `el` to a slide (`section`, default the current one) centred on
+ * `center` in canvas px — kept inside the canvas — or, without one, near
+ * the canvas centre with the cascade offset.
+ */
+function placeAt(bridge, el, width, height, { center, section = bridge.currentSection } = {}) {
   const { width: cw, height: ch } = getCanvasSize(bridge)
-  const offset = (cascade++ % 5) * 24
-  const cx = center ? center.x : cw / 2 + offset
-  const cy = center ? center.y : ch / 2 + offset
+  let left, top
+  if (center) {
+    left = Math.min(Math.max(0, center.x - width / 2), Math.max(0, cw - width))
+    top = Math.min(Math.max(0, center.y - height / 2), Math.max(0, ch - height))
+  } else {
+    const offset = (cascade++ % 5) * 24
+    left = (cw - width) / 2 + offset
+    top = (ch - height) / 2 + offset
+  }
   el.style.position = 'absolute'
-  el.style.left = `${Math.round(cx - width / 2)}px`
-  el.style.top = `${Math.round(cy - height / 2)}px`
-  const section = bridge.currentSection
+  el.style.left = `${Math.round(left)}px`
+  el.style.top = `${Math.round(top)}px`
+  if (!section.isConnected) throw new Error('the slide it was meant for no longer exists')
   section.appendChild(el)
   return el
 }
@@ -27,7 +38,7 @@ function placeAt(bridge, el, width, height, { center } = {}) {
  * never saved, never selectable. `center` is where the converted media
  * should be placed to take the box's spot.
  */
-function showConvertingBox(bridge, name, width, height) {
+function showConvertingBox(bridge, name, width, height, { center, section }) {
   const doc = bridge.doc
   const box = doc.createElement('div')
   box.className = 're-transient re-converting'
@@ -44,7 +55,7 @@ function showConvertingBox(bridge, name, width, height) {
   const fill = doc.createElement('span')
   bar.appendChild(fill)
   box.append(spinner, label, bar)
-  placeAt(bridge, box, width, height)
+  placeAt(bridge, box, width, height, { center, section })
   return {
     center: {
       x: parseFloat(box.style.left) + width / 2,
@@ -82,9 +93,13 @@ export function insertShape(bridge, kind) {
  * Upload an image blob to the deck's assets/ dir and insert it, scaled to
  * fit comfortably on the canvas at natural aspect ratio. When the browser
  * cannot decode the file, `convert(path, name, { onProgress })` gets a chance to produce a
- * displayable copy; the insert fails when it cannot.
+ * displayable copy; the insert fails when it cannot. The image lands on the
+ * slide that is current when this is called (the user may move on during
+ * a long conversion), centred on `at` (canvas px) when given.
+ * `beforeInsert(section)` runs just before the element is appended.
  */
-export async function insertImageBlob(bridge, blob, name, { convert } = {}) {
+export async function insertImageBlob(bridge, blob, name, { convert, at, beforeInsert } = {}) {
+  const section = bridge.currentSection
   const upload = await uploadAsset(blob, name)
   let path = upload.path
   const doc = bridge.doc
@@ -95,12 +110,12 @@ export async function insertImageBlob(bridge, blob, name, { convert } = {}) {
     probe.src = src
   })
   let natural
-  let center
+  let center = at
   try {
     natural = await measure(path)
   } catch (err) {
     if (!convert) throw err
-    const box = showConvertingBox(bridge, name, 400, 300)
+    const box = showConvertingBox(bridge, name, 400, 300, { center, section })
     try {
       const converted = await convert(path, name, { onProgress: box.setProgress })
       if (!converted) throw err
@@ -121,15 +136,20 @@ export async function insertImageBlob(bridge, blob, name, { convert } = {}) {
   img.src = path
   img.style.width = `${w}px`
   img.style.height = `${h}px`
-  return placeAt(bridge, img, w, h, { center })
+  beforeInsert?.(section)
+  return placeAt(bridge, img, w, h, { center, section })
 }
 
 /**
  * Upload and insert an HTML5 video with its intrinsic aspect ratio. When
  * the browser can't decode the file, `convert(path, name, { onProgress })` gets a chance to
- * produce a playable copy.
+ * produce a playable copy. The video lands on the slide that is current
+ * when this is called (the user may move on during a long conversion),
+ * centred on `at` (canvas px) when given. `beforeInsert(section)` runs
+ * just before the element is appended.
  */
-export async function insertVideoBlob(bridge, blob, name, { convert } = {}) {
+export async function insertVideoBlob(bridge, blob, name, { convert, at, beforeInsert } = {}) {
+  const section = bridge.currentSection
   const upload = await uploadAsset(blob, name)
   let path = upload.path
   const doc = bridge.doc
@@ -144,14 +164,14 @@ export async function insertVideoBlob(bridge, blob, name, { convert } = {}) {
     probe.src = src
   })
   let natural
-  let center
+  let center = at
   try {
     natural = await measure(path)
   } catch {
     // Undecodable here: convert if we can, otherwise insert the original
     // anyway (another browser may play it); the video panel explains.
     if (convert) {
-      const box = showConvertingBox(bridge, name, 480, 270)
+      const box = showConvertingBox(bridge, name, 480, 270, { center, section })
       try {
         const converted = await convert(path, name, { onProgress: box.setProgress })
         if (converted) {
@@ -176,7 +196,8 @@ export async function insertVideoBlob(bridge, blob, name, { convert } = {}) {
   video.preload = 'metadata'
   video.style.width = `${w}px`
   video.style.height = `${h}px`
-  return placeAt(bridge, video, w, h, { center })
+  beforeInsert?.(section)
+  return placeAt(bridge, video, w, h, { center, section })
 }
 
 export function insertMathBox(bridge) {

@@ -8,6 +8,7 @@ import {
 } from './model/insert.js'
 import { startTextEdit, formatText, setBlockStyle, isEditingText, activeElement } from './editors/text.js'
 import { ensurePositioned } from './model/position.js'
+import { getCanvasSize } from './overlay/editmode.js'
 import { arrangeElements } from './model/alignment.js'
 import { applyLayout, isSlideEmpty } from './model/layouts.js'
 import {
@@ -211,14 +212,52 @@ export async function convertIfPossible(path, name = fileNameOf(path), { onProgr
   }
 }
 
-export async function addImageBlob(blob, name) {
+// Undo snapshot for the slide holding `section`, whichever slide is
+// current: media inserted after a long conversion goes to the slide it was
+// dropped on, and its undo step must cover that slide.
+function snapshotSection(section) {
+  const entry = runtime.bridge.getSlideEntries().find((e) => e.section === section)
+  if (!entry) throw new Error('the slide it was meant for no longer exists')
+  snapshot(runtime.bridge, { type: 'slide', h: entry.h, v: entry.v })
+}
+
+// Select a freshly inserted element when its slide is the visible one;
+// otherwise say where it went.
+function showInserted(el, name) {
+  const section = el.closest('section')
+  if (section === runtime.bridge.currentSection) {
+    runtime.overlay.setSelection([el])
+    return
+  }
+  const entry = runtime.bridge.getSlideEntries().find((e) => e.section === section)
+  const where = entry ? `slide ${entry.h + 1}${entry.vertical ? `.${entry.v + 1}` : ''}` : 'its slide'
+  editor.statusMessage = `${name} was added to ${where}, where it was dropped.`
+}
+
+/**
+ * Canvas-px point under a drop event on the deck document, or undefined when
+ * it fell outside the current slide (the insert then uses the default spot).
+ */
+function dropPoint(event) {
+  if (event.clientX == null) return undefined
+  const section = runtime.bridge.currentSection
+  const rect = section.getBoundingClientRect()
+  if (event.clientX < rect.left || event.clientX > rect.right ||
+      event.clientY < rect.top || event.clientY > rect.bottom) return undefined
+  const canvas = getCanvasSize(runtime.bridge)
+  const scale = rect.width / canvas.width || 1
+  return { x: (event.clientX - rect.left) / scale, y: (event.clientY - rect.top) / scale }
+}
+
+export async function addImageBlob(blob, name, { at } = {}) {
   try {
     const selection = runtime.overlay?.getSelection() ?? []
     const placeholder = selection.length === 1 && selection[0].classList.contains('re-image-placeholder')
       ? selection[0]
       : null
-    snapshotSlide()
-    const el = await insertImageBlob(runtime.bridge, blob, name, { convert: convertIfPossible })
+    const el = await insertImageBlob(runtime.bridge, blob, name, {
+      convert: convertIfPossible, at, beforeInsert: snapshotSection
+    })
     if (placeholder?.isConnected) {
       for (const prop of ['left', 'top', 'width', 'height']) {
         if (placeholder.style[prop]) el.style[prop] = placeholder.style[prop]
@@ -229,7 +268,7 @@ export async function addImageBlob(blob, name) {
       placeholder.before(el)
       placeholder.remove()
     }
-    runtime.overlay.setSelection([el])
+    showInserted(el, name)
     markDirty()
   } catch (err) {
     editor.statusMessage = `Image insert failed: ${err.message}`
@@ -248,16 +287,17 @@ export function pickImage() {
   input.click()
 }
 
-export async function addVideoBlob(blob, name) {
+export async function addVideoBlob(blob, name, { at } = {}) {
   try {
-    snapshotSlide()
-    const el = await insertVideoBlob(runtime.bridge, blob, name, { convert: convertIfPossible })
+    const el = await insertVideoBlob(runtime.bridge, blob, name, {
+      convert: convertIfPossible, at, beforeInsert: snapshotSection
+    })
     el.addEventListener('error', () => {
       editor.statusMessage =
         'Video added, but this browser cannot decode it (unsupported codec) — it will not play here. Convert to WebM (VP9) or H.264 MP4.'
       editor.selectionVersion++
     }, { once: true })
-    runtime.overlay.setSelection([el])
+    showInserted(el, name)
     markDirty()
   } catch (err) {
     editor.statusMessage = `Video insert failed: ${err.message}`
@@ -286,8 +326,9 @@ export function handleFileDrop(event) {
   const image = type.startsWith('image/') || (untyped && isImagePath(file.name))
   if (!video && !image) return false
   event.preventDefault()
-  if (video) addVideoBlob(file, file.name)
-  else addImageBlob(file, file.name)
+  const at = dropPoint(event)
+  if (video) addVideoBlob(file, file.name, { at })
+  else addImageBlob(file, file.name, { at })
   return true
 }
 
