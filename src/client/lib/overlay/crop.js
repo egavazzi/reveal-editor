@@ -6,8 +6,7 @@
 // commits.
 import Moveable from 'moveable'
 import {
-  CROP_CONTROLS_ATTR, mediaOf, isImageFrame, wrapImage, unwrapImage, isTrivialCrop,
-  readRect, writeRect, rotationOf
+  mediaOf, isImageFrame, wrapImage, unwrapImage, isTrivialCrop, readRect, writeRect, rotationOf
 } from '../model/crop.js'
 import { roundGeometry } from '../model/position.js'
 
@@ -38,15 +37,8 @@ export function createCropMode(bridge, { onDone }) {
     frame = wrapImage(el)
     mutated = false
     const media = mediaOf(frame)
-    if (media.tagName === 'VIDEO') {
-      // a video's own controls sit under the view clone and would eat the
-      // drags that pan and zoom the picture
-      if (media.hasAttribute('controls')) {
-        media.removeAttribute('controls')
-        media.setAttribute(CROP_CONTROLS_ATTR, '')
-      }
-      media.pause()
-    }
+    // the cropped picture must hold still while it is being framed
+    if (media.tagName === 'VIDEO') media.pause()
     frame.classList.add('re-cropping')
     buildView(media)
 
@@ -194,11 +186,6 @@ export function createCropMode(bridge, { onDone }) {
     frameBox = pictureBox = null
     view?.remove()
     view = viewMedia = null
-    const media = mediaOf(frame)
-    if (media?.hasAttribute(CROP_CONTROLS_ATTR)) {
-      media.removeAttribute(CROP_CONTROLS_ATTR)
-      media.setAttribute('controls', '')
-    }
     frame?.classList.remove('re-cropping')
     frame = null
   }
@@ -245,6 +232,8 @@ function injectStyles(doc) {
     /* edit mode makes videos pointer-inert; the picture being cropped must
        still take the drags that pan and zoom it */
     .re-image-frame.re-cropping > video { pointer-events: auto !important; }
+    /* the frame's own control bar would sit on top of the crop handles */
+    .re-image-frame.re-cropping > .re-video-controls { display: none; }
     .re-crop-view {
       position: absolute; inset: 0; overflow: hidden; pointer-events: none;
     }

@@ -131,7 +131,10 @@ workflows and the one-way eject tradeoff.
   resizing a cropped image afterwards keeps the crop
 - **Videos**: the Video panel scrubs and previews playback, sets exact
   dimensions and the saved autoplay/loop/muted/controls settings, and crops
-  the video with the same edge/corner handles as an image
+  the video with the same edge/corner handles as an image. A crop frame clips
+  the browser's own player away, so a cropped video with controls gets a
+  compact play/seek/mute bar along the bottom of the frame, in the saved
+  presentation as well as in the editor
 - **Deck setup**: the Deck panel controls the reveal theme, canvas format/size
   and margins, editor grid display/snapping, navigation-arrow visibility, and
   slide number format/position, typography, and transitions

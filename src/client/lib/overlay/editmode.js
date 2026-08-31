@@ -7,6 +7,7 @@
 const EDIT_STYLE_ID = 're-edit-style'
 
 import { editor } from '../../stores/editor.svelte.js'
+import { installVideoControls } from '../model/videocontrols.js'
 
 export function getCanvasSize(bridge) {
   const config = bridge.config()
@@ -35,6 +36,7 @@ export function enterEditMode(bridge) {
   })
 
   injectEditStyles(bridge.doc)
+  installVideoControls(bridge.doc)
   const relayout = () => applyStageScale(bridge)
   relayout()
   bridge.win.addEventListener('resize', relayout)
@@ -142,6 +144,9 @@ function injectEditStyles(doc) {
        element; hold Ctrl to use the native player */
     body:not(.re-media-live) .reveal .slides section video { pointer-events: none; }
     body.re-media-live .reveal .slides section video { outline: 2px solid rgba(47,111,186,.65); }
+    /* a cropped video's control bar follows the same rule: out of the way of
+       selection and drag gestures until Ctrl hands the pointer to the player */
+    body:not(.re-media-live) .re-video-controls { display: none; }
     /* selection frame handles overlap the player's control bar; get them
        fully out of the way while the native player is live */
     body.re-media-live .moveable-control-box { display: none !important; }

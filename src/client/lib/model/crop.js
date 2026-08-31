@@ -6,6 +6,7 @@
 // which part of it shows. Uncropped media stays a bare <img>/<video
 // class="re-el">; the frame exists only while a crop is in effect, so decks
 // without crops keep their original markup.
+import { VIDEO_CONTROLS_ATTR } from './videocontrols.js'
 
 // Styles that belong to the outer element (the frame while cropped, the
 // bare picture otherwise) rather than to the picture itself.
@@ -17,11 +18,6 @@ const DECORATION_PROPS = [
 const DECORATION_ATTRS = ['data-re-lock-ratio', 'data-re-locked', 'data-re-hidden']
 
 const GEOMETRY_PROPS = ['left', 'top', 'width', 'height']
-
-// Marks a <video> whose native controls crop mode has taken away for the
-// duration of the session. Runtime-only: the save cleaner turns it back into
-// the `controls` attribute, so a save made mid-crop keeps the player.
-export const CROP_CONTROLS_ATTR = 'data-re-crop-controls'
 
 export function isImageFrame(el) {
   return Boolean(el?.classList?.contains('re-image-frame'))
@@ -167,6 +163,12 @@ export function wrapImage(el) {
   media.style.margin = '0'
   media.style.removeProperty('object-fit')
   media.style.removeProperty('object-position')
+  // the frame clips a video's native control bar away; a framed video's
+  // controls are drawn by the deck runtime from the marker instead
+  if (media.hasAttribute('controls')) {
+    media.removeAttribute('controls')
+    media.setAttribute(VIDEO_CONTROLS_ATTR, '')
+  }
 
   media.before(frame)
   frame.appendChild(media)
@@ -186,6 +188,10 @@ export function unwrapImage(frame, rect = readRect(frame)) {
   writeRect(media, rect)
   media.style.removeProperty('max-width')
   media.style.removeProperty('max-height')
+  if (media.hasAttribute(VIDEO_CONTROLS_ATTR)) {
+    media.removeAttribute(VIDEO_CONTROLS_ATTR)
+    media.setAttribute('controls', '')
+  }
   frame.before(media)
   frame.remove()
   return media

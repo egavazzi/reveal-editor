@@ -2,8 +2,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   imageOf, videoOf, mediaOf, isImageFrame, wrapImage, unwrapImage, removeCrop,
-  isTrivialCrop, readRect, writeRect, resizeFrameContents, CROP_CONTROLS_ATTR
+  isTrivialCrop, readRect, writeRect, resizeFrameContents
 } from '../../src/client/lib/model/crop.js'
+import { VIDEO_CONTROLS_ATTR } from '../../src/client/lib/model/videocontrols.js'
 import { videoInfo, applyVideoProperties } from '../../src/client/lib/model/media.js'
 import { cleanElementHtml } from '../../src/client/lib/model/clean.js'
 
@@ -175,9 +176,9 @@ describe('video crop frames', () => {
 
   it('keeps playback attributes on the video and decorations on the frame', () => {
     const video = makeVideo('border-radius: 8px; box-shadow: 0 0 4px #000;',
-      { attrs: 'controls loop muted data-autoplay' })
+      { attrs: 'loop muted data-autoplay' })
     const frame = wrapImage(video)
-    for (const attr of ['controls', 'loop', 'muted', 'data-autoplay']) {
+    for (const attr of ['loop', 'muted', 'data-autoplay']) {
       expect(video.hasAttribute(attr)).toBe(true)
       expect(frame.hasAttribute(attr)).toBe(false)
     }
@@ -185,6 +186,33 @@ describe('video crop frames', () => {
     expect(video.style.borderRadius).toBe('')
     expect(unwrapImage(frame)).toBe(video)
     expect(video.style.borderRadius).toBe('8px')
+  })
+
+  it('hands native controls over to the runtime bar while framed', () => {
+    const video = makeVideo('', { attrs: 'controls' })
+    const frame = wrapImage(video)
+    // native controls are drawn on the video's own box, which the frame clips
+    expect(video.hasAttribute('controls')).toBe(false)
+    expect(video.hasAttribute(VIDEO_CONTROLS_ATTR)).toBe(true)
+    expect(videoInfo(frame).controls).toBe(true)
+    unwrapImage(frame)
+    expect(video.hasAttribute('controls')).toBe(true)
+    expect(video.hasAttribute(VIDEO_CONTROLS_ATTR)).toBe(false)
+  })
+
+  it('leaves a video without controls alone on both sides of a crop', () => {
+    const video = makeVideo()
+    const frame = wrapImage(video)
+    expect(video.hasAttribute(VIDEO_CONTROLS_ATTR)).toBe(false)
+    expect(videoInfo(frame).controls).toBe(false)
+    // the panel checkbox writes whichever attribute the current framing uses
+    applyVideoProperties(frame, { controls: true })
+    expect(video.hasAttribute(VIDEO_CONTROLS_ATTR)).toBe(true)
+    expect(video.hasAttribute('controls')).toBe(false)
+    applyVideoProperties(frame, { controls: false })
+    expect(video.hasAttribute(VIDEO_CONTROLS_ATTR)).toBe(false)
+    unwrapImage(frame)
+    expect(video.hasAttribute('controls')).toBe(false)
   })
 
   it('restores the full video when the crop is removed', () => {
@@ -225,21 +253,25 @@ describe('video crop frames', () => {
     expect(frame.hasAttribute('loop')).toBe(false)
   })
 
-  it('saves a frame mid-crop with the video\'s controls intact', () => {
-    const video = makeVideo()
+  it('saves the marker and the bare frame, never the runtime bar', () => {
+    const video = makeVideo('', { attrs: 'controls' })
     const frame = wrapImage(video)
     writeRect(video, { left: -60, top: 0, width: 400, height: 300 })
-    // the state crop mode leaves behind while it runs
+    // the state crop mode and the control-bar runtime leave behind
     frame.classList.add('re-cropping')
-    video.setAttribute(CROP_CONTROLS_ATTR, '')
     const view = document.createElement('div')
     view.className = 're-transient re-crop-view'
     frame.appendChild(view)
+    const bar = document.createElement('div')
+    bar.className = 're-transient re-video-controls'
+    frame.appendChild(bar)
     const html = cleanElementHtml(frame.closest('section'))
     expect(html).toContain('re-image-frame')
     expect(html).toContain('assets/a.webm')
-    expect(html).toContain('controls')
-    expect(html).not.toContain(CROP_CONTROLS_ATTR)
+    expect(html).toContain(VIDEO_CONTROLS_ATTR)
+    // a framed video must not ask the browser for controls it would clip away
+    expect(html).not.toMatch(/\scontrols/)
+    expect(html).not.toContain('re-video-controls')
     expect(html).not.toContain('re-cropping')
     expect(html).not.toContain('re-crop-view')
   })

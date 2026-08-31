@@ -4,6 +4,13 @@
 // Playback settings live on the <video> even when a crop frame wraps it;
 // size and decorations belong to the outer element.
 import { isImageFrame, readRect, resizeFrameContents, videoOf } from './crop.js'
+import { VIDEO_CONTROLS_ATTR } from './videocontrols.js'
+
+// A framed video's controls are the runtime's bar, marked by an attribute of
+// our own; a bare one uses the browser's native player.
+function controlsAttr(el) {
+  return isImageFrame(el) ? VIDEO_CONTROLS_ATTR : 'controls'
+}
 
 export function videoInfo(el) {
   const video = videoOf(el)
@@ -20,7 +27,7 @@ export function videoInfo(el) {
     autoplay: video.hasAttribute('data-autoplay'),
     loop: video.hasAttribute('loop'),
     muted: video.hasAttribute('muted'),
-    controls: video.hasAttribute('controls')
+    controls: video.hasAttribute(controlsAttr(el))
   }
 }
 
@@ -48,7 +55,7 @@ export function applyVideoProperties(el, values) {
     video.muted = Boolean(values.muted)
   }
   if (values.controls != null) {
-    video.toggleAttribute('controls', Boolean(values.controls))
+    video.toggleAttribute(controlsAttr(el), Boolean(values.controls))
   }
   return true
 }
