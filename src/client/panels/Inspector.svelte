@@ -7,7 +7,7 @@
     currentSpeakerNotes, selectedElementInfo, selectedImageInfo, setElementProperties,
     selectedShapeInfo, setShapeProperties, flattenSelectedLine, resizeDeck,
     selectedVideoInfo, setVideoProperties,
-    setImageProperties, cropSelectedImage, removeImageCrop,
+    setImageProperties, cropSelectedMedia, removeMediaCrop,
     setSpeakerNotes, updateDeckSettings as updateSettings
   } from '../lib/actions.js'
   import { icon } from '../lib/icons.js'
@@ -153,7 +153,7 @@
   // scaled slide canvas, so the panel is the reliable way to scrub.
   let preview = $state(null)
   $effect(() => {
-    const el = video?.el
+    const el = video?.media
     if (!el) {
       preview = null
       return
@@ -179,7 +179,7 @@
   let codec = $state(null)
   let probedSrc = ''
   $effect(() => {
-    const el = video?.el
+    const el = video?.media
     const src = el ? el.currentSrc || el.src : ''
     if (!video?.broken || !src) {
       codec = null
@@ -195,7 +195,7 @@
   })
 
   const videoFileName = $derived.by(() => {
-    const src = video?.el ? video.el.currentSrc || video.el.src : ''
+    const src = video?.media ? video.media.currentSrc || video.media.src : ''
     try {
       return decodeURIComponent(src.split('/').pop() || '')
     } catch {
@@ -210,23 +210,23 @@
   }
 
   function previewToggle() {
-    const el = video?.el
+    const el = video?.media
     if (!el) return
     if (el.paused) el.play().catch(() => {})
     else el.pause()
   }
   function previewSeek(value) {
-    const el = video?.el
+    const el = video?.media
     if (el && Number.isFinite(value)) el.currentTime = value
   }
   function previewVolume(value) {
-    const el = video?.el
+    const el = video?.media
     if (!el) return
     el.volume = Math.min(1, Math.max(0, value))
     el.muted = el.volume === 0
   }
   function previewMute() {
-    const el = video?.el
+    const el = video?.media
     if (el) el.muted = !el.muted
   }
   function fmtTime(s) {
@@ -443,11 +443,11 @@
       </div>
       {#if image.cropped}
         <div class="row">
-          <button onclick={cropSelectedImage}>Adjust crop</button>
-          <button onclick={removeImageCrop}>Remove crop</button>
+          <button onclick={cropSelectedMedia}>Adjust crop</button>
+          <button onclick={removeMediaCrop}>Remove crop</button>
         </div>
       {:else}
-        <button onclick={cropSelectedImage}>Crop image</button>
+        <button onclick={cropSelectedMedia}>Crop image</button>
       {/if}
       <p class="hint">Or double-click the image. Drag the edge handles to crop, drag the picture to reposition it, and drag its corners to zoom. Resizing a cropped image keeps the crop.</p>
       <div class="row">
@@ -519,6 +519,15 @@
         <label>Width<input type="number" min="1" value={video.width} onchange={(e) => setVideoProperties({ width: +e.currentTarget.value })} /></label>
         <label>Height<input type="number" min="1" value={video.height} onchange={(e) => setVideoProperties({ height: +e.currentTarget.value })} /></label>
       </div>
+      {#if video.cropped}
+        <div class="row">
+          <button onclick={cropSelectedMedia}>Adjust crop</button>
+          <button onclick={removeMediaCrop}>Remove crop</button>
+        </div>
+      {:else}
+        <button onclick={cropSelectedMedia}>Crop video</button>
+      {/if}
+      <p class="hint">Or double-click the video. Drag the edge handles to crop, drag the picture to reposition it, and drag its corners to zoom. Resizing a cropped video keeps the crop.</p>
       <h3>Playback</h3>
       <label class="check"><input type="checkbox" checked={video.autoplay} onchange={(e) => setVideoProperties({ autoplay: e.currentTarget.checked })} /> Autoplay when the slide appears</label>
       <label class="check"><input type="checkbox" checked={video.loop} onchange={(e) => setVideoProperties({ loop: e.currentTarget.checked })} /> Loop</label>

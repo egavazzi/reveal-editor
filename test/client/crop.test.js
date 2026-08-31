@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest'
 import {
-  imageOf, isImageFrame, wrapImage, unwrapImage, removeCrop,
-  isTrivialCrop, readRect, writeRect, resizeFrameContents
+  imageOf, videoOf, mediaOf, isImageFrame, wrapImage, unwrapImage, removeCrop,
+  isTrivialCrop, readRect, writeRect, resizeFrameContents, CROP_CONTROLS_ATTR
 } from '../../src/client/lib/model/crop.js'
+import { videoInfo, applyVideoProperties } from '../../src/client/lib/model/media.js'
 import { cleanElementHtml } from '../../src/client/lib/model/clean.js'
 
 function makeImage(style = '', { natural = null } = {}) {
@@ -102,7 +103,7 @@ describe('image crop frames', () => {
     const img = makeImage()
     const frame = wrapImage(img)
     writeRect(img, { left: -60, top: -20, width: 400, height: 300 })
-    const start = { frame: readRect(frame), img: readRect(img) }
+    const start = { frame: readRect(frame), media: readRect(img) }
     // frame doubles in width, halves in height
     resizeFrameContents(frame, start, 800, 150)
     expect(readRect(img)).toEqual({ left: -120, top: -10, width: 800, height: 150 })
@@ -124,10 +125,122 @@ describe('image crop frames', () => {
     expect(html).not.toContain('re-crop-view')
   })
 
-  it('leaves non-images alone', () => {
+  it('leaves non-media alone', () => {
     document.body.innerHTML = '<div class="re-el"></div>'
     const div = document.querySelector('div')
+    expect(mediaOf(div)).toBe(null)
     expect(imageOf(div)).toBe(null)
     expect(isImageFrame(div)).toBe(false)
+  })
+})
+
+function makeVideo(style = '', { intrinsic = null, attrs = '' } = {}) {
+  document.body.innerHTML = `
+    <section><video class="re-el" src="assets/a.webm" ${attrs}
+      style="position:absolute; left:100px; top:50px; width:400px; height:300px; ${style}"></video></section>`
+  const video = document.querySelector('video')
+  if (intrinsic) {
+    Object.defineProperty(video, 'videoWidth', { value: intrinsic.w })
+    Object.defineProperty(video, 'videoHeight', { value: intrinsic.h })
+  }
+  return video
+}
+
+describe('video crop frames', () => {
+  it('wraps a video into a frame the same way as an image', () => {
+    const video = makeVideo()
+    const frame = wrapImage(video)
+    expect(isImageFrame(frame)).toBe(true)
+    expect(mediaOf(frame)).toBe(video)
+    expect(videoOf(frame)).toBe(video)
+    // a video frame is not an image frame: the panels must not confuse them
+    expect(imageOf(frame)).toBe(null)
+    expect(readRect(frame)).toEqual({ left: 100, top: 50, width: 400, height: 300 })
+    expect(readRect(video)).toEqual({ left: 0, top: 0, width: 400, height: 300 })
+    expect(isTrivialCrop(frame)).toBe(true)
+    expect(frame.classList.contains('re-el')).toBe(true)
+    expect(video.classList.contains('re-el')).toBe(false)
+    expect(frame.style.overflow).toBe('hidden')
+    expect(video.style.maxWidth).toBe('none')
+  })
+
+  it('converts an object-fit cover crop using the video\'s intrinsic size', () => {
+    const video = makeVideo('object-fit: cover; object-position: 100% 50%;', { intrinsic: { w: 100, h: 100 } })
+    const frame = wrapImage(video)
+    // cover scale for a 400×300 frame over a square picture is 4
+    expect(readRect(video)).toEqual({ left: 0, top: -50, width: 400, height: 400 })
+    expect(video.style.objectFit).toBe('')
+    expect(isTrivialCrop(frame)).toBe(false)
+  })
+
+  it('keeps playback attributes on the video and decorations on the frame', () => {
+    const video = makeVideo('border-radius: 8px; box-shadow: 0 0 4px #000;',
+      { attrs: 'controls loop muted data-autoplay' })
+    const frame = wrapImage(video)
+    for (const attr of ['controls', 'loop', 'muted', 'data-autoplay']) {
+      expect(video.hasAttribute(attr)).toBe(true)
+      expect(frame.hasAttribute(attr)).toBe(false)
+    }
+    expect(frame.style.borderRadius).toBe('8px')
+    expect(video.style.borderRadius).toBe('')
+    expect(unwrapImage(frame)).toBe(video)
+    expect(video.style.borderRadius).toBe('8px')
+  })
+
+  it('restores the full video when the crop is removed', () => {
+    const video = makeVideo()
+    const frame = wrapImage(video)
+    writeRect(frame, { left: 160, top: 70, width: 340, height: 280 })
+    writeRect(video, { left: -60, top: -20, width: 400, height: 300 })
+    expect(isTrivialCrop(frame)).toBe(false)
+    const back = removeCrop(frame)
+    expect(back).toBe(video)
+    expect(readRect(back)).toEqual({ left: 100, top: 50, width: 400, height: 300 })
+  })
+
+  it('scales the video with its frame so a resize keeps the crop', () => {
+    const video = makeVideo()
+    const frame = wrapImage(video)
+    writeRect(video, { left: -60, top: -20, width: 400, height: 300 })
+    const start = { frame: readRect(frame), media: readRect(video) }
+    resizeFrameContents(frame, start, 800, 150)
+    expect(readRect(video)).toEqual({ left: -120, top: -10, width: 800, height: 150 })
+  })
+
+  it('reports and edits a cropped video through its frame', () => {
+    const video = makeVideo('', { attrs: 'controls' })
+    const frame = wrapImage(video)
+    writeRect(video, { left: -60, top: -20, width: 400, height: 300 })
+    const info = videoInfo(frame)
+    expect(info.el).toBe(frame)
+    expect(info.media).toBe(video)
+    expect(info.cropped).toBe(true)
+    expect(info.controls).toBe(true)
+    expect(info.width).toBe(400)
+    // resizing through the panel scales the picture with the frame
+    applyVideoProperties(frame, { width: 800, loop: true })
+    expect(readRect(frame).width).toBe(800)
+    expect(readRect(video)).toEqual({ left: -120, top: -20, width: 800, height: 300 })
+    expect(video.hasAttribute('loop')).toBe(true)
+    expect(frame.hasAttribute('loop')).toBe(false)
+  })
+
+  it('saves a frame mid-crop with the video\'s controls intact', () => {
+    const video = makeVideo()
+    const frame = wrapImage(video)
+    writeRect(video, { left: -60, top: 0, width: 400, height: 300 })
+    // the state crop mode leaves behind while it runs
+    frame.classList.add('re-cropping')
+    video.setAttribute(CROP_CONTROLS_ATTR, '')
+    const view = document.createElement('div')
+    view.className = 're-transient re-crop-view'
+    frame.appendChild(view)
+    const html = cleanElementHtml(frame.closest('section'))
+    expect(html).toContain('re-image-frame')
+    expect(html).toContain('assets/a.webm')
+    expect(html).toContain('controls')
+    expect(html).not.toContain(CROP_CONTROLS_ATTR)
+    expect(html).not.toContain('re-cropping')
+    expect(html).not.toContain('re-crop-view')
   })
 })

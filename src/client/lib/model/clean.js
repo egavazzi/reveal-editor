@@ -3,6 +3,7 @@
 // clone — never touches the live DOM. The output innerHTML is sent to the
 // server, which formats it deterministically and splices it into the file.
 import { CODE_SRC_ATTR, FRAG_AUTO_ATTR } from './stash.js'
+import { CROP_CONTROLS_ATTR } from './crop.js'
 
 // Classes reveal.js adds to sections/fragments at runtime.
 const RUNTIME_SECTION_CLASSES = [
@@ -128,6 +129,12 @@ function cleanContainer(container) {
 
   // crop mode may be live while saving; its marker class is runtime-only
   for (const el of container.querySelectorAll('.re-cropping')) removeClasses(el, ['re-cropping'])
+
+  // crop mode takes a video's controls away while it runs; the deck keeps them
+  for (const el of container.querySelectorAll(`[${CROP_CONTROLS_ATTR}]`)) {
+    el.removeAttribute(CROP_CONTROLS_ATTR)
+    el.setAttribute('controls', '')
+  }
 
   for (const section of container.querySelectorAll('section')) cleanSection(section)
   cleanFragments(container)

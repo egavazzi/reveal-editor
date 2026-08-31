@@ -30,7 +30,7 @@ import {
 } from './model/settings.js'
 import { setShapeColors, shapeColors, syncShapeGeometry } from './model/shapes.js'
 import { videoInfo, applyVideoProperties } from './model/media.js'
-import { imageOf, isImageFrame, readRect, removeCrop, resizeFrameContents, rotationOf } from './model/crop.js'
+import { imageOf, isImageFrame, mediaOf, readRect, removeCrop, resizeFrameContents, rotationOf, videoOf } from './model/crop.js'
 import { isRatioLocked, setRatioLocked } from './model/ratio.js'
 export { saveDeck } from './model/save.js'
 export { slideSummaries } from './model/slides.js'
@@ -314,13 +314,13 @@ function placeCaretAtPoint(el, { x, y }) {
 export function editElement(el, event = null, { viaClick = false } = {}) {
   if (isEditingText() && activeElement() === el) return
   const tag = el.tagName.toLowerCase()
-  if (tag === 'img' || isImageFrame(el)) {
-    // double-clicking an image edits its crop (a plain click on the
-    // selected image must not — too easy to hit while moving it)
+  if (mediaOf(el)) {
+    // double-clicking an image or video edits its crop (a plain click on
+    // the selected element must not — too easy to hit while moving it)
     if (!viaClick) runtime.overlay.beginCrop(el)
     return
   }
-  if (tag === 'svg' || tag === 'video') return
+  if (tag === 'svg') return
   if (el.classList.contains('re-html')) {
     if (!viaClick) openHtmlEditor(el)
   } else if (el.classList.contains('re-math') ||
@@ -917,8 +917,8 @@ const LAYER_KIND_LABELS = {
 /** Classify a slide element for the layers panel. */
 export function layerKind(el) {
   const tag = el.tagName.toLowerCase()
-  if (tag === 'img' || isImageFrame(el)) return 'image'
-  if (tag === 'video') return 'video'
+  if (imageOf(el)) return 'image'
+  if (videoOf(el)) return 'video'
   if (tag === 'svg') return 'shape'
   if (el.classList.contains('re-math') || el.querySelector?.(':scope .katex')) return 'math'
   if (el.classList.contains('re-html')) return 'html'
@@ -1094,9 +1094,9 @@ export function setElementProperties(values) {
   const { el } = info
   if (values.x != null) el.style.left = `${Number(values.x) || 0}px`
   if (values.y != null) el.style.top = `${Number(values.y) || 0}px`
-  // resizing a cropped image scales the picture with its frame
+  // resizing cropped media scales the picture with its frame
   const frameStart = isImageFrame(el) && (values.width != null || values.height != null)
-    ? { frame: readRect(el), img: readRect(imageOf(el)) }
+    ? { frame: readRect(el), media: readRect(mediaOf(el)) }
     : null
   if (values.width != null) el.style.width = `${Math.max(1, Number(values.width) || 1)}px`
   if (values.height != null) el.style.height = `${Math.max(1, Number(values.height) || 1)}px`
@@ -1217,19 +1217,20 @@ export function selectedImageInfo() {
   }
 }
 
-/** Enter PowerPoint-style crop mode on the selected image. */
-export function cropSelectedImage() {
+/** Enter PowerPoint-style crop mode on the selected image or video. */
+export function cropSelectedMedia() {
   const sel = runtime.overlay?.getSelection() ?? []
-  if (sel.length === 1 && imageOf(sel[0])) runtime.overlay.beginCrop(sel[0])
+  if (sel.length === 1 && mediaOf(sel[0])) runtime.overlay.beginCrop(sel[0])
 }
 
-/** Restore the full picture of a cropped image at its current size. */
-export function removeImageCrop() {
-  const info = selectedImageInfo()
-  if (!info?.cropped) return
+/** Restore the full picture of cropped media at its current size. */
+export function removeMediaCrop() {
+  const sel = runtime.overlay?.getSelection() ?? []
+  const el = sel.length === 1 ? sel[0] : null
+  if (!isImageFrame(el) || !mediaOf(el)) return
   snapshotSlide()
-  const img = removeCrop(info.el)
-  runtime.overlay.setSelection([img])
+  const media = removeCrop(el)
+  runtime.overlay.setSelection([media])
   markDirty()
 }
 
@@ -1250,7 +1251,7 @@ export function setImageProperties(values) {
   if (values.width != null || values.height != null) {
     // write only the edited dimension: a foreign-deck image may have no
     // inline height (or width), and that auto dimension must stay auto
-    const start = { frame: readRect(el), img: readRect(img) }
+    const start = { frame: readRect(el), media: readRect(img) }
     if (values.width != null) el.style.width = `${Math.max(1, Number(values.width))}px`
     if (values.height != null) el.style.height = `${Math.max(1, Number(values.height))}px`
     // a frame always carries both inline dimensions (wrapImage sets them)

@@ -129,6 +129,9 @@ workflows and the one-way eject tradeoff.
   button) for PowerPoint-style cropping — drag the edge handles to crop,
   drag the picture to reposition it, drag its corners to zoom — and
   resizing a cropped image afterwards keeps the crop
+- **Videos**: the Video panel scrubs and previews playback, sets exact
+  dimensions and the saved autoplay/loop/muted/controls settings, and crops
+  the video with the same edge/corner handles as an image
 - **Deck setup**: the Deck panel controls the reveal theme, canvas format/size
   and margins, editor grid display/snapping, navigation-arrow visibility, and
   slide number format/position, typography, and transitions

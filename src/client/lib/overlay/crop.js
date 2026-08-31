@@ -1,11 +1,13 @@
-// PowerPoint-style crop mode. While active, the full picture shows dimmed
-// behind the frame with the framed part at full opacity. Dragging the
-// frame's edge handles crops (the picture stays put on the canvas),
-// dragging the picture pans it inside the frame, and the picture's corner
-// handles zoom it. Enter/Escape or clicking elsewhere commits.
+// PowerPoint-style crop mode for images and videos. While active, the full
+// picture shows dimmed behind the frame with the framed part at full
+// opacity. Dragging the frame's edge handles crops (the picture stays put on
+// the canvas), dragging the picture pans it inside the frame, and the
+// picture's corner handles zoom it. Enter/Escape or clicking elsewhere
+// commits.
 import Moveable from 'moveable'
 import {
-  imageOf, isImageFrame, wrapImage, unwrapImage, isTrivialCrop, readRect, writeRect, rotationOf
+  CROP_CONTROLS_ATTR, mediaOf, isImageFrame, wrapImage, unwrapImage, isTrivialCrop,
+  readRect, writeRect, rotationOf
 } from '../model/crop.js'
 import { roundGeometry } from '../model/position.js'
 
@@ -17,7 +19,7 @@ export function createCropMode(bridge, { onDone }) {
   let frameBox = null
   let pictureBox = null
   let view = null
-  let viewImg = null
+  let viewMedia = null
   let mutated = false
   // attributes to restore if the session ends without any actual cropping,
   // so an accidental enter+leave round-trips the markup exactly
@@ -35,9 +37,18 @@ export function createCropMode(bridge, { onDone }) {
       : { style: el.getAttribute('style'), class: el.getAttribute('class') }
     frame = wrapImage(el)
     mutated = false
-    const img = imageOf(frame)
+    const media = mediaOf(frame)
+    if (media.tagName === 'VIDEO') {
+      // a video's own controls sit under the view clone and would eat the
+      // drags that pan and zoom the picture
+      if (media.hasAttribute('controls')) {
+        media.removeAttribute('controls')
+        media.setAttribute(CROP_CONTROLS_ATTR, '')
+      }
+      media.pause()
+    }
     frame.classList.add('re-cropping')
-    buildView(img)
+    buildView(media)
 
     frameBox = new Moveable(doc.body, {
       target: frame,
@@ -64,11 +75,11 @@ export function createCropMode(bridge, { onDone }) {
       // picture's frame-local offset for the frame's displacement — the
       // frame-center shift, mapped into the frame's (possibly rotated) axes
       const after = readRect(frame)
-      const rect = readRect(img)
+      const rect = readRect(media)
       const angle = -rotationOf(frame) * Math.PI / 180
       const cdx = after.left - before.left + (after.width - before.width) / 2
       const cdy = after.top - before.top + (after.height - before.height) / 2
-      writeRect(img, {
+      writeRect(media, {
         ...rect,
         left: rect.left + (after.width - before.width) / 2 -
           (cdx * Math.cos(angle) - cdy * Math.sin(angle)),
@@ -76,12 +87,12 @@ export function createCropMode(bridge, { onDone }) {
           (cdx * Math.sin(angle) + cdy * Math.cos(angle))
       })
       mutated = true
-      sync(img)
+      sync(media)
       pictureBox?.updateRect()
     })
 
     pictureBox = new Moveable(doc.body, {
-      target: img,
+      target: media,
       rootContainer: doc.body,
       draggable: true,
       resizable: true,
@@ -94,19 +105,19 @@ export function createCropMode(bridge, { onDone }) {
     })
     pictureBox
       .on('drag', (e) => {
-        img.style.left = `${e.left}px`
-        img.style.top = `${e.top}px`
+        media.style.left = `${e.left}px`
+        media.style.top = `${e.top}px`
         mutated = true
-        sync(img)
+        sync(media)
       })
       .on('resizeStart', (e) => e.setMin([12, 12]))
       .on('resize', (e) => {
-        img.style.width = `${e.width}px`
-        img.style.height = `${e.height}px`
-        img.style.left = `${e.drag.left}px`
-        img.style.top = `${e.drag.top}px`
+        media.style.width = `${e.width}px`
+        media.style.height = `${e.height}px`
+        media.style.left = `${e.drag.left}px`
+        media.style.top = `${e.drag.top}px`
         mutated = true
-        sync(img)
+        sync(media)
         frameBox?.updateRect()
       })
       .on('dragEnd', () => frameBox?.updateRect())
@@ -118,19 +129,43 @@ export function createCropMode(bridge, { onDone }) {
 
   // The framed region at full opacity: a clipping clone kept in sync with
   // the real (dimmed) picture.
-  function buildView(img) {
+  function buildView(media) {
     view = doc.createElement('div')
     view.className = 're-transient re-crop-view'
-    viewImg = doc.createElement('img')
-    viewImg.src = img.getAttribute('src') ?? img.src
-    viewImg.alt = ''
-    view.appendChild(viewImg)
+    viewMedia = media.tagName === 'VIDEO' ? videoClone(media) : imageClone(media)
+    view.appendChild(viewMedia)
     frame.appendChild(view)
-    sync(img)
+    sync(media)
   }
 
-  function sync(img) {
-    if (viewImg) writeRect(viewImg, readRect(img))
+  function imageClone(img) {
+    const clone = doc.createElement('img')
+    clone.src = img.getAttribute('src') ?? img.src
+    clone.alt = ''
+    return clone
+  }
+
+  // A silent, inert still of the video at the frame it is paused on. The
+  // clone carries any <source> children, and seeks again once its own
+  // metadata has loaded — a fresh element starts at zero.
+  function videoClone(video) {
+    const clone = video.cloneNode(true)
+    clone.removeAttribute('class')
+    clone.removeAttribute('style')
+    clone.removeAttribute('controls')
+    clone.removeAttribute('autoplay')
+    clone.removeAttribute('data-autoplay')
+    clone.removeAttribute('loop')
+    clone.muted = true
+    clone.preload = 'auto'
+    const seek = () => { clone.currentTime = video.currentTime }
+    clone.addEventListener('loadedmetadata', seek, { once: true })
+    seek()
+    return clone
+  }
+
+  function sync(media) {
+    if (viewMedia) writeRect(viewMedia, readRect(media))
   }
 
   function onOutsidePress(e) {
@@ -158,7 +193,12 @@ export function createCropMode(bridge, { onDone }) {
     pictureBox?.destroy()
     frameBox = pictureBox = null
     view?.remove()
-    view = viewImg = null
+    view = viewMedia = null
+    const media = mediaOf(frame)
+    if (media?.hasAttribute(CROP_CONTROLS_ATTR)) {
+      media.removeAttribute(CROP_CONTROLS_ATTR)
+      media.setAttribute('controls', '')
+    }
     frame?.classList.remove('re-cropping')
     frame = null
   }
@@ -166,7 +206,7 @@ export function createCropMode(bridge, { onDone }) {
   function commit() {
     if (!frame) return
     const done = frame
-    const img = imageOf(done)
+    const media = mediaOf(done)
     const restore = pristine
     pristine = null
     teardown()
@@ -185,7 +225,7 @@ export function createCropMode(bridge, { onDone }) {
       return
     }
     roundGeometry(done)
-    if (img) roundGeometry(img)
+    if (media) roundGeometry(media)
     const el = isTrivialCrop(done) ? unwrapImage(done) : done
     onDone?.(el, true)
   }
@@ -200,11 +240,15 @@ function injectStyles(doc) {
   style.textContent = `
     /* reveal-editor crop mode (runtime only, never saved) */
     .re-image-frame.re-cropping { overflow: visible !important; }
-    .re-image-frame.re-cropping > img { opacity: .35; }
+    .re-image-frame.re-cropping > img,
+    .re-image-frame.re-cropping > video { opacity: .35; }
+    /* edit mode makes videos pointer-inert; the picture being cropped must
+       still take the drags that pan and zoom it */
+    .re-image-frame.re-cropping > video { pointer-events: auto !important; }
     .re-crop-view {
       position: absolute; inset: 0; overflow: hidden; pointer-events: none;
     }
-    .re-crop-view img {
+    .re-crop-view img, .re-crop-view video {
       position: absolute; max-width: none; max-height: none; margin: 0;
     }
     /* frame handles: dark PowerPoint-style crop bars */
