@@ -10,14 +10,16 @@ function makeDeck({
   attrs = VIDEO_CONTROLS_ATTR,
   frame: frameBox = 'width:340px; height:200px',
   picture = 'left:-60px; top:-20px; width:400px; height:300px',
-  intrinsic = null
+  intrinsic = null,
+  cropped = true
 } = {}) {
   document.head.innerHTML = ''
+  const media = `<video src="assets/a.webm" ${attrs} style="position:absolute; ${picture}"></video>`
   document.body.innerHTML = `
     <div class="reveal"><div class="slides"><section>
-      <div class="re-el re-image-frame" style="position:absolute; ${frameBox}; overflow:hidden">
-        <video src="assets/a.webm" ${attrs} style="position:absolute; ${picture}"></video>
-      </div>
+      ${cropped
+        ? `<div class="re-el re-image-frame" style="position:absolute; ${frameBox}; overflow:hidden">${media}</div>`
+        : media}
     </section></div></div>`
   const video = document.querySelector('video')
   // happy-dom's media element has no real pipeline; the bar only needs the
@@ -70,8 +72,16 @@ describe('cropped video controls', () => {
     expect(bar.querySelector('.re-vc-time').textContent).toBe('0:00 / 0:00')
   })
 
-  it('leaves an unmarked video to the browser\'s own player', () => {
-    const { frame } = makeDeck({ attrs: 'controls' })
+  it('migrates a native controls attribute to the marker', () => {
+    const { frame, video } = makeDeck({ attrs: 'controls' })
+    runRuntime()
+    expect(video.hasAttribute('controls')).toBe(false)
+    expect(video.hasAttribute(VIDEO_CONTROLS_ATTR)).toBe(true)
+    expect(frame.querySelector('.re-video-controls')).not.toBeNull()
+  })
+
+  it('leaves a video without controls bare', () => {
+    const { frame } = makeDeck({ attrs: '' })
     runRuntime()
     expect(frame.querySelector('.re-video-controls')).toBeNull()
   })
@@ -176,6 +186,7 @@ describe('cropped video controls', () => {
     expect(html).not.toContain('re-video-controls')
   })
 
+  // the bar is 28px tall and sits 12px above the picture's bottom edge
   it('spans the picture, not the frame', () => {
     // picture fills its frame: the bar spans the whole bottom edge
     {
@@ -188,7 +199,7 @@ describe('cropped video controls', () => {
       const bar = frame.querySelector('.re-video-controls')
       expect(bar.style.left).toBe('0px')
       expect(bar.style.width).toBe('400px')
-      expect(bar.style.bottom).toBe('0px')
+      expect(bar.style.top).toBe('260px')
     }
     // picture smaller than its frame: the bar sits on the picture's edges
     {
@@ -201,7 +212,7 @@ describe('cropped video controls', () => {
       const bar = frame.querySelector('.re-video-controls')
       expect(bar.style.left).toBe('20px')
       expect(bar.style.width).toBe('200px')
-      expect(bar.style.bottom).toBe('190px')
+      expect(bar.style.top).toBe('70px')
     }
     // cropped on the left: the bar starts at the frame, ends with the picture
     {
@@ -214,7 +225,7 @@ describe('cropped video controls', () => {
       const bar = frame.querySelector('.re-video-controls')
       expect(bar.style.left).toBe('0px')
       expect(bar.style.width).toBe('200px')
-      expect(bar.style.bottom).toBe('0px')
+      expect(bar.style.top).toBe('260px')
     }
   })
 
@@ -229,7 +240,7 @@ describe('cropped video controls', () => {
     const bar = frame.querySelector('.re-video-controls')
     expect(bar.style.left).toBe('50px')
     expect(bar.style.width).toBe('300px')
-    expect(bar.style.bottom).toBe('0px')
+    expect(bar.style.top).toBe('260px')
   })
 
   it('spans the frame when the visible sliver is too narrow to hold controls', () => {
@@ -242,7 +253,7 @@ describe('cropped video controls', () => {
     const bar = frame.querySelector('.re-video-controls')
     expect(bar.style.left).toBe('0px')
     expect(bar.style.width).toBe('400px')
-    expect(bar.style.bottom).toBe('0px')
+    expect(bar.style.top).toBe('260px')
   })
 
   it('repositions the bar when the crop is adjusted', () => {
@@ -261,7 +272,44 @@ describe('cropped video controls', () => {
     api.sync()
     expect(bar.style.left).toBe('100px')
     expect(bar.style.width).toBe('200px')
-    expect(bar.style.bottom).toBe('150px')
+    expect(bar.style.top).toBe('110px')
+  })
+
+  it('serves an uncropped video from a sibling over its picture', () => {
+    const { video } = makeDeck({
+      cropped: false,
+      picture: 'left:100px; top:50px; width:400px; height:300px',
+      intrinsic: { w: 400, h: 300 }
+    })
+    const api = runRuntime()
+    const bar = video.nextElementSibling
+    expect(bar.classList.contains('re-video-controls')).toBe(true)
+    // no frame to live in: the bar is the video's sibling in the slide
+    expect(bar.parentElement).toBe(video.parentElement)
+    expect(bar.style.left).toBe('100px')
+    expect(bar.style.width).toBe('400px')
+    expect(bar.style.top).toBe('310px')
+
+    // moving the video takes the bar with it
+    video.style.left = '200px'
+    video.style.top = '0px'
+    api.sync()
+    expect(bar.style.left).toBe('200px')
+    expect(bar.style.top).toBe('260px')
+    expect(cleanElementHtml(video.closest('section'))).not.toContain('re-video-controls')
+  })
+
+  it('keeps an uncropped letterboxed video\'s bar on the picture', () => {
+    const { video } = makeDeck({
+      cropped: false,
+      picture: 'left:0px; top:0px; width:400px; height:300px',
+      intrinsic: { w: 100, h: 100 }
+    })
+    runRuntime()
+    const bar = video.nextElementSibling
+    expect(bar.style.left).toBe('50px')
+    expect(bar.style.width).toBe('300px')
+    expect(bar.style.top).toBe('260px')
   })
 
   it('installs its editor copy exactly once', () => {
@@ -271,20 +319,23 @@ describe('cropped video controls', () => {
     expect(document.querySelectorAll('script#re-video-controls-runtime')).toHaveLength(1)
   })
 
-  it('marks and unmarks the video as a crop comes and goes', () => {
-    document.body.innerHTML = `
-      <div class="reveal"><div class="slides"><section>
-        <video class="re-el" src="assets/a.webm" controls
-          style="position:absolute; left:0px; top:0px; width:400px; height:300px"></video>
-      </section></div></div>`
-    const video = document.querySelector('video')
+  it('moves the bar into the frame with the video, and back out', () => {
+    const { video } = makeDeck({
+      cropped: false,
+      picture: 'left:0px; top:0px; width:400px; height:300px'
+    })
+    const section = video.closest('section')
+    const api = runRuntime()
+    expect(video.nextElementSibling.classList.contains('re-video-controls')).toBe(true)
+
     const frame = wrapImage(video)
-    expect(video.hasAttribute('controls')).toBe(false)
-    runRuntime()
-    expect(frame.querySelector('.re-video-controls')).not.toBeNull()
+    api.sync()
+    expect(frame.querySelector(':scope > .re-video-controls')).not.toBeNull()
+    expect(section.querySelectorAll('.re-video-controls')).toHaveLength(1)
 
     unwrapImage(frame)
-    expect(video.hasAttribute('controls')).toBe(true)
-    expect(document.querySelector('.re-video-controls')).toBeNull()
+    api.sync()
+    expect(video.nextElementSibling.classList.contains('re-video-controls')).toBe(true)
+    expect(section.querySelectorAll('.re-video-controls')).toHaveLength(1)
   })
 })

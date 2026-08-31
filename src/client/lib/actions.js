@@ -68,15 +68,15 @@ function afterHistory(entry) {
 let autosaveTimer = null
 
 /**
- * A cropped video's control bar is built by the deck runtime, so a deck that
- * holds one needs the support nodes even if its settings were never touched.
+ * A video's control bar is built by the deck runtime, so a deck that holds
+ * one needs the support nodes even if its settings were never touched.
  * writeSettings is idempotent and the nodes are shared with every other
  * runtime feature, so this adds them once and never churns.
  */
 function ensureVideoControlsRuntime() {
   const slides = runtime.bridge?.slidesEl
   if (!slides || hasStoredSettings(slides)) return
-  if (slides.querySelector(`.re-image-frame > video[${VIDEO_CONTROLS_ATTR}]`)) {
+  if (slides.querySelector(`video[${VIDEO_CONTROLS_ATTR}]`)) {
     writeSettings(slides, editor.settings)
   }
 }
@@ -1183,7 +1183,9 @@ export function ungroupSelection() {
   const parent = group.parentElement
   const left = parseFloat(group.style.left) || 0
   const top = parseFloat(group.style.top) || 0
-  const children = [...group.children]
+  // runtime overlays (a video's control bar) belong to the runtime, not to
+  // the group's membership
+  const children = [...group.children].filter((el) => !el.matches('.re-transient'))
   for (const child of children) {
     child.style.left = `${left + (parseFloat(child.style.left) || 0)}px`
     child.style.top = `${top + (parseFloat(child.style.top) || 0)}px`
@@ -1206,9 +1208,9 @@ export function selectedVideoInfo() {
 export function setVideoProperties(values) {
   const info = selectedVideoInfo()
   if (!info) return
-  // A cropped video's controls are the deck runtime's bar. Capture the whole
-  // deck so undo can also remove the support nodes the first one adds.
-  const runtimeControls = values.controls === true && info.cropped
+  // A video's controls are the deck runtime's bar. Capture the whole deck so
+  // undo can also remove the support nodes the first one adds.
+  const runtimeControls = values.controls === true
   if (runtimeControls) snapshotDeck()
   else snapshotSlide()
   applyVideoProperties(info.el, values)

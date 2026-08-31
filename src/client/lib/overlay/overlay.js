@@ -5,6 +5,7 @@ import Selecto from 'selecto'
 import { ensurePositioned, roundGeometry } from '../model/position.js'
 import { ANGLE_SNAP_STEP, FLAT_SNAP_TOLERANCE, constrainSegmentAngle, syncShapeGeometry } from '../model/shapes.js'
 import { intrinsicSize, isImageFrame, mediaOf, readRect, resizeFrameContents } from '../model/crop.js'
+import { VIDEO_CONTROLS_CLASS } from '../model/videocontrols.js'
 import { createCropMode } from './crop.js'
 import { isRatioLocked } from '../model/ratio.js'
 import { isEditingText, activeElement } from '../editors/text.js'
@@ -87,6 +88,8 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
     const direct = resolveEditable(event.target, section)
     if (direct || event.clientX == null) return direct
     for (const video of section.querySelectorAll('video')) {
+      // the crop preview's clone is a picture of the video, not the video
+      if (video.closest('.re-transient')) continue
       // a cropped video shows only through its frame; the frame's box is
       // what the pointer can actually hit
       const r = (video.closest('.re-image-frame') ?? video).getBoundingClientRect()
@@ -108,7 +111,8 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
     }
     const section = currentSection()
     const guidelines = targets.length
-      ? [section, ...[...section.children].filter((c) => !targets.includes(c))]
+      ? [section, ...[...section.children].filter(
+          (c) => !targets.includes(c) && !c.classList.contains('re-transient'))]
       : []
     const endpointShape = targets.length === 1 && ['line', 'arrow'].includes(targets[0].getAttribute('data-shape'))
     const startCorner = endpointShape ? targets[0].getAttribute('data-re-line-start') || 'nw' : null
@@ -305,8 +309,8 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
     // pointer off it — that click must not clear the selection.
     if (Date.now() - lastRealDrag < 300) return
     if (isEditingText() && activeElement()?.contains(e.target)) return
-    // Ctrl+click on a video is native player interaction, not selection
-    if (e.ctrlKey && e.target.closest?.('video')) return
+    // Ctrl+click on a video or its control bar drives the player, not selection
+    if (e.ctrlKey && e.target.closest?.(`video, .${VIDEO_CONTROLS_CLASS}`)) return
     const section = currentSection()
     if (!section) return
     const el = resolveAtPointer(e, section)
@@ -328,7 +332,7 @@ export function createOverlay(bridge, { onSelectionChange, onEdit, onDblClick, o
 
   function onDoubleClick(e) {
     if (cropMode.active()) return
-    if (e.ctrlKey && e.target.closest?.('video')) return
+    if (e.ctrlKey && e.target.closest?.(`video, .${VIDEO_CONTROLS_CLASS}`)) return
     const section = currentSection()
     if (!section) return
     let el = resolveAtPointer(e, section)

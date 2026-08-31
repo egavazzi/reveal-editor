@@ -1,14 +1,18 @@
-// Control bar for cropped videos. A browser draws native controls along the
-// bottom edge of the <video> box itself, which a crop frame clips away as
-// soon as the picture is offset or zoomed, and their position cannot be
-// moved. So a framed video hands its controls over: the marker attribute
-// below replaces `controls` for as long as the video sits in a frame
-// (crop.js swaps the two when wrapping and unwrapping), and this runtime
-// builds a bar anchored to the frame's bottom edge instead.
+// Video controls. `data-re-controls` is how a deck records "this video has
+// controls": a <video> the editor has touched never carries the browser's own
+// `controls` attribute, and the runtime below draws the bar instead. Native
+// controls are drawn on the bottom edge of the <video> box and cannot be
+// moved, so a crop frame clips them away as soon as the picture is offset or
+// zoomed, and a letterboxed video puts them in the black band rather than on
+// the picture. One bar, positioned on the picture itself, covers both.
 //
-// The bar itself is never saved: it is built from the marker at load time,
-// carries `re-transient` so the save cleaner drops it, and is rebuilt
-// whenever the slides change.
+// A video that arrives with native `controls` — a foreign deck, a
+// hand-written one — is migrated to the marker the first time the runtime
+// syncs, so every deck the editor writes is consistent.
+//
+// The bar itself is never saved: the runtime builds it from the marker as the
+// video's next sibling, it carries `re-transient` so the save cleaner drops
+// it, and it is rebuilt whenever the slides change.
 
 export const VIDEO_CONTROLS_ATTR = 'data-re-controls'
 
@@ -16,74 +20,114 @@ export const VIDEO_CONTROLS_CLASS = 're-video-controls'
 
 const SCRIPT_ID = 're-video-controls-runtime'
 
+// The bar's own height and its inset from the picture's edges, shared by the
+// stylesheet and the runtime that positions it.
+const BAR_HEIGHT = 28
+const INSET = 12
+
 export const VIDEO_CONTROLS_CSS = `
-.reveal .re-image-frame > .re-video-controls {
-  position: absolute; left: 0; bottom: 0; width: 100%; z-index: 2;
-  display: flex; align-items: center; gap: 8px; padding: 0 8px;
-  height: 32px; box-sizing: border-box;
-  background: rgba(16, 17, 22, .62); color: #fff;
-  font: 12px/1 system-ui, -apple-system, Segoe UI, sans-serif;
-  opacity: 0; pointer-events: none; transition: opacity .2s ease;
+.reveal .re-video-controls {
+  position: absolute; box-sizing: border-box;
+  height: ${BAR_HEIGHT}px; padding: 0 ${INSET}px;
+  display: flex; align-items: center; gap: 10px;
+  color: #fff; font: 13px/1 system-ui, -apple-system, Segoe UI, sans-serif;
+  /* legibility over any footage comes from the shadow alone: the bar itself
+     never paints a background over the picture */
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .8));
+  opacity: 0; pointer-events: none; transition: opacity .15s ease;
 }
-/* The runtime shows the bar while the video is paused, while the pointer is
-   live over the frame, and while focus is inside it. Hidden, it must not
-   swallow a click meant for the slide underneath. */
-.reveal .re-image-frame > .re-video-controls[data-show],
-.reveal .re-image-frame > .re-video-controls:focus-within {
-  opacity: 1; pointer-events: auto;
-}
-.reveal .re-image-frame[data-re-idle] { cursor: none; }
+.reveal .re-video-controls[data-show],
+.reveal .re-video-controls:focus-within { opacity: 1; pointer-events: auto; }
 .reveal .re-video-controls button {
-  background: none; border: 0; margin: 0; padding: 2px; color: inherit;
-  font: inherit; line-height: 0; cursor: pointer; border-radius: 3px;
+  background: none; border: 0; margin: 0; padding: 0; color: inherit;
+  line-height: 0; cursor: pointer; opacity: .85; transition: opacity .15s ease;
 }
-.reveal .re-video-controls button:hover { background: rgba(255, 255, 255, .18); }
-.reveal .re-video-controls input[type="range"] {
-  flex: 1; min-width: 0; height: 3px; margin: 0; accent-color: #fff; cursor: pointer;
+.reveal .re-video-controls button:hover,
+.reveal .re-video-controls button:focus-visible { opacity: 1; }
+.reveal .re-video-controls .re-vc-seek {
+  flex: 1; min-width: 0; height: 12px; margin: 0; padding: 0; cursor: pointer;
+  -webkit-appearance: none; appearance: none; background: none;
 }
+/* the played part is drawn into the track, so it reads the same everywhere */
+.reveal .re-video-controls .re-vc-seek::-webkit-slider-runnable-track {
+  height: 2px; border-radius: 2px;
+  background: var(--re-vc-track, rgba(255, 255, 255, .45));
+}
+.reveal .re-video-controls .re-vc-seek::-moz-range-track {
+  height: 2px; border-radius: 2px;
+  background: var(--re-vc-track, rgba(255, 255, 255, .45));
+}
+.reveal .re-video-controls .re-vc-seek:hover::-webkit-slider-runnable-track { height: 3px; }
+.reveal .re-video-controls .re-vc-seek:hover::-moz-range-track { height: 3px; }
+.reveal .re-video-controls .re-vc-seek::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 10px; height: 10px; margin-top: -4px;
+  border: 0; border-radius: 50%; background: #fff;
+  opacity: 0; transition: opacity .15s ease;
+}
+.reveal .re-video-controls .re-vc-seek::-moz-range-thumb {
+  width: 10px; height: 10px; border: 0; border-radius: 50%; background: #fff;
+  opacity: 0; transition: opacity .15s ease;
+}
+.reveal .re-video-controls .re-vc-seek:hover::-webkit-slider-thumb,
+.reveal .re-video-controls .re-vc-seek:focus-visible::-webkit-slider-thumb { opacity: 1; }
+.reveal .re-video-controls .re-vc-seek:hover::-moz-range-thumb,
+.reveal .re-video-controls .re-vc-seek:focus-visible::-moz-range-thumb { opacity: 1; }
 .reveal .re-video-controls .re-vc-time {
-  font-variant-numeric: tabular-nums; white-space: nowrap; opacity: .85;
+  font-variant-numeric: tabular-nums; white-space: nowrap; opacity: .9;
 }
+.reveal [data-re-idle] { cursor: none; }
 `.trim()
 
 // Self-contained: this source runs both from the saved deck's runtime script
 // and, injected by installVideoControls, inside the editor's deck frame.
 // Repeated runs replace the previous observer rather than stacking one up.
 export const VIDEO_CONTROLS_SCRIPT = `(() => {
-  const ATTR = 'data-re-controls';
-  const CLASS = 're-video-controls';
-  const icon = (body) => '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">' + body + '</svg>';
-  const PLAY = icon('<path fill="currentColor" d="M8 5v14l11-7z"/>');
-  const PAUSE = icon('<path fill="currentColor" d="M6 4h4v16H6zm8 0h4v16h-4z"/>');
-  const SOUND = icon('<path fill="currentColor" d="M4 9v6h4l5 4V5L8 9H4z"/>');
-  const MUTED = icon('<path fill="currentColor" d="M4 9v6h4l5 4V5L8 9H4z"/>' +
-    '<path stroke="currentColor" stroke-width="2" fill="none" d="M16.5 9.5l5 5m0-5l-5 5"/>');
+  const ATTR = '${VIDEO_CONTROLS_ATTR}';
+  const CLASS = '${VIDEO_CONTROLS_CLASS}';
+  const BAR_H = ${BAR_HEIGHT};
+  const INSET = ${INSET};
+  // how long the bar survives a pointer resting over a playing video
+  const IDLE_MS = 2500;
+  // below this the bar cannot hold its controls, so it takes the whole picture
+  const MIN_WIDTH = 80;
+  const SCOPE = '.reveal .slides ';
+
+  const icon = (body) => '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" ' +
+    'stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" ' +
+    'aria-hidden="true">' + body + '</svg>';
+  const PLAY = icon('<path d="M8 5.5l10 6.5-10 6.5z"/>');
+  const PAUSE = icon('<path d="M9 5.5v13M15 5.5v13"/>');
+  const SPEAKER = '<path d="M4.5 9.5h3l4.5-3.5v12L7.5 14.5h-3z"/>';
+  const SOUND = icon(SPEAKER + '<path d="M15.5 9.8a3.5 3.5 0 010 4.4"/>' +
+    '<path d="M18 7.6a7 7 0 010 8.8"/>');
+  const MUTED = icon(SPEAKER + '<path d="M16 10l4.5 4.5M20.5 10L16 14.5"/>');
+
   const clock = (s) => {
     const whole = Math.max(0, Math.floor(s || 0));
     return Math.floor(whole / 60) + ':' + String(whole % 60).padStart(2, '0');
   };
-  // how long the bar survives an idle pointer over a playing video
-  const IDLE_MS = 2500;
-  // below this the bar cannot hold its buttons, so it spans the frame instead
-  const MIN_WIDTH = 80;
   const px = (el, prop, fallback) => {
     const value = parseFloat(el.style[prop]);
     return isFinite(value) ? value : fallback;
   };
+  const frameOf = (video) => {
+    const parent = video.parentElement;
+    return parent && parent.classList.contains('re-image-frame') ? parent : null;
+  };
 
-  // The bar tracks the picture the frame actually shows, not the frame: the
-  // video's box inside the frame, shrunk to the letterbox a mismatched aspect
-  // ratio leaves (a video's default object-fit is contain), then clipped to
-  // the frame.
-  const visibleRect = (frame, video) => {
-    const fw = px(frame, 'width', frame.offsetWidth);
-    const fh = px(frame, 'height', frame.offsetHeight);
+  // Where the picture actually shows, in the coordinates the bar is
+  // positioned in (its parent's): the video's own box, shrunk to the
+  // letterbox a mismatched aspect ratio leaves — a video's default object-fit
+  // is contain — and clipped to the frame when there is one.
+  const visibleRect = (video) => {
+    const frame = frameOf(video);
     let left = px(video, 'left', video.offsetLeft);
     let top = px(video, 'top', video.offsetTop);
     let width = px(video, 'width', video.offsetWidth);
     let height = px(video, 'height', video.offsetHeight);
     const vw = video.videoWidth;
     const vh = video.videoHeight;
+    const box = { left: left, width: width, bottom: top + height };
     if (vw > 0 && vh > 0 && width > 0 && height > 0) {
       const scale = Math.min(width / vw, height / vh);
       left += (width - vw * scale) / 2;
@@ -91,21 +135,27 @@ export const VIDEO_CONTROLS_SCRIPT = `(() => {
       width = vw * scale;
       height = vh * scale;
     }
+    if (!frame) {
+      return width >= MIN_WIDTH ? { left: left, width: width, bottom: top + height } : box;
+    }
+    const fw = px(frame, 'width', frame.offsetWidth);
+    const fh = px(frame, 'height', frame.offsetHeight);
     const visible = Math.min(fw, left + width) - Math.max(0, left);
     const bottom = Math.min(fh, top + height);
     // too little of the picture is in view to carry the controls: the frame
     // keeps them usable
     if (!(visible >= MIN_WIDTH) || !(bottom > 0)) return { left: 0, width: fw, bottom: fh };
-    return { left: Math.max(0, left), width: visible, bottom };
+    return { left: Math.max(0, left), width: visible, bottom: bottom };
   };
 
-  const build = (frame, video) => {
-    const doc = frame.ownerDocument;
+  const build = (video) => {
+    const doc = video.ownerDocument;
     const bar = doc.createElement('div');
     bar.className = 're-transient ' + CLASS;
     const play = doc.createElement('button');
     play.type = 'button';
     const seek = doc.createElement('input');
+    seek.className = 're-vc-seek';
     seek.type = 'range';
     seek.min = '0';
     seek.step = '0.05';
@@ -117,14 +167,17 @@ export const VIDEO_CONTROLS_SCRIPT = `(() => {
     const mute = doc.createElement('button');
     mute.type = 'button';
     bar.append(play, seek, time, mute);
+    // the pointer is tracked over what the viewer sees: the frame's window on
+    // the picture, or the video itself when nothing crops it
+    const host = frameOf(video) || video;
 
     // A drag holds the slider still until it is released, so the running
     // timeupdate cannot yank the thumb out from under the pointer.
     let scrubbing = false;
     let paused = null;
     let muted = null;
-    // Every write is guarded on a real change: the observer below watches
-    // this subtree, and a rewrite that changes nothing would wake it forever.
+    // Every write is guarded on a real change: a rewrite that changes nothing
+    // still wakes the observer below.
     const paint = () => {
       if (paused !== video.paused) {
         paused = video.paused;
@@ -141,14 +194,28 @@ export const VIDEO_CONTROLS_SCRIPT = `(() => {
       if (!scrubbing) seek.value = String(video.currentTime || 0);
       const label = clock(video.currentTime) + ' / ' + clock(duration);
       if (time.firstChild.data !== label) time.firstChild.data = label;
+      const done = duration > 0 ? Math.min(100, (video.currentTime || 0) / duration * 100) : 0;
+      const stop = done.toFixed(2) + '%';
+      const track = 'linear-gradient(to right, #fff 0, #fff ' + stop +
+        ', rgba(255,255,255,.45) ' + stop + ', rgba(255,255,255,.45) 100%)';
+      if (seek.style.getPropertyValue('--re-vc-track') !== track) {
+        seek.style.setProperty('--re-vc-track', track);
+      }
     };
 
     const place = () => {
-      const rect = visibleRect(frame, video);
+      const rect = visibleRect(video);
+      const frame = frameOf(video);
+      let top = rect.bottom - BAR_H - INSET;
+      // inside a frame the bar has nowhere to go but the visible window
+      if (frame) top = Math.max(0, top);
       const set = (prop, value) => { if (bar.style[prop] !== value) bar.style[prop] = value; };
       set('left', rect.left + 'px');
       set('width', rect.width + 'px');
-      set('bottom', (px(frame, 'height', frame.offsetHeight) - rect.bottom) + 'px');
+      set('top', top + 'px');
+      // a sibling bar shares the video's stacking level and, being later in
+      // the document, paints over it
+      set('zIndex', video.style.zIndex);
     };
 
     let idle = null;
@@ -157,13 +224,18 @@ export const VIDEO_CONTROLS_SCRIPT = `(() => {
       // a paused video keeps its controls; only playback takes them away
       if (video.paused) return;
       bar.removeAttribute('data-show');
-      frame.setAttribute('data-re-idle', '');
+      host.setAttribute('data-re-idle', '');
     };
     const show = () => {
       if (idle !== null) clearTimeout(idle);
       idle = video.paused ? null : setTimeout(hide, IDLE_MS);
       if (!bar.hasAttribute('data-show')) bar.setAttribute('data-show', '');
-      frame.removeAttribute('data-re-idle');
+      host.removeAttribute('data-re-idle');
+    };
+    // reaching for the bar leaves the host; that is not the pointer leaving
+    const onLeave = (e) => {
+      if (e.relatedTarget && bar.contains(e.relatedTarget)) return;
+      hide();
     };
 
     play.addEventListener('click', () => {
@@ -179,8 +251,9 @@ export const VIDEO_CONTROLS_SCRIPT = `(() => {
     });
     bar.addEventListener('focusin', show);
     bar.addEventListener('focusout', hide);
-    frame.addEventListener('pointermove', show);
-    frame.addEventListener('pointerleave', hide);
+    bar.addEventListener('pointermove', show);
+    host.addEventListener('pointermove', show);
+    host.addEventListener('pointerleave', onLeave);
     const onState = () => { paint(); show(); };
     const onMeta = () => { paint(); place(); };
     for (const type of ['play', 'pause', 'ended', 'volumechange']) video.addEventListener(type, onState);
@@ -192,38 +265,43 @@ export const VIDEO_CONTROLS_SCRIPT = `(() => {
 
     bar.reTeardown = () => {
       if (idle !== null) clearTimeout(idle);
-      frame.removeEventListener('pointermove', show);
-      frame.removeEventListener('pointerleave', hide);
+      host.removeEventListener('pointermove', show);
+      host.removeEventListener('pointerleave', onLeave);
       for (const type of ['play', 'pause', 'ended', 'volumechange']) video.removeEventListener(type, onState);
       for (const type of ['timeupdate', 'durationchange']) video.removeEventListener(type, paint);
       video.removeEventListener('loadedmetadata', onMeta);
       win.removeEventListener('resize', place);
-      frame.removeAttribute('data-re-idle');
+      host.removeAttribute('data-re-idle');
     };
     bar.rePlace = place;
 
     paint();
     show();
-    frame.appendChild(bar);
+    video.after(bar);
     place();
   };
 
-  // Idempotent: a run that finds every frame already served makes no DOM
-  // change, so the observer that scheduled it does not fire again.
+  // Idempotent: a pass that finds every video already served changes nothing,
+  // so the observer it would wake stays quiet.
   const sync = () => {
-    for (const bar of document.querySelectorAll('.' + CLASS)) {
-      const video = bar.parentElement && bar.parentElement.querySelector(':scope > video[' + ATTR + ']');
+    for (const video of document.querySelectorAll(SCOPE + 'video[controls]')) {
+      video.removeAttribute('controls');
+      video.setAttribute(ATTR, '');
+    }
+    for (const bar of document.querySelectorAll(SCOPE + '.' + CLASS)) {
+      const video = bar.previousElementSibling;
+      const kept = video && video.tagName === 'VIDEO' && video.hasAttribute(ATTR);
       // a bar this run did not build — an older deck's runtime — is dropped
       // here and rebuilt below, so every bar on the page is this one's
-      if (video && bar.rePlace) bar.rePlace();
+      if (kept && bar.rePlace) bar.rePlace();
       else {
         if (bar.reTeardown) bar.reTeardown();
         bar.remove();
       }
     }
-    for (const video of document.querySelectorAll('.re-image-frame > video[' + ATTR + ']')) {
-      const frame = video.parentElement;
-      if (!frame.querySelector(':scope > .' + CLASS)) build(frame, video);
+    for (const video of document.querySelectorAll(SCOPE + 'video[' + ATTR + ']')) {
+      const next = video.nextElementSibling;
+      if (!(next && next.classList.contains(CLASS))) build(video);
     }
   };
 
@@ -237,10 +315,19 @@ export const VIDEO_CONTROLS_SCRIPT = `(() => {
     const slides = document.querySelector('.reveal .slides');
     if (!slides) return;
     if (window.__reVideoControls) window.__reVideoControls.observer.disconnect();
-    const observer = new MutationObserver(schedule);
-    // a resize or an adjusted crop moves the picture through inline styles
-    observer.observe(slides, { childList: true, subtree: true, attributeFilter: [ATTR, 'style'] });
-    window.__reVideoControls = { sync, observer };
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        const node = record.target;
+        const el = node.nodeType === 1 ? node : node.parentElement;
+        // the bar's own repaints must not wake the pass that repaints it
+        if (el && el.closest('.' + CLASS)) continue;
+        schedule();
+        return;
+      }
+    });
+    // a move, a resize or an adjusted crop reaches the bar through inline styles
+    observer.observe(slides, { childList: true, subtree: true, attributeFilter: [ATTR, 'controls', 'style'] });
+    window.__reVideoControls = { sync: sync, observer: observer };
     sync();
   };
   if (document.readyState === 'loading') {

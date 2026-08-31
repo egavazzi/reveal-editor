@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest'
 import { videoInfo, applyVideoProperties } from '../../src/client/lib/model/media.js'
+import { VIDEO_CONTROLS_ATTR } from '../../src/client/lib/model/videocontrols.js'
 import { cleanElementHtml } from '../../src/client/lib/model/clean.js'
 
 function makeVideo(attrs = '') {
@@ -11,7 +12,7 @@ function makeVideo(attrs = '') {
 
 describe('video media properties', () => {
   it('reads playback state from attributes', () => {
-    const el = makeVideo('controls loop muted data-autoplay')
+    const el = makeVideo(`${VIDEO_CONTROLS_ATTR} loop muted data-autoplay`)
     expect(videoInfo(el)).toMatchObject({
       width: 320, height: 180, autoplay: true, loop: true, muted: true, controls: true
     })
@@ -21,12 +22,12 @@ describe('video media properties', () => {
   })
 
   it('writes properties as persistable attributes', () => {
-    const el = makeVideo('controls')
+    const el = makeVideo(VIDEO_CONTROLS_ATTR)
     applyVideoProperties(el, { autoplay: true, loop: true, muted: true, controls: false, width: 640, height: 360 })
     expect(el.hasAttribute('data-autoplay')).toBe(true)
     expect(el.hasAttribute('loop')).toBe(true)
     expect(el.hasAttribute('muted')).toBe(true)
-    expect(el.hasAttribute('controls')).toBe(false)
+    expect(el.hasAttribute(VIDEO_CONTROLS_ATTR)).toBe(false)
     expect(el.style.width).toBe('640px')
     expect(el.style.height).toBe('360px')
     applyVideoProperties(el, { autoplay: false, loop: false, muted: false })
@@ -48,13 +49,14 @@ describe('video media properties', () => {
     expect(html).toContain('data-autoplay')
     expect(html).toContain('loop')
     expect(html).toContain('muted')
-    expect(html).toContain('controls')
+    // the deck records controls as the marker the runtime draws its bar from
+    expect(html).toContain(VIDEO_CONTROLS_ATTR)
   })
 
   it('strips reveal runtime pause markers on save', () => {
-    const el = makeVideo('controls data-paused-by-reveal')
+    const el = makeVideo(`${VIDEO_CONTROLS_ATTR} data-paused-by-reveal`)
     const html = cleanElementHtml(el.closest('section'))
     expect(html).not.toContain('data-paused-by-reveal')
-    expect(html).toContain('controls')
+    expect(html).toContain(VIDEO_CONTROLS_ATTR)
   })
 })

@@ -1,16 +1,11 @@
 // Video/media playback properties. Persisted as plain attributes on the
-// <video> element: native `controls`/`loop`/`muted`/`playsinline`, plus
-// reveal.js's `data-autoplay` (plays when the slide becomes visible).
-// Playback settings live on the <video> even when a crop frame wraps it;
-// size and decorations belong to the outer element.
+// <video> element: native `loop`/`muted`/`playsinline`, reveal.js's
+// `data-autoplay` (plays when the slide becomes visible), and
+// `data-re-controls` for the control bar the deck runtime draws (see
+// videocontrols.js). Playback settings live on the <video> even when a crop
+// frame wraps it; size and decorations belong to the outer element.
 import { isImageFrame, readRect, resizeFrameContents, videoOf } from './crop.js'
 import { VIDEO_CONTROLS_ATTR } from './videocontrols.js'
-
-// A framed video's controls are the runtime's bar, marked by an attribute of
-// our own; a bare one uses the browser's native player.
-function controlsAttr(el) {
-  return isImageFrame(el) ? VIDEO_CONTROLS_ATTR : 'controls'
-}
 
 export function videoInfo(el) {
   const video = videoOf(el)
@@ -27,7 +22,7 @@ export function videoInfo(el) {
     autoplay: video.hasAttribute('data-autoplay'),
     loop: video.hasAttribute('loop'),
     muted: video.hasAttribute('muted'),
-    controls: video.hasAttribute(controlsAttr(el))
+    controls: video.hasAttribute(VIDEO_CONTROLS_ATTR)
   }
 }
 
@@ -55,7 +50,9 @@ export function applyVideoProperties(el, values) {
     video.muted = Boolean(values.muted)
   }
   if (values.controls != null) {
-    video.toggleAttribute(controlsAttr(el), Boolean(values.controls))
+    video.toggleAttribute(VIDEO_CONTROLS_ATTR, Boolean(values.controls))
+    // the browser's own player is never what a deck of ours shows
+    video.removeAttribute('controls')
   }
   return true
 }

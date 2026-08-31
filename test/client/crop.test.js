@@ -198,31 +198,28 @@ describe('video crop frames', () => {
     expect(video.style.borderRadius).toBe('8px')
   })
 
-  it('hands native controls over to the runtime bar while framed', () => {
-    const video = makeVideo('', { attrs: 'controls' })
+  it('carries the controls marker through a crop and back', () => {
+    const video = makeVideo('', { attrs: VIDEO_CONTROLS_ATTR })
     const frame = wrapImage(video)
-    // native controls are drawn on the video's own box, which the frame clips
-    expect(video.hasAttribute('controls')).toBe(false)
     expect(video.hasAttribute(VIDEO_CONTROLS_ATTR)).toBe(true)
     expect(videoInfo(frame).controls).toBe(true)
     unwrapImage(frame)
-    expect(video.hasAttribute('controls')).toBe(true)
-    expect(video.hasAttribute(VIDEO_CONTROLS_ATTR)).toBe(false)
+    expect(video.hasAttribute(VIDEO_CONTROLS_ATTR)).toBe(true)
   })
 
-  it('leaves a video without controls alone on both sides of a crop', () => {
+  it('toggles the marker from the panel, framed or not', () => {
     const video = makeVideo()
     const frame = wrapImage(video)
-    expect(video.hasAttribute(VIDEO_CONTROLS_ATTR)).toBe(false)
     expect(videoInfo(frame).controls).toBe(false)
-    // the panel checkbox writes whichever attribute the current framing uses
     applyVideoProperties(frame, { controls: true })
     expect(video.hasAttribute(VIDEO_CONTROLS_ATTR)).toBe(true)
+    // the browser's own player is never what a deck of ours shows
     expect(video.hasAttribute('controls')).toBe(false)
     applyVideoProperties(frame, { controls: false })
     expect(video.hasAttribute(VIDEO_CONTROLS_ATTR)).toBe(false)
     unwrapImage(frame)
-    expect(video.hasAttribute('controls')).toBe(false)
+    applyVideoProperties(video, { controls: true })
+    expect(video.hasAttribute(VIDEO_CONTROLS_ATTR)).toBe(true)
   })
 
   it('restores the full video when the crop is removed', () => {
@@ -246,7 +243,7 @@ describe('video crop frames', () => {
   })
 
   it('reports and edits a cropped video through its frame', () => {
-    const video = makeVideo('', { attrs: 'controls' })
+    const video = makeVideo('', { attrs: VIDEO_CONTROLS_ATTR })
     const frame = wrapImage(video)
     writeRect(video, { left: -60, top: -20, width: 400, height: 300 })
     const info = videoInfo(frame)
@@ -264,7 +261,7 @@ describe('video crop frames', () => {
   })
 
   it('saves the marker and the bare frame, never the runtime bar', () => {
-    const video = makeVideo('', { attrs: 'controls' })
+    const video = makeVideo('', { attrs: VIDEO_CONTROLS_ATTR })
     const frame = wrapImage(video)
     writeRect(video, { left: -60, top: 0, width: 400, height: 300 })
     // the state crop mode and the control-bar runtime leave behind
@@ -279,7 +276,7 @@ describe('video crop frames', () => {
     expect(html).toContain('re-image-frame')
     expect(html).toContain('assets/a.webm')
     expect(html).toContain(VIDEO_CONTROLS_ATTR)
-    // a framed video must not ask the browser for controls it would clip away
+    // a saved video never asks the browser for controls of its own
     expect(html).not.toMatch(/\scontrols/)
     expect(html).not.toContain('re-video-controls')
     expect(html).not.toContain('re-cropping')

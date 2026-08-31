@@ -225,6 +225,8 @@ export function slideSummaries(bridge, canvas) {
     const boxes = []
     const collect = (el, offsetX, offsetY) => {
       if (boxes.length >= 40) return
+      // runtime overlays (a video's control bar) are not slide content
+      if (el.classList.contains('re-transient')) return
       const left = parseFloat(el.style.left)
       const top = parseFloat(el.style.top)
       if (Number.isNaN(left) || Number.isNaN(top)) return
