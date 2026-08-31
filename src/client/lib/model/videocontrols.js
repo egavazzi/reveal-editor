@@ -94,6 +94,9 @@ export const VIDEO_CONTROLS_SCRIPT = `(() => {
   // below this the bar cannot hold its controls, so it takes the whole picture
   const MIN_WIDTH = 80;
   const SCOPE = '.reveal .slides ';
+  // every bar carries the token of the run that built it, so a later run —
+  // the editor's copy over the deck file's — can tell its own from the rest
+  const OWNER = {};
 
   const icon = (body) => '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" ' +
     'stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" ' +
@@ -116,6 +119,22 @@ export const VIDEO_CONTROLS_SCRIPT = `(() => {
   const frameOf = (video) => {
     const parent = video.parentElement;
     return parent && parent.classList.contains('re-image-frame') ? parent : null;
+  };
+
+  // Hover is decided from the pointer's position against the picture and the
+  // bar together, not from enter/leave events: the bar overlaps the picture
+  // it belongs to, so crossing between them fires leave events that mean
+  // nothing, and a pointer that leaves through the bar fires none at all.
+  const entries = new Set();
+  const over = (el, x, y) => {
+    const r = el.getBoundingClientRect();
+    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+  };
+  const onPointerMove = (e) => {
+    for (const entry of entries) entry.hover(e.clientX, e.clientY);
+  };
+  const onPointerOut = () => {
+    for (const entry of entries) entry.hide();
   };
 
   // Where the picture actually shows, in the coordinates the bar is
@@ -241,11 +260,11 @@ export const VIDEO_CONTROLS_SCRIPT = `(() => {
       if (!bar.hasAttribute('data-show')) bar.setAttribute('data-show', '');
       host.removeAttribute('data-re-idle');
     };
-    // reaching for the bar leaves the host; that is not the pointer leaving
-    const onLeave = (e) => {
-      if (e.relatedTarget && bar.contains(e.relatedTarget)) return;
-      hide();
+    const entry = {
+      hover: (x, y) => { if (over(host, x, y) || over(bar, x, y)) show(); else hide(); },
+      hide: hide
     };
+    entries.add(entry);
 
     const toggle = () => {
       if (video.paused) video.play().catch(() => {});
@@ -283,11 +302,6 @@ export const VIDEO_CONTROLS_SCRIPT = `(() => {
       const value = Number(seek.value);
       if (isFinite(value)) video.currentTime = value;
     });
-    bar.addEventListener('pointerenter', show);
-    bar.addEventListener('pointermove', show);
-    host.addEventListener('pointerenter', show);
-    host.addEventListener('pointermove', show);
-    host.addEventListener('pointerleave', onLeave);
     // starting or stopping playback changes what the countdown should do,
     // but only while the pointer is there to see the bar at all
     const onState = () => {
@@ -304,9 +318,7 @@ export const VIDEO_CONTROLS_SCRIPT = `(() => {
 
     bar.reTeardown = () => {
       if (idle !== null) clearTimeout(idle);
-      host.removeEventListener('pointerenter', show);
-      host.removeEventListener('pointermove', show);
-      host.removeEventListener('pointerleave', onLeave);
+      entries.delete(entry);
       host.removeEventListener('pointerdown', onPress);
       host.removeEventListener('click', onClick);
       for (const type of ['play', 'pause', 'ended', 'volumechange']) video.removeEventListener(type, onState);
@@ -316,6 +328,7 @@ export const VIDEO_CONTROLS_SCRIPT = `(() => {
       host.removeAttribute('data-re-idle');
     };
     bar.rePlace = place;
+    bar.reOwner = OWNER;
 
     paint();
     video.after(bar);
@@ -334,7 +347,7 @@ export const VIDEO_CONTROLS_SCRIPT = `(() => {
       const kept = video && video.tagName === 'VIDEO' && video.hasAttribute(ATTR);
       // a bar this run did not build — an older deck's runtime — is dropped
       // here and rebuilt below, so every bar on the page is this one's
-      if (kept && bar.rePlace) bar.rePlace();
+      if (kept && bar.reOwner === OWNER) bar.rePlace();
       else {
         if (bar.reTeardown) bar.reTeardown();
         bar.remove();
@@ -355,7 +368,14 @@ export const VIDEO_CONTROLS_SCRIPT = `(() => {
   const start = () => {
     const slides = document.querySelector('.reveal .slides');
     if (!slides) return;
-    if (window.__reVideoControls) window.__reVideoControls.observer.disconnect();
+    const previous = window.__reVideoControls;
+    if (previous) { previous.observer.disconnect(); previous.stop(); }
+    document.addEventListener('pointermove', onPointerMove, true);
+    document.addEventListener('pointerleave', onPointerOut, true);
+    const stop = () => {
+      document.removeEventListener('pointermove', onPointerMove, true);
+      document.removeEventListener('pointerleave', onPointerOut, true);
+    };
     const observer = new MutationObserver((records) => {
       for (const record of records) {
         const node = record.target;
@@ -368,7 +388,7 @@ export const VIDEO_CONTROLS_SCRIPT = `(() => {
     });
     // a move, a resize or an adjusted crop reaches the bar through inline styles
     observer.observe(slides, { childList: true, subtree: true, attributeFilter: [ATTR, 'controls', 'style'] });
-    window.__reVideoControls = { sync: sync, observer: observer };
+    window.__reVideoControls = { sync: sync, observer: observer, stop: stop };
     sync();
   };
   if (document.readyState === 'loading') {

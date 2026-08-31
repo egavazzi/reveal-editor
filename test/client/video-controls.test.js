@@ -39,11 +39,27 @@ function play(video) {
   video.dispatchEvent(new Event('play'))
 }
 
-/** A pointerleave whose pointer went on to `to`, the way a browser reports it. */
-function leaveTowards(to) {
-  const event = new Event('pointerleave')
-  Object.defineProperty(event, 'relatedTarget', { value: to })
-  return event
+// happy-dom lays nothing out, and the runtime decides hover from the boxes on
+// screen: stand in for layout with the inline geometry the deck carries.
+const BAR_HEIGHT = 28
+function rectOf(el) {
+  let left = 0
+  let top = 0
+  for (let node = el; node && node.style; node = node.parentElement) {
+    left += parseFloat(node.style.left) || 0
+    top += parseFloat(node.style.top) || 0
+  }
+  const width = parseFloat(el.style.width) || 0
+  const height = parseFloat(el.style.height) ||
+    (el.classList.contains('re-video-controls') ? BAR_HEIGHT : 0)
+  return { left, top, right: left + width, bottom: top + height, width, height }
+}
+
+Element.prototype.getBoundingClientRect = function () { return rectOf(this) }
+
+/** Move the pointer to a viewport point, as a browser reports it. */
+function pointerAt(x, y) {
+  document.dispatchEvent(new MouseEvent('pointermove', { clientX: x, clientY: y, bubbles: true }))
 }
 
 // The saved deck runs this source from its own script node; here it stands in
@@ -106,7 +122,7 @@ describe('cropped video controls', () => {
     runRuntime()
     const bar = frame.querySelector('.re-video-controls')
     const [playButton, mute] = bar.querySelectorAll('button')
-    frame.dispatchEvent(new Event('pointermove'))
+    pointerAt(50, 50)
     expect(bar.hasAttribute('data-show')).toBe(true)
     expect(playButton.title).toBe('Play')
 
@@ -124,7 +140,7 @@ describe('cropped video controls', () => {
     expect(mute.title).toBe('Unmute')
   })
 
-  it('shows on pointer movement and hides the moment the pointer leaves', () => {
+  it('shows under the pointer and hides the moment it moves off', () => {
     vi.useFakeTimers()
     const { frame, video } = makeDeck()
     runRuntime()
@@ -134,22 +150,47 @@ describe('cropped video controls', () => {
     vi.advanceTimersByTime(10000)
     expect(bar.hasAttribute('data-show')).toBe(false)
 
-    frame.dispatchEvent(new Event('pointermove'))
+    pointerAt(50, 50)
     expect(bar.hasAttribute('data-show')).toBe(true)
     // a paused video keeps the bar for as long as the pointer stays
     vi.advanceTimersByTime(10000)
     expect(bar.hasAttribute('data-show')).toBe(true)
 
-    frame.dispatchEvent(new Event('pointerleave'))
+    // out sideways: the frame is 340×200 at the slide's origin
+    pointerAt(600, 50)
     expect(bar.hasAttribute('data-show')).toBe(false)
     expect(frame.hasAttribute('data-re-idle')).toBe(false)
 
     // playing and ended behave no differently: the pointer decides
-    frame.dispatchEvent(new Event('pointermove'))
+    pointerAt(50, 50)
     play(video)
-    frame.dispatchEvent(new Event('pointerleave'))
+    pointerAt(600, 50)
     expect(bar.hasAttribute('data-show')).toBe(false)
     video.dispatchEvent(new Event('ended'))
+    expect(bar.hasAttribute('data-show')).toBe(false)
+  })
+
+  it('keeps the bar while the pointer is on it, over or beside the picture', () => {
+    const { video } = makeDeck({
+      cropped: false,
+      picture: 'left:100px; top:50px; width:400px; height:300px'
+    })
+    runRuntime()
+    const bar = video.nextElementSibling
+    // the bar overlays the picture's bottom: 400 wide at x=100, y 310–338
+    pointerAt(300, 100)
+    expect(bar.hasAttribute('data-show')).toBe(true)
+    // crossing onto the bar is not leaving the picture
+    pointerAt(300, 320)
+    expect(bar.hasAttribute('data-show')).toBe(true)
+    // leaving downward through the bar is, and takes effect at once
+    pointerAt(300, 400)
+    expect(bar.hasAttribute('data-show')).toBe(false)
+
+    // a bar hanging below a short picture still counts as hover
+    pointerAt(300, 200)
+    expect(bar.hasAttribute('data-show')).toBe(true)
+    pointerAt(50, 200)
     expect(bar.hasAttribute('data-show')).toBe(false)
   })
 
@@ -158,7 +199,7 @@ describe('cropped video controls', () => {
     const { frame, video } = makeDeck()
     runRuntime()
     const bar = frame.querySelector('.re-video-controls')
-    frame.dispatchEvent(new Event('pointermove'))
+    pointerAt(50, 50)
     play(video)
 
     vi.advanceTimersByTime(2400)
@@ -168,7 +209,7 @@ describe('cropped video controls', () => {
     // the cursor goes with it, over footage nobody is touching
     expect(frame.hasAttribute('data-re-idle')).toBe(true)
 
-    frame.dispatchEvent(new Event('pointermove'))
+    pointerAt(60, 50)
     expect(bar.hasAttribute('data-show')).toBe(true)
     expect(frame.hasAttribute('data-re-idle')).toBe(false)
     // the move restarted the countdown rather than shortening it
@@ -176,19 +217,13 @@ describe('cropped video controls', () => {
     expect(bar.hasAttribute('data-show')).toBe(true)
     vi.advanceTimersByTime(200)
     expect(bar.hasAttribute('data-show')).toBe(false)
-
-    // reaching from the picture onto the bar is not the pointer leaving
-    bar.dispatchEvent(new Event('pointerenter'))
-    expect(bar.hasAttribute('data-show')).toBe(true)
-    frame.dispatchEvent(leaveTowards(bar))
-    expect(bar.hasAttribute('data-show')).toBe(true)
   })
 
   it('never saves the idle marker the hidden cursor needs', () => {
     vi.useFakeTimers()
     const { frame, video } = makeDeck()
     runRuntime()
-    frame.dispatchEvent(new Event('pointermove'))
+    pointerAt(50, 50)
     play(video)
     vi.advanceTimersByTime(2600)
     expect(frame.hasAttribute('data-re-idle')).toBe(true)
