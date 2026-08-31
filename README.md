@@ -135,8 +135,9 @@ workflows and the one-way eject tradeoff.
   controls get a compact play/seek/mute bar drawn along the bottom of the
   picture — including a cropped or letterboxed one, where the browser's own
   player sits outside the visible picture — in the saved presentation as well
-  as in the editor; it fades out while the video plays and comes back on
-  pointer movement. Controls are recorded as `data-re-controls`, and a video
+  as in the editor. The bar appears while the pointer is over the picture and
+  clicking the picture plays or pauses it. Controls are recorded as
+  `data-re-controls`, and a video
   that arrives with the native `controls` attribute is converted the first
   time the deck is opened
 - **Deck setup**: the Deck panel controls the reveal theme, canvas format/size

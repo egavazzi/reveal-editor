@@ -39,9 +39,11 @@ function play(video) {
   video.dispatchEvent(new Event('play'))
 }
 
-function pause(video) {
-  Object.defineProperty(video, 'paused', { value: true, configurable: true })
-  video.dispatchEvent(new Event('pause'))
+/** A pointerleave whose pointer went on to `to`, the way a browser reports it. */
+function leaveTowards(to) {
+  const event = new Event('pointerleave')
+  Object.defineProperty(event, 'relatedTarget', { value: to })
+  return event
 }
 
 // The saved deck runs this source from its own script node; here it stands in
@@ -104,7 +106,7 @@ describe('cropped video controls', () => {
     runRuntime()
     const bar = frame.querySelector('.re-video-controls')
     const [playButton, mute] = bar.querySelectorAll('button')
-    // paused: the bar stays visible and offers Play
+    frame.dispatchEvent(new Event('pointermove'))
     expect(bar.hasAttribute('data-show')).toBe(true)
     expect(playButton.title).toBe('Play')
 
@@ -112,6 +114,8 @@ describe('cropped video controls', () => {
     video.play = () => { played = true; return Promise.resolve() }
     playButton.click()
     expect(played).toBe(true)
+    // a pointer press leaves no focus behind to pin the bar open
+    expect(frame.ownerDocument.activeElement).not.toBe(playButton)
 
     mute.click()
     expect(video.muted).toBe(true)
@@ -120,19 +124,48 @@ describe('cropped video controls', () => {
     expect(mute.title).toBe('Unmute')
   })
 
-  it('fades out over a playing video and comes back with the pointer', () => {
+  it('shows on pointer movement and hides the moment the pointer leaves', () => {
     vi.useFakeTimers()
     const { frame, video } = makeDeck()
     runRuntime()
     const bar = frame.querySelector('.re-video-controls')
+    // nothing has been touched yet
+    expect(bar.hasAttribute('data-show')).toBe(false)
+    vi.advanceTimersByTime(10000)
+    expect(bar.hasAttribute('data-show')).toBe(false)
+
+    frame.dispatchEvent(new Event('pointermove'))
+    expect(bar.hasAttribute('data-show')).toBe(true)
+    // a paused video keeps the bar for as long as the pointer stays
+    vi.advanceTimersByTime(10000)
     expect(bar.hasAttribute('data-show')).toBe(true)
 
+    frame.dispatchEvent(new Event('pointerleave'))
+    expect(bar.hasAttribute('data-show')).toBe(false)
+    expect(frame.hasAttribute('data-re-idle')).toBe(false)
+
+    // playing and ended behave no differently: the pointer decides
+    frame.dispatchEvent(new Event('pointermove'))
     play(video)
+    frame.dispatchEvent(new Event('pointerleave'))
+    expect(bar.hasAttribute('data-show')).toBe(false)
+    video.dispatchEvent(new Event('ended'))
+    expect(bar.hasAttribute('data-show')).toBe(false)
+  })
+
+  it('fades out over a playing video the pointer rests on', () => {
+    vi.useFakeTimers()
+    const { frame, video } = makeDeck()
+    runRuntime()
+    const bar = frame.querySelector('.re-video-controls')
+    frame.dispatchEvent(new Event('pointermove'))
+    play(video)
+
     vi.advanceTimersByTime(2400)
     expect(bar.hasAttribute('data-show')).toBe(true)
     vi.advanceTimersByTime(200)
     expect(bar.hasAttribute('data-show')).toBe(false)
-    // the pointer is hidden too while the picture plays untouched
+    // the cursor goes with it, over footage nobody is touching
     expect(frame.hasAttribute('data-re-idle')).toBe(true)
 
     frame.dispatchEvent(new Event('pointermove'))
@@ -143,39 +176,61 @@ describe('cropped video controls', () => {
     expect(bar.hasAttribute('data-show')).toBe(true)
     vi.advanceTimersByTime(200)
     expect(bar.hasAttribute('data-show')).toBe(false)
+
+    // reaching from the picture onto the bar is not the pointer leaving
+    bar.dispatchEvent(new Event('pointerenter'))
+    expect(bar.hasAttribute('data-show')).toBe(true)
+    frame.dispatchEvent(leaveTowards(bar))
+    expect(bar.hasAttribute('data-show')).toBe(true)
   })
 
-  it('holds the bar while paused, focused, and drops it when the pointer leaves', () => {
+  it('never saves the idle marker the hidden cursor needs', () => {
     vi.useFakeTimers()
     const { frame, video } = makeDeck()
     runRuntime()
-    const bar = frame.querySelector('.re-video-controls')
-
-    // a paused video keeps its controls however long nothing happens
-    vi.advanceTimersByTime(10000)
-    expect(bar.hasAttribute('data-show')).toBe(true)
-
+    frame.dispatchEvent(new Event('pointermove'))
     play(video)
-    frame.dispatchEvent(new Event('pointerleave'))
-    expect(bar.hasAttribute('data-show')).toBe(false)
-
-    bar.dispatchEvent(new Event('focusin'))
-    expect(bar.hasAttribute('data-show')).toBe(true)
-    vi.advanceTimersByTime(3000)
-    expect(bar.hasAttribute('data-show')).toBe(false)
-
-    pause(video)
-    expect(bar.hasAttribute('data-show')).toBe(true)
-    expect(frame.hasAttribute('data-re-idle')).toBe(false)
-  })
-
-  it('never saves the idle marker the hidden pointer needs', () => {
-    const { frame, video } = makeDeck()
-    runRuntime()
-    play(video)
-    frame.dispatchEvent(new Event('pointerleave'))
+    vi.advanceTimersByTime(2600)
     expect(frame.hasAttribute('data-re-idle')).toBe(true)
     expect(cleanElementHtml(frame.closest('section'))).not.toContain('data-re-idle')
+  })
+
+  it('toggles playback when the picture itself is clicked', () => {
+    const { frame, video } = makeDeck()
+    runRuntime()
+    let played = 0
+    video.play = () => { played++; return Promise.resolve() }
+
+    frame.dispatchEvent(new MouseEvent('pointerdown', { clientX: 40, clientY: 40, bubbles: true }))
+    frame.dispatchEvent(new MouseEvent('click', { clientX: 41, clientY: 40, bubbles: true }))
+    expect(played).toBe(1)
+
+    // a click that ends a drag moved the element, it did not press the picture
+    frame.dispatchEvent(new MouseEvent('pointerdown', { clientX: 40, clientY: 40, bubbles: true }))
+    frame.dispatchEvent(new MouseEvent('click', { clientX: 90, clientY: 40, bubbles: true }))
+    expect(played).toBe(1)
+
+    // the bar's own controls are not the picture
+    const bar = frame.querySelector('.re-video-controls')
+    bar.querySelector('.re-vc-time').dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(played).toBe(1)
+  })
+
+  it('leaves canvas clicks to the editor until Ctrl is held', () => {
+    const { frame, video } = makeDeck()
+    document.body.classList.add('re-edit-mode')
+    runRuntime()
+    let played = 0
+    video.play = () => { played++; return Promise.resolve() }
+
+    frame.dispatchEvent(new MouseEvent('click', { clientX: 40, clientY: 40, bubbles: true }))
+    expect(played).toBe(0)
+
+    // Ctrl hands the pointer to the player, as it does for playback itself
+    document.body.classList.add('re-media-live')
+    frame.dispatchEvent(new MouseEvent('click', { clientX: 40, clientY: 40, bubbles: true }))
+    expect(played).toBe(1)
+    document.body.classList.remove('re-edit-mode', 're-media-live')
   })
 
   it('never reaches the saved deck', () => {

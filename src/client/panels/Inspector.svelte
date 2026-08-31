@@ -529,7 +529,7 @@
       {/if}
       <p class="hint">Or double-click the video. Drag the edge handles to crop, drag the picture to reposition it, and drag its corners to zoom. Resizing a cropped video keeps the crop.</p>
       {#if video.controls}
-        <p class="hint">Videos use the editor's own control bar, drawn along the bottom of the picture — in the presentation as well as here (hold Ctrl to use it on the canvas). It fades out while the video plays and comes back on pointer movement.</p>
+        <p class="hint">Videos use the editor's own control bar, drawn along the bottom of the picture — in the presentation as well as here (hold Ctrl to use it on the canvas). It appears while the pointer is over the picture, and clicking the picture plays or pauses.</p>
       {/if}
       <h3>Playback</h3>
       <label class="check"><input type="checkbox" checked={video.autoplay} onchange={(e) => setVideoProperties({ autoplay: e.currentTarget.checked })} /> Autoplay when the slide appears</label>

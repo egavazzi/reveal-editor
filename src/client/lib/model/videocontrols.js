@@ -31,47 +31,50 @@ export const VIDEO_CONTROLS_CSS = `
   height: ${BAR_HEIGHT}px; padding: 0 ${INSET}px;
   display: flex; align-items: center; gap: 10px;
   color: #fff; font: 13px/1 system-ui, -apple-system, Segoe UI, sans-serif;
-  /* legibility over any footage comes from the shadow alone: the bar itself
-     never paints a background over the picture */
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .8));
+  /* The bar never paints a background over the picture, so legibility rests
+     on two shadows: a tight dark halo that holds the glyph edges against
+     bright footage, and a soft one that gives depth on dark footage. */
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, .9)) drop-shadow(0 1px 3px rgba(0, 0, 0, .7));
   opacity: 0; pointer-events: none; transition: opacity .15s ease;
 }
-.reveal .re-video-controls[data-show],
-.reveal .re-video-controls:focus-within { opacity: 1; pointer-events: auto; }
+/* the bar shows while the pointer is over the picture or the bar, and
+   nowhere else — a button keeping focus must not pin it open */
+.reveal .re-video-controls[data-show] { opacity: 1; pointer-events: auto; }
 .reveal .re-video-controls button {
   background: none; border: 0; margin: 0; padding: 0; color: inherit;
   line-height: 0; cursor: pointer; opacity: .85; transition: opacity .15s ease;
 }
-.reveal .re-video-controls button:hover,
-.reveal .re-video-controls button:focus-visible { opacity: 1; }
+.reveal .re-video-controls button:hover { opacity: 1; }
 .reveal .re-video-controls .re-vc-seek {
   flex: 1; min-width: 0; height: 12px; margin: 0; padding: 0; cursor: pointer;
   -webkit-appearance: none; appearance: none; background: none;
 }
-/* the played part is drawn into the track, so it reads the same everywhere */
+/* The played part is drawn into the track, so it reads the same everywhere;
+   the dark ring keeps the thin white line visible on bright footage. */
 .reveal .re-video-controls .re-vc-seek::-webkit-slider-runnable-track {
   height: 2px; border-radius: 2px;
   background: var(--re-vc-track, rgba(255, 255, 255, .45));
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .5);
 }
 .reveal .re-video-controls .re-vc-seek::-moz-range-track {
   height: 2px; border-radius: 2px;
   background: var(--re-vc-track, rgba(255, 255, 255, .45));
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .5);
 }
 .reveal .re-video-controls .re-vc-seek:hover::-webkit-slider-runnable-track { height: 3px; }
 .reveal .re-video-controls .re-vc-seek:hover::-moz-range-track { height: 3px; }
 .reveal .re-video-controls .re-vc-seek::-webkit-slider-thumb {
   -webkit-appearance: none; width: 10px; height: 10px; margin-top: -4px;
   border: 0; border-radius: 50%; background: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .5);
   opacity: 0; transition: opacity .15s ease;
 }
 .reveal .re-video-controls .re-vc-seek::-moz-range-thumb {
   width: 10px; height: 10px; border: 0; border-radius: 50%; background: #fff;
   opacity: 0; transition: opacity .15s ease;
 }
-.reveal .re-video-controls .re-vc-seek:hover::-webkit-slider-thumb,
-.reveal .re-video-controls .re-vc-seek:focus-visible::-webkit-slider-thumb { opacity: 1; }
-.reveal .re-video-controls .re-vc-seek:hover::-moz-range-thumb,
-.reveal .re-video-controls .re-vc-seek:focus-visible::-moz-range-thumb { opacity: 1; }
+.reveal .re-video-controls .re-vc-seek:hover::-webkit-slider-thumb { opacity: 1; }
+.reveal .re-video-controls .re-vc-seek:hover::-moz-range-thumb { opacity: 1; }
 .reveal .re-video-controls .re-vc-time {
   font-variant-numeric: tabular-nums; white-space: nowrap; opacity: .9;
 }
@@ -218,17 +221,23 @@ export const VIDEO_CONTROLS_SCRIPT = `(() => {
       set('zIndex', video.style.zIndex);
     };
 
+    // The bar belongs to the pointer: it is out whenever the pointer is not
+    // over the picture or the bar, whatever the video is doing.
     let idle = null;
     const hide = () => {
       if (idle !== null) { clearTimeout(idle); idle = null; }
-      // a paused video keeps its controls; only playback takes them away
-      if (video.paused) return;
+      bar.removeAttribute('data-show');
+      host.removeAttribute('data-re-idle');
+    };
+    // the pointer rested over running footage: take the cursor away with it
+    const hideIdle = () => {
+      idle = null;
       bar.removeAttribute('data-show');
       host.setAttribute('data-re-idle', '');
     };
     const show = () => {
       if (idle !== null) clearTimeout(idle);
-      idle = video.paused ? null : setTimeout(hide, IDLE_MS);
+      idle = video.paused ? null : setTimeout(hideIdle, IDLE_MS);
       if (!bar.hasAttribute('data-show')) bar.setAttribute('data-show', '');
       host.removeAttribute('data-re-idle');
     };
@@ -238,23 +247,53 @@ export const VIDEO_CONTROLS_SCRIPT = `(() => {
       hide();
     };
 
-    play.addEventListener('click', () => {
+    const toggle = () => {
       if (video.paused) video.play().catch(() => {});
       else video.pause();
+    };
+    // a pointer-driven press must not leave focus on the button: focus would
+    // outlive the pointer, and the bar would have no reason left to hide
+    const press = (button, action) => button.addEventListener('click', (e) => {
+      action();
+      if (e.detail > 0) button.blur();
     });
-    mute.addEventListener('click', () => { video.muted = !video.muted; });
+    press(play, toggle);
+    press(mute, () => { video.muted = !video.muted; });
+
+    // Clicking the picture plays or pauses it, as a player does. On the edit
+    // canvas that belongs to the same Ctrl gate as the rest of playback:
+    // without it a click selects and drags the element.
+    let pressed = null;
+    const onPress = (e) => { pressed = [e.clientX, e.clientY]; };
+    const onClick = (e) => {
+      const from = pressed;
+      pressed = null;
+      if (bar.contains(e.target) || host.classList.contains('re-cropping')) return;
+      const body = doc.body;
+      if (body.classList.contains('re-edit-mode') && !body.classList.contains('re-media-live')) return;
+      // a click that ends a drag is not a click on the picture
+      if (from && Math.abs(e.clientX - from[0]) + Math.abs(e.clientY - from[1]) > 4) return;
+      toggle();
+    };
+    host.addEventListener('pointerdown', onPress);
+    host.addEventListener('click', onClick);
     seek.addEventListener('pointerdown', () => { scrubbing = true; });
     seek.addEventListener('pointerup', () => { scrubbing = false; });
     seek.addEventListener('input', () => {
       const value = Number(seek.value);
       if (isFinite(value)) video.currentTime = value;
     });
-    bar.addEventListener('focusin', show);
-    bar.addEventListener('focusout', hide);
+    bar.addEventListener('pointerenter', show);
     bar.addEventListener('pointermove', show);
+    host.addEventListener('pointerenter', show);
     host.addEventListener('pointermove', show);
     host.addEventListener('pointerleave', onLeave);
-    const onState = () => { paint(); show(); };
+    // starting or stopping playback changes what the countdown should do,
+    // but only while the pointer is there to see the bar at all
+    const onState = () => {
+      paint();
+      if (bar.hasAttribute('data-show')) show();
+    };
     const onMeta = () => { paint(); place(); };
     for (const type of ['play', 'pause', 'ended', 'volumechange']) video.addEventListener(type, onState);
     for (const type of ['timeupdate', 'durationchange']) video.addEventListener(type, paint);
@@ -265,8 +304,11 @@ export const VIDEO_CONTROLS_SCRIPT = `(() => {
 
     bar.reTeardown = () => {
       if (idle !== null) clearTimeout(idle);
+      host.removeEventListener('pointerenter', show);
       host.removeEventListener('pointermove', show);
       host.removeEventListener('pointerleave', onLeave);
+      host.removeEventListener('pointerdown', onPress);
+      host.removeEventListener('click', onClick);
       for (const type of ['play', 'pause', 'ended', 'volumechange']) video.removeEventListener(type, onState);
       for (const type of ['timeupdate', 'durationchange']) video.removeEventListener(type, paint);
       video.removeEventListener('loadedmetadata', onMeta);
@@ -276,7 +318,6 @@ export const VIDEO_CONTROLS_SCRIPT = `(() => {
     bar.rePlace = place;
 
     paint();
-    show();
     video.after(bar);
     place();
   };
