@@ -6,12 +6,13 @@
     toggleLayerHidden, toggleLayerLocked, moveLayer, setLayerName,
     currentSpeakerNotes, selectedElementInfo, selectedImageInfo, setElementProperties,
     selectedShapeInfo, setShapeProperties, flattenSelectedLine, resizeDeck,
-    selectedVideoInfo, setVideoProperties,
+    selectedVideoInfo, setVideoProperties, selectedMediaLocalSrc, convertSelectedMedia,
     setImageProperties, cropSelectedMedia, removeMediaCrop,
     setSpeakerNotes, updateDeckSettings as updateSettings
   } from '../lib/actions.js'
   import { icon } from '../lib/icons.js'
-  import { probeVideoCodec, webmConvertCommand } from '../lib/model/codecs.js'
+  import { extensionOf, imageOutputName, probeVideoCodec, webmConvertCommand } from '../lib/model/codecs.js'
+  import { converterStatus } from '../lib/api.js'
 
   const presets = {
     'standard': [960, 700],
@@ -207,6 +208,53 @@
   function copyConvertCommand() {
     navigator.clipboard?.writeText(convertCommand)
     editor.statusMessage = 'ffmpeg command copied to the clipboard.'
+  }
+
+  // Conversion runs the system ffmpeg (video) or ImageMagick (image)
+  // through the local server; the manual command is the fallback when the
+  // tool is missing (or the conversion fails). null while unknown, then
+  // { ffmpeg, imagemagick } with a version string or null for each.
+  let tools = $state(null)
+  $effect(() => {
+    if (!(video?.broken || image?.broken) || tools) return
+    converterStatus()
+      .then((status) => { tools = status })
+      .catch(() => { tools = { ffmpeg: null, imagemagick: null } })
+  })
+  const canConvert = $derived.by(() => {
+    void editor.selectionVersion
+    return Boolean(tools?.ffmpeg && video?.broken && selectedMediaLocalSrc())
+  })
+  const canConvertImage = $derived.by(() => {
+    void editor.selectionVersion
+    return Boolean(tools?.imagemagick && image?.broken && selectedMediaLocalSrc())
+  })
+  const imageTarget = $derived(imageOutputName(image?.fileName ?? '').endsWith('.jpg') ? 'JPEG' : 'PNG')
+  const imageExtension = $derived(extensionOf(image?.fileName ?? '').toUpperCase())
+  const imageConvertCommand = $derived.by(() => {
+    const input = image?.fileName || 'IMG.heic'
+    return `magick "${input}" "${imageOutputName(input)}"`
+  })
+  // null when idle, else { progress, error?, controller }
+  let conversion = $state(null)
+
+  async function convertMedia() {
+    if (conversion?.controller) return
+    const controller = new AbortController()
+    conversion = { progress: 0, controller }
+    try {
+      const path = await convertSelectedMedia({
+        signal: controller.signal,
+        onProgress: (fraction) => { if (conversion?.controller === controller) conversion = { ...conversion, progress: fraction } }
+      })
+      conversion = null
+      editor.statusMessage = `Converted to ${path.split('/').pop()}.`
+    } catch (err) {
+      conversion = controller.signal.aborted ? null : { progress: 0, error: String(err.message ?? err) }
+    }
+  }
+  function cancelConversion() {
+    conversion?.controller?.abort()
   }
 
   function previewToggle() {
@@ -437,6 +485,36 @@
   {#if image && editor.sidePanel === 'image'}
     <section class="panel image-panel">
       <h3>Image</h3>
+      {#if image.broken}
+        <div class="codec-warn">
+          <strong>This image can't be displayed in this browser</strong>
+          <p>
+            It's a{#if imageExtension}&nbsp;<b>{imageExtension}</b>{/if} file (HEIC/TIFF/…) — browsers only show
+            PNG, JPEG, GIF, WebP, SVG and AVIF.
+          </p>
+          {#if canConvertImage}
+            {#if conversion?.controller}
+              <div class="row convert-row">
+                <span class="fine">Converting…</span>
+                <button class="copy" onclick={cancelConversion}>Cancel</button>
+              </div>
+            {:else}
+              <button class="convert" onclick={convertMedia}>Convert to {imageTarget}</button>
+              <p class="fine">Writes a <b>{imageTarget === 'JPEG' ? '.jpg' : '.png'}</b> next to the original (which is kept) using the ImageMagick installed on this machine, then swaps the image to it. Undo restores the original.</p>
+            {/if}
+            {#if conversion?.error}
+              <p class="convert-error">Conversion failed: <code>{conversion.error}</code></p>
+            {/if}
+          {/if}
+          {#if tools && !tools.imagemagick}
+            <p class="fine">Install <b>ImageMagick</b> to convert it here, or convert the file yourself and re-insert it:</p>
+            <code>{imageConvertCommand}</code>
+          {:else if tools && !canConvertImage}
+            <p class="fine">The editor can only convert files inside the deck folder; convert this one yourself and re-insert it:</p>
+            <code>{imageConvertCommand}</code>
+          {/if}
+        </div>
+      {/if}
       <div class="row">
         <label>Width<input type="number" min="1" value={image.width} onchange={(e) => setImageProperties({ width: +e.currentTarget.value })} /></label>
         <label>Height<input type="number" min="1" value={image.height} onchange={(e) => setImageProperties({ height: +e.currentTarget.value })} /></label>
@@ -475,14 +553,40 @@
             The frame will stay blank both while editing and when presenting here
             (other browsers or devices may still play it).
           </p>
-          <p>Re-encode it as WebM — VP9 video and Opus audio are royalty-free codecs every modern browser plays:</p>
-          <code>{convertCommand}</code>
-          <button class="copy" onclick={copyConvertCommand}>Copy command</button>
-          <p class="fine">
-            <b>-c:v libvpx-vp9</b> re-encodes the video as VP9 ·
-            <b>-crf 32</b> sets quality (lower&nbsp;=&nbsp;better, bigger file) ·
-            <b>-c:a libopus</b> converts the audio to Opus
-          </p>
+          <p>Re-encode it as WebM — VP9 video and Opus audio are royalty-free codecs every modern browser plays.</p>
+          {#if canConvert}
+            {#if conversion?.controller}
+              <div class="convert-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(conversion.progress * 100)}>
+                <div class="bar" style:width="{conversion.progress * 100}%"></div>
+              </div>
+              <div class="row convert-row">
+                <span class="fine">Converting… {Math.round(conversion.progress * 100)}%</span>
+                <button class="copy" onclick={cancelConversion}>Cancel</button>
+              </div>
+            {:else}
+              <button class="convert" onclick={convertMedia}>Convert to WebM</button>
+              <p class="fine">Writes a <b>.webm</b> next to the original (which is kept) using the ffmpeg installed on this machine, then swaps the video to it. Undo restores the original.</p>
+            {/if}
+            {#if conversion?.error}
+              <p class="convert-error">Conversion failed: <code>{conversion.error}</code></p>
+            {/if}
+          {/if}
+          {#if !canConvert || conversion?.error}
+            {#if tools && !tools.ffmpeg}
+              <p class="fine">Install <b>ffmpeg</b> and reopen this panel to convert it here, or run:</p>
+            {:else if canConvert}
+              <p class="fine">Or run the command yourself:</p>
+            {:else if tools}
+              <p class="fine">The editor can only convert files inside the deck folder; run this yourself:</p>
+            {/if}
+            <code>{convertCommand}</code>
+            <button class="copy" onclick={copyConvertCommand}>Copy command</button>
+            <p class="fine">
+              <b>-c:v libvpx-vp9</b> re-encodes the video as VP9 ·
+              <b>-crf 32</b> sets quality (lower&nbsp;=&nbsp;better, bigger file) ·
+              <b>-c:a libopus</b> converts the audio to Opus
+            </p>
+          {/if}
         </div>
       {/if}
       {#if preview}
@@ -712,4 +816,24 @@
   }
   .codec-warn .copy:hover { background: rgba(227, 183, 107, 0.3); }
   .codec-warn .fine { margin-top: 8px; color: rgba(232, 201, 138, 0.75); font-size: 11px; }
+  .codec-warn .convert {
+    margin-top: 4px;
+    background: rgba(227, 183, 107, 0.3);
+    border-color: rgba(227, 183, 107, 0.6);
+    color: #fbe6bb;
+    font-weight: 600;
+  }
+  .codec-warn .convert:hover { background: rgba(227, 183, 107, 0.42); }
+  .codec-warn .convert-progress {
+    height: 6px;
+    margin: 6px 0 4px;
+    border-radius: 3px;
+    background: rgba(0, 0, 0, 0.35);
+    overflow: hidden;
+  }
+  .codec-warn .convert-progress .bar { height: 100%; background: #e3b76b; transition: width 0.2s; }
+  .codec-warn .convert-row { align-items: center; justify-content: space-between; }
+  .codec-warn .convert-row .fine { margin: 0; }
+  .codec-warn .convert-error { color: #f3a6a6; }
+  .codec-warn .convert-error code { margin-top: 4px; color: #f3c0c0; }
 </style>

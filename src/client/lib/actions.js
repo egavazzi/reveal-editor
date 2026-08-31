@@ -8,6 +8,7 @@ import {
 } from './model/insert.js'
 import { startTextEdit, formatText, setBlockStyle, isEditingText, activeElement } from './editors/text.js'
 import { ensurePositioned } from './model/position.js'
+import { getCanvasSize } from './overlay/editmode.js'
 import { arrangeElements } from './model/alignment.js'
 import { applyLayout, isSlideEmpty } from './model/layouts.js'
 import {
@@ -25,6 +26,8 @@ import { cleanElementHtml } from './model/clean.js'
 import { loadSlideTemplates, storeSlideTemplate } from './model/templates.js'
 import { rehydrate } from './model/rehydrate.js'
 import { saveDeck } from './model/save.js'
+import { convertAsset, converterStatus } from './api.js'
+import { imageOutputName, isImagePath, isVideoPath } from './model/codecs.js'
 import {
   hasStoredSettings, initializeSettings, updateSettings as updateSettingsModel, writeSettings
 } from './model/settings.js'
@@ -174,14 +177,104 @@ export function addShape(kind) {
   markDirty()
 }
 
-export async function addImageBlob(blob, name) {
+// The converters the server can run, fetched once per session.
+let converters = null
+
+function fileNameOf(path) {
+  const last = path.split('/').pop() || path
+  try {
+    return decodeURIComponent(last)
+  } catch {
+    return last
+  }
+}
+
+/**
+ * Convert a just-uploaded asset the browser can't show into one it can,
+ * reporting progress in the status bar (and to `onProgress`, for the box on
+ * the slide). Resolves to the new deck-relative path, or null when the
+ * needed tool is missing or the conversion failed (the status bar then
+ * says why).
+ */
+export async function convertIfPossible(path, name = fileNameOf(path), { onProgress } = {}) {
+  const video = isVideoPath(path)
+  converters ??= converterStatus().catch(() => ({ ffmpeg: null, imagemagick: null }))
+  const status = await converters
+  if (video && !status.ffmpeg) {
+    editor.statusMessage = `${name} can't be played here and ffmpeg isn't installed, so it wasn't converted.`
+    return null
+  }
+  if (!video && !status.imagemagick) {
+    editor.statusMessage = `${name} can't be displayed here; install ImageMagick to convert it automatically.`
+    return null
+  }
+  const target = video ? 'WebM' : (imageOutputName(name).endsWith('.jpg') ? 'JPEG' : 'PNG')
+  // images convert in one step, with no progress to report
+  editor.conversion = { name, target, progress: video ? 0 : null }
+  try {
+    const converted = await convertAsset(path, {
+      onProgress: (fraction) => {
+        if (!video) return
+        if (editor.conversion) editor.conversion.progress = fraction
+        onProgress?.(fraction)
+      }
+    })
+    editor.conversion = null
+    editor.statusMessage = `Converted ${name} to ${fileNameOf(converted)}.`
+    return converted
+  } catch (err) {
+    editor.conversion = null
+    editor.statusMessage = `Conversion of ${name} failed: ${err.message}`
+    return null
+  }
+}
+
+// Undo snapshot for the slide holding `section`, whichever slide is
+// current: media inserted after a long conversion goes to the slide it was
+// dropped on, and its undo step must cover that slide.
+function snapshotSection(section) {
+  const entry = runtime.bridge.getSlideEntries().find((e) => e.section === section)
+  if (!entry) throw new Error('the slide it was meant for no longer exists')
+  snapshot(runtime.bridge, { type: 'slide', h: entry.h, v: entry.v })
+}
+
+// Select a freshly inserted element when its slide is the visible one;
+// otherwise say where it went.
+function showInserted(el, name) {
+  const section = el.closest('section')
+  if (section === runtime.bridge.currentSection) {
+    runtime.overlay.setSelection([el])
+    return
+  }
+  const entry = runtime.bridge.getSlideEntries().find((e) => e.section === section)
+  const where = entry ? `slide ${entry.h + 1}${entry.vertical ? `.${entry.v + 1}` : ''}` : 'its slide'
+  editor.statusMessage = `${name} was added to ${where}, where it was dropped.`
+}
+
+/**
+ * Canvas-px point under a drop event on the deck document, or undefined when
+ * it fell outside the current slide (the insert then uses the default spot).
+ */
+function dropPoint(event) {
+  if (event.clientX == null) return undefined
+  const section = runtime.bridge.currentSection
+  const rect = section.getBoundingClientRect()
+  if (event.clientX < rect.left || event.clientX > rect.right ||
+      event.clientY < rect.top || event.clientY > rect.bottom) return undefined
+  const canvas = getCanvasSize(runtime.bridge)
+  const scale = rect.width / canvas.width || 1
+  return { x: (event.clientX - rect.left) / scale, y: (event.clientY - rect.top) / scale }
+}
+
+export async function addImageBlob(blob, name, { at } = {}) {
   try {
     const selection = runtime.overlay?.getSelection() ?? []
     const placeholder = selection.length === 1 && selection[0].classList.contains('re-image-placeholder')
       ? selection[0]
       : null
-    snapshotSlide()
-    const el = await insertImageBlob(runtime.bridge, blob, name)
+    const el = await insertImageBlob(runtime.bridge, blob, name, {
+      convert: convertIfPossible, at, beforeInsert: snapshotSection
+    })
     if (placeholder?.isConnected) {
       for (const prop of ['left', 'top', 'width', 'height']) {
         if (placeholder.style[prop]) el.style[prop] = placeholder.style[prop]
@@ -192,7 +285,7 @@ export async function addImageBlob(blob, name) {
       placeholder.before(el)
       placeholder.remove()
     }
-    runtime.overlay.setSelection([el])
+    showInserted(el, name)
     markDirty()
   } catch (err) {
     editor.statusMessage = `Image insert failed: ${err.message}`
@@ -203,7 +296,7 @@ export async function addImageBlob(blob, name) {
 export function pickImage() {
   const input = document.createElement('input')
   input.type = 'file'
-  input.accept = 'image/*'
+  input.accept = 'image/*,.heic,.heif,.avif,.jxl,.tif,.tiff,.psd'
   input.onchange = () => {
     const file = input.files?.[0]
     if (file) addImageBlob(file, file.name)
@@ -211,16 +304,17 @@ export function pickImage() {
   input.click()
 }
 
-export async function addVideoBlob(blob, name) {
+export async function addVideoBlob(blob, name, { at } = {}) {
   try {
-    snapshotSlide()
-    const el = await insertVideoBlob(runtime.bridge, blob, name)
+    const el = await insertVideoBlob(runtime.bridge, blob, name, {
+      convert: convertIfPossible, at, beforeInsert: snapshotSection
+    })
     el.addEventListener('error', () => {
       editor.statusMessage =
         'Video added, but this browser cannot decode it (unsupported codec) — it will not play here. Convert to WebM (VP9) or H.264 MP4.'
       editor.selectionVersion++
     }, { once: true })
-    runtime.overlay.setSelection([el])
+    showInserted(el, name)
     markDirty()
   } catch (err) {
     editor.statusMessage = `Video insert failed: ${err.message}`
@@ -230,7 +324,7 @@ export async function addVideoBlob(blob, name) {
 export function pickVideo() {
   const input = document.createElement('input')
   input.type = 'file'
-  input.accept = 'video/mp4,video/webm,video/*'
+  input.accept = 'video/mp4,video/webm,video/*,.mov,.mkv,.avi,.m4v'
   input.onchange = () => {
     const file = input.files?.[0]
     if (file) addVideoBlob(file, file.name)
@@ -240,10 +334,18 @@ export function pickVideo() {
 
 export function handleFileDrop(event) {
   const file = [...(event.dataTransfer?.files ?? [])][0]
-  if (!file || (!file.type.startsWith('image/') && !file.type.startsWith('video/'))) return false
+  if (!file) return false
+  const type = file.type || ''
+  // Formats the browser doesn't know (HEIC, ProRes MOV, …) arrive with no
+  // type or as a generic binary; their extension decides where they go.
+  const untyped = type === '' || type === 'application/octet-stream'
+  const video = type.startsWith('video/') || (untyped && isVideoPath(file.name))
+  const image = type.startsWith('image/') || (untyped && isImagePath(file.name))
+  if (!video && !image) return false
   event.preventDefault()
-  if (file.type.startsWith('video/')) addVideoBlob(file, file.name)
-  else addImageBlob(file, file.name)
+  const at = dropPoint(event)
+  if (video) addVideoBlob(file, file.name, { at })
+  else addImageBlob(file, file.name, { at })
   return true
 }
 
@@ -1260,6 +1362,53 @@ export function setVideoProperties(values) {
   bumpSelection()
 }
 
+// The <video> or <img> the conversion actions work on: whichever of the two
+// the selection holds (an image may sit inside a crop frame).
+function selectedMediaElement() {
+  const video = selectedVideoInfo()?.el
+  if (video) return video
+  const sel = runtime.overlay?.getSelection() ?? []
+  return (sel.length === 1 ? imageOf(sel[0]) : null) || null
+}
+
+/**
+ * Deck-relative source of the selected video or image as written in the
+ * markup, or null when it is remote (http/data/blob URLs can't be converted
+ * server-side).
+ */
+export function selectedMediaLocalSrc() {
+  const src = selectedMediaElement()?.getAttribute('src') ?? ''
+  if (!src || /^[a-z][a-z0-9+.-]*:/i.test(src) || src.startsWith('//')) return null
+  return src
+}
+
+/**
+ * Convert the selected video or image on the server and point the element
+ * at the result (an undoable edit). Resolves to the new path; rejects with
+ * the server's message when the conversion fails.
+ */
+export async function convertSelectedMedia({ onProgress, signal } = {}) {
+  const el = selectedMediaElement()
+  const src = selectedMediaLocalSrc()
+  if (!el || !src) throw new Error('no local media selected')
+  const path = await convertAsset(src, { onProgress, signal })
+  // the selection may have moved on during a long conversion
+  if (selectedMediaElement() !== el) return path
+  snapshotSlide()
+  el.setAttribute('src', path)
+  if (el.tagName === 'VIDEO') {
+    // load() restarts resource selection, clearing the old decode error
+    el.load()
+    el.addEventListener('loadedmetadata', bumpSelection, { once: true })
+  } else {
+    el.addEventListener('load', bumpSelection, { once: true })
+  }
+  runtime.overlay.refresh()
+  markDirty()
+  bumpSelection()
+  return path
+}
+
 // --- image properties ---
 
 export function selectedImageInfo() {
@@ -1270,6 +1419,10 @@ export function selectedImageInfo() {
   return {
     el,
     cropped: isImageFrame(el),
+    fileName: fileNameOf(img.getAttribute('src') || ''),
+    // a finished load with no pixels: this browser can't decode the file
+    // (an SVG without explicit dimensions also reports no natural width)
+    broken: img.complete && img.naturalWidth === 0 && !/\.svgz?(?:[?#].*)?$/i.test(img.getAttribute('src') || ''),
     width: Math.round(parseFloat(el.style.width) || el.getBoundingClientRect().width),
     height: Math.round(parseFloat(el.style.height) || el.getBoundingClientRect().height),
     borderWidth: parseFloat(el.style.borderWidth) || 0,
