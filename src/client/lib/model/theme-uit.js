@@ -10,7 +10,7 @@
 //     small round emblem bottom-right (the theme adds that emblem to every
 //     slide; slides that bring their own footer opt out via .uit-own-footer)
 //   - closing slides: centered emblem, motto bottom-left, uit.no bottom-right
-//     (the "Björn version" is the dark closing slide with an animated emblem)
+//     (the "Björn’s special" version is the dark closing slide with an animated emblem)
 import {
   UIT_EMBLEM_VIEWBOX, UIT_EMBLEM_INNER, UIT_EMBLEM_PETROL_INNER,
   UIT_WORDMARK_VIEWBOX, UIT_WORDMARK_INNER
@@ -37,11 +37,11 @@ export const UIT_LAYOUTS = Object.freeze([
   { id: 'uit-content-dark', label: 'UiT — Content (dark blue)' },
   { id: 'uit-closing', label: 'UiT — Closing (dark)' },
   { id: 'uit-closing-light', label: 'UiT — Closing (light)' },
-  { id: 'uit-closing-bjorn', label: 'UiT — Closing (Björn version)' }
+  { id: 'uit-closing-bjorn', label: 'UiT — Closing (Björn’s special)' }
 ])
 
-// Class on the emblem of the "Björn" closing slide; the theme CSS animates it
-// (zoom in over 12 s, then spin from 2 min) while the slide is presented.
+// Class on the emblem of the "Björn’s special" closing slide; the theme CSS animates it
+// (zoom in over 12 s, then spin from 1 min) while the slide is presented.
 export const UIT_EMBLEM_ANIMATED_CLASS = 'uit-emblem-zoom-spin'
 
 const SVG_NS = 'http://www.w3.org/2000/svg'

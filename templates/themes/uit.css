@@ -469,8 +469,8 @@ body.no-uit-logo .reveal .slides::after {
 }
 
 /*********************************************
- * ANIMATED CLOSING EMBLEM ("Björn version" closing slide)
- * The emblem grows from a dot to full size over 12 s, then from 2 min on
+ * ANIMATED CLOSING EMBLEM ("Björn’s special" closing slide)
+ * The emblem grows from a dot to full size over 12 s, then from 1 min on
  * rotates continuously. Both run on the individual scale/rotate properties
  * so neither overrides the other. The animations restart every time the
  * slide becomes the present one; edit mode and reduced-motion users get the
@@ -480,7 +480,7 @@ body.no-uit-logo .reveal .slides::after {
   transform-origin: center;
   animation:
     uit-emblem-zoom 12s ease-in-out both,
-    uit-emblem-spin 6s linear 120s infinite;
+    uit-emblem-spin 6s linear 60s infinite;
 }
 
 body.re-edit-mode .reveal .slides section .uit-emblem-zoom-spin {
