@@ -3,7 +3,7 @@
 // /api/assets/convert route against a real ffmpeg when one is installed.
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -12,7 +12,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createServer } from '../../src/server/index.js'
 import { scaffoldDeck } from '../../src/server/scaffold.js'
 import {
-  ffmpegVersion, imageMagickVersion, imageOutputName, isVideoFile, parseDuration, parseOutTime
+  convertToWebm, ffmpegVersion, imageMagickVersion, imageOutputName, isVideoFile, parseDuration, parseOutTime
 } from '../../src/server/convert.js'
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
@@ -98,7 +98,7 @@ describe.skipIf(!haveFfmpeg)('POST /api/assets/convert', () => {
     const out = await readFile(join(deckDir, 'assets', 'clip.webm'))
     // EBML header: WebM/Matroska container
     expect([...out.subarray(0, 4)]).toEqual([0x1a, 0x45, 0xdf, 0xa3])
-    expect(existsSync(join(deckDir, 'assets', 'clip.webm.part'))).toBe(false)
+    expect(existsSync(join(deckDir, 'assets', '.re-convert-clip.webm'))).toBe(false)
     // the original stays
     expect(existsSync(join(deckDir, 'assets', 'clip.mp4'))).toBe(true)
   }, 60_000)
@@ -128,8 +128,61 @@ describe.skipIf(!haveFfmpeg)('POST /api/assets/convert', () => {
     const { last } = await readStream(res)
     expect(last.error).toMatch(/ffmpeg exited with code/)
     expect(existsSync(join(deckDir, 'assets', 'bogus.webm'))).toBe(false)
-    expect(existsSync(join(deckDir, 'assets', 'bogus.webm.part'))).toBe(false)
+    expect(existsSync(join(deckDir, 'assets', '.re-convert-bogus.webm'))).toBe(false)
   }, 30_000)
+
+  it('hides the in-progress output from the asset listing', async () => {
+    // a fresh output name, so this doesn't race the earlier test's clip.webm
+    const input = join(deckDir, 'assets', 'clip.mp4')
+    const output = join(deckDir, 'assets', 'clip2.webm')
+    const partial = join(deckDir, 'assets', '.re-convert-clip2.webm')
+    const job = convertToWebm({ input, output })
+    // ffmpeg opens the partial before it starts encoding; the source clip is
+    // tiny, so poll tightly rather than sleeping past the whole conversion
+    const deadline = Date.now() + 5000
+    while (!existsSync(partial) && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 2))
+    }
+    try {
+      expect(existsSync(partial)).toBe(true)
+      const listing = await (await fetch(`${base}api/assets`)).json()
+      expect(listing.assets.some((a) => a.includes('re-convert'))).toBe(false)
+    } finally {
+      job.abort()
+      await job.catch(() => {})
+    }
+    expect(existsSync(partial)).toBe(false)
+  }, 30_000)
+})
+
+describe.skipIf(!haveFfmpeg)('leftover conversion files on startup', () => {
+  let dir, deckPath, deckDir
+
+  beforeAll(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'reveal-editor-convert-stale-'))
+    deckPath = await scaffoldDeck(join(dir, 'deck'))
+    deckDir = join(dir, 'deck')
+    await mkdir(join(deckDir, 'assets'), { recursive: true })
+  })
+
+  afterAll(async () => {
+    await rm(dir, { recursive: true, force: true })
+  })
+
+  it('removes a stray partial left by a killed conversion at startup', async () => {
+    const stray = join(deckDir, 'assets', '.re-convert-clip.webm')
+    await writeFile(stray, 'leftover from a killed ffmpeg')
+    const kept = join(deckDir, 'assets', 'clip.mp4')
+    await writeFile(kept, 'not touched')
+
+    const started = await createServer({ deckPath, port: 0, dev: false, repoRoot })
+    try {
+      expect(existsSync(stray)).toBe(false)
+      expect(existsSync(kept)).toBe(true)
+    } finally {
+      started.server.close()
+    }
+  })
 })
 
 describe.skipIf(!magick)('POST /api/assets/convert (images)', () => {
@@ -163,7 +216,7 @@ describe.skipIf(!magick)('POST /api/assets/convert (images)', () => {
     expect(lines[lines.length - 1]).toEqual({ path: 'assets/pic.png' })
     const out = await readFile(join(deckDir, 'assets', 'pic.png'))
     expect([...out.subarray(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47])
-    expect(existsSync(join(deckDir, 'assets', 'pic.part.png'))).toBe(false)
+    expect(existsSync(join(deckDir, 'assets', '.re-convert-pic.png'))).toBe(false)
     expect(existsSync(join(deckDir, 'assets', 'pic.tiff'))).toBe(true)
   }, 30_000)
 

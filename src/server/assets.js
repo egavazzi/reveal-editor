@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { extname, resolve, sep } from 'node:path'
-import { convertImage, convertToWebm, ffmpegVersion, imageMagickVersion, imageOutputName, isVideoFile } from './convert.js'
+import { cleanupPartials, convertImage, convertToWebm, ffmpegVersion, imageMagickVersion, imageOutputName, isVideoFile } from './convert.js'
 import { webmOutputName } from '../client/lib/model/codecs.js'
 
 const EXT_BY_MIME = {
@@ -20,9 +20,10 @@ function safeName(name) {
   return name.replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/^[._]+/, '').slice(0, 80)
 }
 
-export function assetsRouter(deckDir) {
+export async function assetsRouter(deckDir) {
   const router = express.Router()
   const assetsDir = resolve(deckDir, 'assets')
+  await cleanupPartials(assetsDir)
 
   router.get('/', async (req, res) => {
     try {
