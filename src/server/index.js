@@ -80,7 +80,7 @@ export async function createServer({ deckPath, port = 3737, dev = false, repoRoo
     }
   })
 
-  app.use('/api/assets', assetsRouter(deckDir))
+  app.use('/api/assets', await assetsRouter(deckDir))
 
   app.get('/api/events', (req, res) => {
     res.set({

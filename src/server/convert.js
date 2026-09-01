@@ -4,11 +4,50 @@
 // is the fix. Videos run the same encoder settings the inspector shows for
 // manual use (WEBM_ENCODE_ARGS), so the two paths can't drift apart.
 import { execFile, spawn } from 'node:child_process'
-import { rename, unlink } from 'node:fs/promises'
+import { readdir, rename, unlink } from 'node:fs/promises'
+import { dirname, basename, join } from 'node:path'
 import { imageOutputName, isVideoPath, WEBM_ENCODE_ARGS } from '../client/lib/model/codecs.js'
 
 export { imageOutputName }
 export { isVideoPath as isVideoFile }
+
+// Marks a conversion's in-progress output file. Dot-prefixed so the asset
+// listing (which hides dot-files) never shows it mid-conversion, and
+// distinctive enough that a leftover from a killed process can be found and
+// removed on the next startup.
+const PARTIAL_PREFIX = '.re-convert-'
+
+/** Path of the temporary file a conversion to `output` writes while running. */
+function partialPath(output) {
+  return join(dirname(output), `${PARTIAL_PREFIX}${basename(output)}`)
+}
+
+/**
+ * Remove conversion temp files left in `assetsDir` by a process that never
+ * reached rename-on-success or remove-on-failure (a crash or `kill -9`).
+ * Logs each file removed; a removal failure is logged, not swallowed.
+ * Does nothing if `assetsDir` doesn't exist yet.
+ */
+export async function cleanupPartials(assetsDir) {
+  let entries
+  try {
+    entries = await readdir(assetsDir)
+  } catch (err) {
+    if (err.code === 'ENOENT') return
+    console.error(`could not scan ${assetsDir} for leftover conversion files:`, err.message)
+    return
+  }
+  for (const name of entries) {
+    if (!name.startsWith(PARTIAL_PREFIX)) continue
+    const path = join(assetsDir, name)
+    try {
+      await unlink(path)
+      console.log(`removed leftover conversion file: ${path}`)
+    } catch (err) {
+      console.error(`could not remove leftover conversion file ${path}:`, err.message)
+    }
+  }
+}
 
 /** Version of the ffmpeg on PATH (e.g. "6.1.1"), or null when there is none. */
 export function ffmpegVersion(bin = 'ffmpeg') {
@@ -41,15 +80,16 @@ export function parseOutTime(progress) {
 }
 
 /**
- * Transcode `input` to `output` (WebM). Writes to `<output>.part` and renames
- * on success, so a crash or abort never leaves a half-written file under the
- * final name. `onProgress(fraction)` is called with values in [0, 1] as
- * ffmpeg reports encoded time. Rejects with ffmpeg's stderr tail on failure.
- * The returned promise has an `abort()` method that kills ffmpeg and removes
- * the partial output; the promise then rejects.
+ * Transcode `input` to `output` (WebM). Writes to a dot-prefixed temporary
+ * name next to `output` and renames on success, so a crash or abort never
+ * leaves a half-written file under the final name (or visible in the asset
+ * listing). `onProgress(fraction)` is called with values in [0, 1] as ffmpeg
+ * reports encoded time. Rejects with ffmpeg's stderr tail on failure. The
+ * returned promise has an `abort()` method that kills ffmpeg and removes the
+ * partial output; the promise then rejects.
  */
 export function convertToWebm({ input, output, onProgress = () => {}, bin = 'ffmpeg' }) {
-  const partial = `${output}.part`
+  const partial = partialPath(output)
   const args = [
     '-nostdin', '-hide_banner', '-y',
     '-i', input,
@@ -118,14 +158,14 @@ export async function imageMagickVersion() {
 
 /**
  * Convert `input` to `output` with ImageMagick. ImageMagick chooses the
- * output format from the extension, so the temporary file keeps it
- * (`photo.part.jpg`); it is renamed onto `output` on success and removed on
- * failure. `input` is read as `<path>[0]`, taking the first frame of a
- * multi-page or layered file. Rejects with ImageMagick's stderr tail.
+ * output format from the extension, so the dot-prefixed temporary name keeps
+ * it (`.re-convert-photo.jpg`); it is renamed onto `output` on success and
+ * removed on failure. `input` is read as `<path>[0]`, taking the first frame
+ * of a multi-page or layered file. Rejects with ImageMagick's stderr tail.
  * The returned promise has an `abort()` method that kills the conversion.
  */
 export function convertImage({ input, output, bin = 'convert' }) {
-  const partial = output.replace(/(\.[^.]*)$/, '.part$1')
+  const partial = partialPath(output)
   const args = [`${input}[0]`, '-auto-orient']
   if (/\.jpe?g$/i.test(output)) args.push('-quality', '90')
   args.push(partial)
