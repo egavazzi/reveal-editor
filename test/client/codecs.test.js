@@ -1,6 +1,9 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest'
-import { sniffVideoCodec, probeVideoCodec, webmConvertCommand } from '../../src/client/lib/model/codecs.js'
+import {
+  extensionOf, imageOutputName, isImagePath, isVideoPath,
+  sniffVideoCodec, probeVideoCodec, webmConvertCommand
+} from '../../src/client/lib/model/codecs.js'
 
 const bytesOf = (text) => Uint8Array.from(text, (ch) => ch.charCodeAt(0))
 
@@ -47,6 +50,21 @@ describe('codec sniffing', () => {
   it('returns null on fetch failure', async () => {
     const fetchImpl = async () => ({ ok: false, status: 404 })
     expect(await probeVideoCodec('/x', { fetchImpl })).toBe(null)
+  })
+
+  it('classifies files by extension', () => {
+    expect(extensionOf('a/b/My Clip.MOV')).toBe('mov')
+    expect(extensionOf('noextension')).toBe('')
+    expect(isVideoPath('assets/clip.mov')).toBe(true)
+    expect(isVideoPath('assets/photo.heic')).toBe(false)
+    expect(isImagePath('assets/photo.HEIC')).toBe(true)
+    expect(isImagePath('assets/clip.mp4')).toBe(false)
+  })
+
+  it('names the converted copy of an image', () => {
+    expect(imageOutputName('IMG_1234.heic')).toBe('IMG_1234.jpg')
+    expect(imageOutputName('scan.tiff')).toBe('scan.png')
+    expect(imageOutputName('assets/layers.psd')).toBe('assets/layers.png')
   })
 
   it('builds the conversion command from the file name', () => {

@@ -86,6 +86,25 @@ describe('layers and groups', () => {
     expect(el('a').hasAttribute('data-re-group-child')).toBe(false)
   })
 
+  it('keeps a grouped image where it was, out of reach of the theme box styling', () => {
+    section.insertAdjacentHTML(
+      'beforeend',
+      '<img class="re-el" id="pic" src="x.png" style="position:absolute;left:40px;top:40px;width:200px;height:100px">'
+    )
+    selection = [el('a'), el('pic')]
+    expect(groupSelection()).toBe(true)
+    // reveal's own `.reveal section img { margin: 20px 0; max-width: 95% }`
+    // applies the moment the image stops being a .re-el
+    expect(el('pic').style.margin).toBe('0px')
+    expect(el('pic').style.maxWidth).toBe('none')
+    expect(el('pic').style.maxHeight).toBe('none')
+    expect(ungroupSelection()).toBe(true)
+    expect(el('pic').style.margin).toBe('')
+    expect(el('pic').style.maxWidth).toBe('')
+    expect(el('pic').style.left).toBe('40px')
+    expect(el('pic').style.top).toBe('40px')
+  })
+
   it('refuses to group across levels and says why', () => {
     selection = [el('a'), el('b')]
     groupSelection()

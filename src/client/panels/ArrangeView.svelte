@@ -1,7 +1,7 @@
 <script>
-  // Full-screen slide arrangement board (slides.com-style): columns are
-  // horizontal positions, stacked cards in a column are a vertical stack.
-  // Dragging cards between columns restructures the deck.
+  // Full-screen slide arrangement board: columns are horizontal positions,
+  // stacked cards in a column are a vertical stack. Dragging cards between
+  // columns restructures the deck.
   import { onMount } from 'svelte'
   import { dndzone } from 'svelte-dnd-action'
   import { editor, runtime } from '../stores/editor.svelte.js'

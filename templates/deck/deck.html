@@ -16,6 +16,9 @@
     .reveal .re-text > :last-child { margin-bottom: 0; }
     .reveal img.re-el { max-width: none; max-height: none; }
     .reveal svg.re-el { display: block; }
+    /* group members are positioned too, but carry no .re-el marker */
+    .reveal .re-group > * { position: absolute; margin: 0; }
+    .reveal .re-group img, .reveal .re-group video { max-width: none; max-height: none; }
     .reveal .re-el pre { width: 100%; height: 100%; margin: 0; }
     .reveal .re-el pre code { max-height: none; height: 100%; box-sizing: border-box; }
   </style>

@@ -7,7 +7,7 @@
   import { enterEditMode } from './lib/overlay/editmode.js'
   import { initializeSettings, settingsFromRevealConfig } from './lib/model/settings.js'
   import { isSlideEmpty } from './lib/model/layouts.js'
-  import { isImageFrame } from './lib/model/crop.js'
+  import { isImageFrame, videoOf } from './lib/model/crop.js'
   import { createOverlay } from './lib/overlay/overlay.js'
   import {
     editElement, handlePaste, snapshotSlide, undoAction, redoAction,
@@ -96,9 +96,9 @@
       runtime.overlay = createOverlay(bridge, {
         onSelectionChange(targets, { keepPanel = false } = {}) {
           editor.selectionCount = targets.length
-          // a crop frame is an image as far as the UI is concerned
+          // a crop frame stands in for the picture it wraps
           editor.selectionTag = isImageFrame(targets[0])
-            ? 'img'
+            ? (videoOf(targets[0]) ? 'video' : 'img')
             : targets[0]?.tagName.toLowerCase() ?? ''
           editor.selectionVersion++
           // A pinned panel keeps whatever the user chose, and a selection
@@ -237,7 +237,18 @@
   {#if editor.arrangeOpen}<ArrangeView />{/if}
 
   <footer class="statusbar">
-    <span>{editor.statusMessage}</span>
+    {#if editor.conversion}
+      <span class="converting">
+        <span class="spinner"></span>
+        Converting {editor.conversion.name} to {editor.conversion.target}…
+        {#if typeof editor.conversion.progress === 'number'}
+          <span class="convert-bar"><span class="fill" style:width="{editor.conversion.progress * 100}%"></span></span>
+          {Math.round(editor.conversion.progress * 100)}%
+        {/if}
+      </span>
+    {:else}
+      <span>{editor.statusMessage}</span>
+    {/if}
     <span class="spacer"></span>
     <span>
       {editor.selectionCount === 0
@@ -404,5 +415,35 @@
   }
   .spacer {
     flex: 1;
+  }
+  .converting {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--ui-text);
+  }
+  .spinner {
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--ui-border);
+    border-top-color: var(--ui-accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+  .convert-bar {
+    width: 120px;
+    height: 4px;
+    background: var(--ui-border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .convert-bar .fill {
+    display: block;
+    height: 100%;
+    background: var(--ui-accent);
+    transition: width 0.2s;
   }
 </style>

@@ -1,9 +1,6 @@
 # reveal-editor
 
-A local WYSIWYG editor for [reveal.js](https://revealjs.com/) presentations —
-drag elements around like slides.com, but the deck stays a **plain,
-hand-editable HTML file** that you own, keep in git, and present anywhere
-with nothing but a browser.
+A local WYSIWYG editor for [reveal.js](https://revealjs.com/) presentations. Heavily vibe-coded. Use at your own risk.
 
 ## How it works
 
@@ -20,7 +17,9 @@ next GUI save.
 
 ## Install (per machine)
 
-Needs Node.js ≥ 20.
+Needs Node.js ≥ 20. Optional: `ffmpeg` and ImageMagick (`magick` or
+`convert`) on the PATH, for converting videos and images the browser can't
+show from inside the editor.
 
 ```sh
 git clone <your-repo-url> reveal-editor
@@ -129,6 +128,31 @@ workflows and the one-way eject tradeoff.
   button) for PowerPoint-style cropping — drag the edge handles to crop,
   drag the picture to reposition it, drag its corners to zoom — and
   resizing a cropped image afterwards keeps the crop
+- **Videos**: the Video panel scrubs and previews playback, sets exact
+  dimensions and the saved autoplay/loop/muted/controls settings, and crops
+  the video with the same edge/corner handles as an image. Videos with
+  controls get a compact play/seek/mute bar drawn along the bottom of the
+  picture — including a cropped or letterboxed one, where the browser's own
+  player sits outside the visible picture — in the saved presentation as well
+  as in the editor. The bar appears while the pointer is over the picture and
+  clicking the picture plays or pauses it. Controls are recorded as
+  `data-re-controls`, and a video
+  that arrives with the native `controls` attribute is converted the first
+  time the deck is opened. Autoplay can wait: a start delay in seconds
+  (`data-re-autoplay-delay`, written instead of reveal's `data-autoplay`)
+  starts the video that long after its slide opens, while presenting only
+- **Video formats**: a file the browser can't decode (HEVC from an iPhone, an
+  old MPEG-4/DivX clip, ProRes, …) is flagged in the Video panel with its
+  codec; if `ffmpeg` is installed, a "Convert to WebM" button re-encodes it as
+  VP9/Opus next to the original and swaps the slide over to the new file
+  (undoable). Without ffmpeg the panel shows the equivalent command to run.
+  A video dropped or picked while ffmpeg is installed is converted right at
+  insert time, with progress in the status bar
+- **Image formats**: HEIC/HEIF, TIFF, PSD, camera raw and other formats
+  browsers don't display are converted on insert — photos to JPEG, the rest
+  to PNG — next to the original, when ImageMagick is installed. An image
+  already in a deck that this browser can't show is flagged in the Image
+  panel with a Convert button
 - **Deck setup**: the Deck panel controls the reveal theme, canvas format/size
   and margins, editor grid display/snapping, navigation-arrow visibility, and
   slide number format/position, typography, and transitions

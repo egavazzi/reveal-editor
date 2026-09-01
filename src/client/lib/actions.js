@@ -8,6 +8,7 @@ import {
 } from './model/insert.js'
 import { startTextEdit, formatText, setBlockStyle, isEditingText, activeElement } from './editors/text.js'
 import { ensurePositioned } from './model/position.js'
+import { getCanvasSize } from './overlay/editmode.js'
 import { arrangeElements } from './model/alignment.js'
 import { applyLayout, isSlideEmpty } from './model/layouts.js'
 import {
@@ -25,13 +26,16 @@ import { cleanElementHtml } from './model/clean.js'
 import { loadSlideTemplates, storeSlideTemplate } from './model/templates.js'
 import { rehydrate } from './model/rehydrate.js'
 import { saveDeck } from './model/save.js'
+import { convertAsset, converterStatus } from './api.js'
+import { imageOutputName, isImagePath, isVideoPath } from './model/codecs.js'
 import {
-  initializeSettings, updateSettings as updateSettingsModel, writeSettings
+  hasStoredSettings, initializeSettings, updateSettings as updateSettingsModel, writeSettings
 } from './model/settings.js'
 import { setShapeColors, shapeColors, syncShapeGeometry } from './model/shapes.js'
 import { videoInfo, applyVideoProperties } from './model/media.js'
-import { imageOf, isImageFrame, readRect, removeCrop, resizeFrameContents, rotationOf } from './model/crop.js'
+import { imageOf, isImageFrame, mediaOf, readRect, removeCrop, resizeFrameContents, rotationOf, videoOf } from './model/crop.js'
 import { isRatioLocked, setRatioLocked } from './model/ratio.js'
+import { VIDEO_CONTROLS_ATTR, VIDEO_DELAY_ATTR } from './model/videocontrols.js'
 export { saveDeck } from './model/save.js'
 export { slideSummaries } from './model/slides.js'
 
@@ -66,7 +70,23 @@ function afterHistory(entry) {
 
 let autosaveTimer = null
 
+/**
+ * A video's control bar and its delayed start are built by the deck runtime,
+ * so a deck that asks for either needs the support nodes even if its settings
+ * were never touched.
+ * writeSettings is idempotent and the nodes are shared with every other
+ * runtime feature, so this adds them once and never churns.
+ */
+function ensureVideoControlsRuntime() {
+  const slides = runtime.bridge?.slidesEl
+  if (!slides || hasStoredSettings(slides)) return
+  if (slides.querySelector(`video[${VIDEO_CONTROLS_ATTR}], video[${VIDEO_DELAY_ATTR}]`)) {
+    writeSettings(slides, editor.settings)
+  }
+}
+
 export function markDirty() {
+  ensureVideoControlsRuntime()
   editor.dirty = true
   editor.docVersion++
   if (editor.autosave) {
@@ -157,14 +177,104 @@ export function addShape(kind) {
   markDirty()
 }
 
-export async function addImageBlob(blob, name) {
+// The converters the server can run, fetched once per session.
+let converters = null
+
+function fileNameOf(path) {
+  const last = path.split('/').pop() || path
+  try {
+    return decodeURIComponent(last)
+  } catch {
+    return last
+  }
+}
+
+/**
+ * Convert a just-uploaded asset the browser can't show into one it can,
+ * reporting progress in the status bar (and to `onProgress`, for the box on
+ * the slide). Resolves to the new deck-relative path, or null when the
+ * needed tool is missing or the conversion failed (the status bar then
+ * says why).
+ */
+export async function convertIfPossible(path, name = fileNameOf(path), { onProgress } = {}) {
+  const video = isVideoPath(path)
+  converters ??= converterStatus().catch(() => ({ ffmpeg: null, imagemagick: null }))
+  const status = await converters
+  if (video && !status.ffmpeg) {
+    editor.statusMessage = `${name} can't be played here and ffmpeg isn't installed, so it wasn't converted.`
+    return null
+  }
+  if (!video && !status.imagemagick) {
+    editor.statusMessage = `${name} can't be displayed here; install ImageMagick to convert it automatically.`
+    return null
+  }
+  const target = video ? 'WebM' : (imageOutputName(name).endsWith('.jpg') ? 'JPEG' : 'PNG')
+  // images convert in one step, with no progress to report
+  editor.conversion = { name, target, progress: video ? 0 : null }
+  try {
+    const converted = await convertAsset(path, {
+      onProgress: (fraction) => {
+        if (!video) return
+        if (editor.conversion) editor.conversion.progress = fraction
+        onProgress?.(fraction)
+      }
+    })
+    editor.conversion = null
+    editor.statusMessage = `Converted ${name} to ${fileNameOf(converted)}.`
+    return converted
+  } catch (err) {
+    editor.conversion = null
+    editor.statusMessage = `Conversion of ${name} failed: ${err.message}`
+    return null
+  }
+}
+
+// Undo snapshot for the slide holding `section`, whichever slide is
+// current: media inserted after a long conversion goes to the slide it was
+// dropped on, and its undo step must cover that slide.
+function snapshotSection(section) {
+  const entry = runtime.bridge.getSlideEntries().find((e) => e.section === section)
+  if (!entry) throw new Error('the slide it was meant for no longer exists')
+  snapshot(runtime.bridge, { type: 'slide', h: entry.h, v: entry.v })
+}
+
+// Select a freshly inserted element when its slide is the visible one;
+// otherwise say where it went.
+function showInserted(el, name) {
+  const section = el.closest('section')
+  if (section === runtime.bridge.currentSection) {
+    runtime.overlay.setSelection([el])
+    return
+  }
+  const entry = runtime.bridge.getSlideEntries().find((e) => e.section === section)
+  const where = entry ? `slide ${entry.h + 1}${entry.vertical ? `.${entry.v + 1}` : ''}` : 'its slide'
+  editor.statusMessage = `${name} was added to ${where}, where it was dropped.`
+}
+
+/**
+ * Canvas-px point under a drop event on the deck document, or undefined when
+ * it fell outside the current slide (the insert then uses the default spot).
+ */
+function dropPoint(event) {
+  if (event.clientX == null) return undefined
+  const section = runtime.bridge.currentSection
+  const rect = section.getBoundingClientRect()
+  if (event.clientX < rect.left || event.clientX > rect.right ||
+      event.clientY < rect.top || event.clientY > rect.bottom) return undefined
+  const canvas = getCanvasSize(runtime.bridge)
+  const scale = rect.width / canvas.width || 1
+  return { x: (event.clientX - rect.left) / scale, y: (event.clientY - rect.top) / scale }
+}
+
+export async function addImageBlob(blob, name, { at } = {}) {
   try {
     const selection = runtime.overlay?.getSelection() ?? []
     const placeholder = selection.length === 1 && selection[0].classList.contains('re-image-placeholder')
       ? selection[0]
       : null
-    snapshotSlide()
-    const el = await insertImageBlob(runtime.bridge, blob, name)
+    const el = await insertImageBlob(runtime.bridge, blob, name, {
+      convert: convertIfPossible, at, beforeInsert: snapshotSection
+    })
     if (placeholder?.isConnected) {
       for (const prop of ['left', 'top', 'width', 'height']) {
         if (placeholder.style[prop]) el.style[prop] = placeholder.style[prop]
@@ -175,7 +285,7 @@ export async function addImageBlob(blob, name) {
       placeholder.before(el)
       placeholder.remove()
     }
-    runtime.overlay.setSelection([el])
+    showInserted(el, name)
     markDirty()
   } catch (err) {
     editor.statusMessage = `Image insert failed: ${err.message}`
@@ -186,7 +296,7 @@ export async function addImageBlob(blob, name) {
 export function pickImage() {
   const input = document.createElement('input')
   input.type = 'file'
-  input.accept = 'image/*'
+  input.accept = 'image/*,.heic,.heif,.avif,.jxl,.tif,.tiff,.psd'
   input.onchange = () => {
     const file = input.files?.[0]
     if (file) addImageBlob(file, file.name)
@@ -194,16 +304,17 @@ export function pickImage() {
   input.click()
 }
 
-export async function addVideoBlob(blob, name) {
+export async function addVideoBlob(blob, name, { at } = {}) {
   try {
-    snapshotSlide()
-    const el = await insertVideoBlob(runtime.bridge, blob, name)
+    const el = await insertVideoBlob(runtime.bridge, blob, name, {
+      convert: convertIfPossible, at, beforeInsert: snapshotSection
+    })
     el.addEventListener('error', () => {
       editor.statusMessage =
         'Video added, but this browser cannot decode it (unsupported codec) — it will not play here. Convert to WebM (VP9) or H.264 MP4.'
       editor.selectionVersion++
     }, { once: true })
-    runtime.overlay.setSelection([el])
+    showInserted(el, name)
     markDirty()
   } catch (err) {
     editor.statusMessage = `Video insert failed: ${err.message}`
@@ -213,7 +324,7 @@ export async function addVideoBlob(blob, name) {
 export function pickVideo() {
   const input = document.createElement('input')
   input.type = 'file'
-  input.accept = 'video/mp4,video/webm,video/*'
+  input.accept = 'video/mp4,video/webm,video/*,.mov,.mkv,.avi,.m4v'
   input.onchange = () => {
     const file = input.files?.[0]
     if (file) addVideoBlob(file, file.name)
@@ -223,10 +334,18 @@ export function pickVideo() {
 
 export function handleFileDrop(event) {
   const file = [...(event.dataTransfer?.files ?? [])][0]
-  if (!file || (!file.type.startsWith('image/') && !file.type.startsWith('video/'))) return false
+  if (!file) return false
+  const type = file.type || ''
+  // Formats the browser doesn't know (HEIC, ProRes MOV, …) arrive with no
+  // type or as a generic binary; their extension decides where they go.
+  const untyped = type === '' || type === 'application/octet-stream'
+  const video = type.startsWith('video/') || (untyped && isVideoPath(file.name))
+  const image = type.startsWith('image/') || (untyped && isImagePath(file.name))
+  if (!video && !image) return false
   event.preventDefault()
-  if (file.type.startsWith('video/')) addVideoBlob(file, file.name)
-  else addImageBlob(file, file.name)
+  const at = dropPoint(event)
+  if (video) addVideoBlob(file, file.name, { at })
+  else addImageBlob(file, file.name, { at })
   return true
 }
 
@@ -314,13 +433,13 @@ function placeCaretAtPoint(el, { x, y }) {
 export function editElement(el, event = null, { viaClick = false } = {}) {
   if (isEditingText() && activeElement() === el) return
   const tag = el.tagName.toLowerCase()
-  if (tag === 'img' || isImageFrame(el)) {
-    // double-clicking an image edits its crop (a plain click on the
-    // selected image must not — too easy to hit while moving it)
+  if (mediaOf(el)) {
+    // double-clicking an image or video edits its crop (a plain click on
+    // the selected element must not — too easy to hit while moving it)
     if (!viaClick) runtime.overlay.beginCrop(el)
     return
   }
-  if (tag === 'svg' || tag === 'video') return
+  if (tag === 'svg') return
   if (el.classList.contains('re-html')) {
     if (!viaClick) openHtmlEditor(el)
   } else if (el.classList.contains('re-math') ||
@@ -446,7 +565,7 @@ export function applyBlockStyle(tag) {
   markDirty()
 }
 
-/** Font size applies to whole boxes (like slides.com), not text runs. */
+/** Font size is a box-level property: it applies to the whole element, not to individual text runs. */
 export function setFontSize(px) {
   if (!(Number.isFinite(px) && px > 0)) return
   const targets = isEditingText() ? [activeElement()] : runtime.overlay.getSelection()
@@ -803,10 +922,13 @@ export function setSpeakerNotes(notes) {
 /**
  * Open the standalone deck in a new tab. `fromCurrent` starts the show on the
  * slide being edited, via reveal's own #/h/v location hash — the presentation
- * view runs with hash navigation on, so it reads that on load. Like Present
- * from the start, this opens the file ON DISK: unsaved edits are not in it.
+ * view runs with hash navigation on, so it reads that on load.
+ *
+ * This serves the file ON DISK, so unsaved edits have to be written out first
+ * or the show is of an older deck. The tab is opened inside the click that
+ * asked for it — a popup blocker refuses one opened after the `await`.
  */
-export function openPresentation({ pdf = false, fromCurrent = false } = {}) {
+export async function openPresentation({ pdf = false, fromCurrent = false } = {}) {
   if (!editor.deckFile) return
   const file = encodeURIComponent(editor.deckFile)
   let suffix = pdf ? '?print-pdf' : ''
@@ -814,7 +936,19 @@ export function openPresentation({ pdf = false, fromCurrent = false } = {}) {
     const { h, v } = editor.slideIndex
     suffix = `#/${h}${v ? `/${v}` : ''}`
   }
-  window.open(`/deck/${file}${suffix}`, '_blank', 'noopener')
+  const url = `/deck/${file}${suffix}`
+  if (!editor.dirty) {
+    window.open(url, '_blank', 'noopener')
+    return
+  }
+  const tab = window.open('', '_blank')
+  // 'noopener' would return no handle to navigate later; sever the link instead
+  if (tab) tab.opener = null
+  await saveDeck()
+  if (!tab) return
+  // a failed save leaves the deck dirty — show the error, not a stale deck
+  if (editor.dirty) tab.close()
+  else tab.location = url
 }
 
 function refreshSlideState() {
@@ -830,7 +964,10 @@ export function toggleFragment() {
   snapshotSlide()
   for (const el of runtime.overlay.getSelection()) {
     if (el.classList.contains('fragment')) {
-      el.classList.remove('fragment')
+      // reveal's runtime classes only mean something on a fragment; the save
+      // cleaner looks for them on .fragment elements, so drop them here or
+      // they end up in the file
+      el.classList.remove('fragment', 'visible', 'current-fragment')
       el.removeAttribute('data-fragment-index')
       el.removeAttribute('data-re-frag-auto')
       if (!el.classList.length) el.removeAttribute('class')
@@ -917,8 +1054,8 @@ const LAYER_KIND_LABELS = {
 /** Classify a slide element for the layers panel. */
 export function layerKind(el) {
   const tag = el.tagName.toLowerCase()
-  if (tag === 'img' || isImageFrame(el)) return 'image'
-  if (tag === 'video') return 'video'
+  if (imageOf(el)) return 'image'
+  if (videoOf(el)) return 'video'
   if (tag === 'svg') return 'shape'
   if (el.classList.contains('re-math') || el.querySelector?.(':scope .katex')) return 'math'
   if (el.classList.contains('re-html')) return 'html'
@@ -1094,9 +1231,9 @@ export function setElementProperties(values) {
   const { el } = info
   if (values.x != null) el.style.left = `${Number(values.x) || 0}px`
   if (values.y != null) el.style.top = `${Number(values.y) || 0}px`
-  // resizing a cropped image scales the picture with its frame
+  // resizing cropped media scales the picture with its frame
   const frameStart = isImageFrame(el) && (values.width != null || values.height != null)
-    ? { frame: readRect(el), img: readRect(imageOf(el)) }
+    ? { frame: readRect(el), media: readRect(mediaOf(el)) }
     : null
   if (values.width != null) el.style.width = `${Math.max(1, Number(values.width) || 1)}px`
   if (values.height != null) el.style.height = `${Math.max(1, Number(values.height) || 1)}px`
@@ -1111,6 +1248,12 @@ export function setElementProperties(values) {
 /**
  * An element inside a group is not its own editable unit on the canvas
  * (clicks select the group), while a top-level one is.
+ *
+ * Losing `re-el` also loses the deck's convention CSS that neutralizes the
+ * theme's box styling (`.reveal .re-el { margin: 0 }`, `img.re-el` max sizes),
+ * and reveal's own `.reveal section img { margin: 15px 0; ... }` would then
+ * push a grouped image off its stored coordinates. Carry the neutralization
+ * inline instead, so it holds in the standalone deck too.
  */
 function adoptInto(el, parent) {
   const nested = parent.classList.contains('re-group')
@@ -1118,7 +1261,22 @@ function adoptInto(el, parent) {
   // don't leave an empty class="" behind in the saved deck
   if (!el.getAttribute('class')) el.removeAttribute('class')
   el.toggleAttribute('data-re-group-child', nested)
+  if (nested) {
+    el.style.margin = '0'
+    if (SIZED_BY_THEME.has(el.tagName.toUpperCase())) {
+      el.style.maxWidth = 'none'
+      el.style.maxHeight = 'none'
+    }
+  } else {
+    el.style.removeProperty('margin')
+    el.style.removeProperty('max-width')
+    el.style.removeProperty('max-height')
+  }
 }
+
+// Elements reveal's theme caps to a share of the slide (.reveal img, video…);
+// inside a group they must keep the size the editor gave them.
+const SIZED_BY_THEME = new Set(['IMG', 'VIDEO', 'IFRAME', 'SVG'])
 
 export function groupSelection() {
   // Document order, not click order: the group must preserve the stacking
@@ -1167,7 +1325,9 @@ export function ungroupSelection() {
   const parent = group.parentElement
   const left = parseFloat(group.style.left) || 0
   const top = parseFloat(group.style.top) || 0
-  const children = [...group.children]
+  // runtime overlays (a video's control bar) belong to the runtime, not to
+  // the group's membership
+  const children = [...group.children].filter((el) => !el.matches('.re-transient'))
   for (const child of children) {
     child.style.left = `${left + (parseFloat(child.style.left) || 0)}px`
     child.style.top = `${top + (parseFloat(child.style.top) || 0)}px`
@@ -1190,11 +1350,63 @@ export function selectedVideoInfo() {
 export function setVideoProperties(values) {
   const info = selectedVideoInfo()
   if (!info) return
-  snapshotSlide()
+  // A video's controls are the deck runtime's bar. Capture the whole deck so
+  // undo can also remove the support nodes the first one adds.
+  const runtimeControls = values.controls === true || Number(values.autoplayDelay) > 0
+  if (runtimeControls) snapshotDeck()
+  else snapshotSlide()
   applyVideoProperties(info.el, values)
+  if (runtimeControls) writeSettings(runtime.bridge.slidesEl, editor.settings)
   runtime.overlay.refresh()
   markDirty()
   bumpSelection()
+}
+
+// The <video> or <img> the conversion actions work on: whichever of the two
+// the selection holds (an image may sit inside a crop frame).
+function selectedMediaElement() {
+  const video = selectedVideoInfo()?.el
+  if (video) return video
+  const sel = runtime.overlay?.getSelection() ?? []
+  return (sel.length === 1 ? imageOf(sel[0]) : null) || null
+}
+
+/**
+ * Deck-relative source of the selected video or image as written in the
+ * markup, or null when it is remote (http/data/blob URLs can't be converted
+ * server-side).
+ */
+export function selectedMediaLocalSrc() {
+  const src = selectedMediaElement()?.getAttribute('src') ?? ''
+  if (!src || /^[a-z][a-z0-9+.-]*:/i.test(src) || src.startsWith('//')) return null
+  return src
+}
+
+/**
+ * Convert the selected video or image on the server and point the element
+ * at the result (an undoable edit). Resolves to the new path; rejects with
+ * the server's message when the conversion fails.
+ */
+export async function convertSelectedMedia({ onProgress, signal } = {}) {
+  const el = selectedMediaElement()
+  const src = selectedMediaLocalSrc()
+  if (!el || !src) throw new Error('no local media selected')
+  const path = await convertAsset(src, { onProgress, signal })
+  // the selection may have moved on during a long conversion
+  if (selectedMediaElement() !== el) return path
+  snapshotSlide()
+  el.setAttribute('src', path)
+  if (el.tagName === 'VIDEO') {
+    // load() restarts resource selection, clearing the old decode error
+    el.load()
+    el.addEventListener('loadedmetadata', bumpSelection, { once: true })
+  } else {
+    el.addEventListener('load', bumpSelection, { once: true })
+  }
+  runtime.overlay.refresh()
+  markDirty()
+  bumpSelection()
+  return path
 }
 
 // --- image properties ---
@@ -1207,6 +1419,10 @@ export function selectedImageInfo() {
   return {
     el,
     cropped: isImageFrame(el),
+    fileName: fileNameOf(img.getAttribute('src') || ''),
+    // a finished load with no pixels: this browser can't decode the file
+    // (an SVG without explicit dimensions also reports no natural width)
+    broken: img.complete && img.naturalWidth === 0 && !/\.svgz?(?:[?#].*)?$/i.test(img.getAttribute('src') || ''),
     width: Math.round(parseFloat(el.style.width) || el.getBoundingClientRect().width),
     height: Math.round(parseFloat(el.style.height) || el.getBoundingClientRect().height),
     borderWidth: parseFloat(el.style.borderWidth) || 0,
@@ -1217,19 +1433,20 @@ export function selectedImageInfo() {
   }
 }
 
-/** Enter PowerPoint-style crop mode on the selected image. */
-export function cropSelectedImage() {
+/** Enter PowerPoint-style crop mode on the selected image or video. */
+export function cropSelectedMedia() {
   const sel = runtime.overlay?.getSelection() ?? []
-  if (sel.length === 1 && imageOf(sel[0])) runtime.overlay.beginCrop(sel[0])
+  if (sel.length === 1 && mediaOf(sel[0])) runtime.overlay.beginCrop(sel[0])
 }
 
-/** Restore the full picture of a cropped image at its current size. */
-export function removeImageCrop() {
-  const info = selectedImageInfo()
-  if (!info?.cropped) return
+/** Restore the full picture of cropped media at its current size. */
+export function removeMediaCrop() {
+  const sel = runtime.overlay?.getSelection() ?? []
+  const el = sel.length === 1 ? sel[0] : null
+  if (!isImageFrame(el) || !mediaOf(el)) return
   snapshotSlide()
-  const img = removeCrop(info.el)
-  runtime.overlay.setSelection([img])
+  const media = removeCrop(el)
+  runtime.overlay.setSelection([media])
   markDirty()
 }
 
@@ -1250,7 +1467,7 @@ export function setImageProperties(values) {
   if (values.width != null || values.height != null) {
     // write only the edited dimension: a foreign-deck image may have no
     // inline height (or width), and that auto dimension must stay auto
-    const start = { frame: readRect(el), img: readRect(img) }
+    const start = { frame: readRect(el), media: readRect(img) }
     if (values.width != null) el.style.width = `${Math.max(1, Number(values.width))}px`
     if (values.height != null) el.style.height = `${Math.max(1, Number(values.height))}px`
     // a frame always carries both inline dimensions (wrapImage sets them)

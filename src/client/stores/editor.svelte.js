@@ -12,6 +12,9 @@ export const editor = $state({
   dirty: false,
   saving: false,
   statusMessage: '',
+  // media conversion in flight: { name, target, progress } (null progress
+  // means indeterminate); null when nothing is converting
+  conversion: null,
   selectionCount: 0,
   selectionTag: '',
   selectionVersion: 0,

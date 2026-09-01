@@ -5,8 +5,10 @@ import {
   currentSpeakerNotes, currentSlideTransition, redoAction, selectedImageInfo,
   groupSelection, selectedElementInfo, setCurrentSlideTransition, setElementProperties,
   setFragmentIndex, setFontSize, setTextColor,
-  setImageProperties, setSpeakerNotes, ungroupSelection, undoAction, updateDeckSettings
+  setImageProperties, setSpeakerNotes, setVideoProperties, ungroupSelection,
+  markDirty, undoAction, updateDeckSettings
 } from '../../src/client/lib/actions.js'
+import { VIDEO_CONTROLS_ATTR } from '../../src/client/lib/model/videocontrols.js'
 import { DEFAULT_SETTINGS } from '../../src/client/lib/model/settings.js'
 import { getCanvasSize } from '../../src/client/lib/overlay/editmode.js'
 import { createShape } from '../../src/client/lib/model/shapes.js'
@@ -145,6 +147,37 @@ describe('settings actions', () => {
     undoAction()
     expect(runtime.bridge.slidesEl.querySelector('[data-re-settings]')).toBeNull()
     expect(runtime.bridge.slidesEl.querySelector('img').hasAttribute('data-re-href')).toBe(false)
+  })
+
+  it('adds control-bar runtime support for a cropped video and removes it on undo', () => {
+    const frame = document.createElement('div')
+    frame.className = 're-el re-image-frame'
+    Object.assign(frame.style, { position: 'absolute', width: '340px', height: '200px' })
+    const video = document.createElement('video')
+    Object.assign(video.style, { position: 'absolute', left: '-60px', top: '-20px', width: '400px', height: '300px' })
+    frame.appendChild(video)
+    runtime.bridge.getSections()[0].appendChild(frame)
+    runtime.overlay.getSelection = () => [frame]
+
+    setVideoProperties({ controls: true })
+    // a framed video asks the runtime for a bar, never the browser
+    expect(video.hasAttribute(VIDEO_CONTROLS_ATTR)).toBe(true)
+    expect(video.hasAttribute('controls')).toBe(false)
+    expect(runtime.bridge.slidesEl.querySelector('script[data-re-settings-runtime]')).not.toBeNull()
+
+    undoAction()
+    expect(runtime.bridge.slidesEl.querySelector('[data-re-settings]')).toBeNull()
+    expect(runtime.bridge.slidesEl.querySelector('video').hasAttribute(VIDEO_CONTROLS_ATTR)).toBe(false)
+  })
+
+  it('picks up a cropped video that arrives by any other edit', () => {
+    const section = runtime.bridge.getSections()[0]
+    section.innerHTML =
+      `<div class="re-el re-image-frame"><video ${VIDEO_CONTROLS_ATTR}></video></div>`
+    expect(runtime.bridge.slidesEl.querySelector('script[data-re-settings-runtime]')).toBeNull()
+
+    markDirty()
+    expect(runtime.bridge.slidesEl.querySelector('script[data-re-settings-runtime]')).not.toBeNull()
   })
 
   it('writes native speaker notes and per-slide transitions with undo', () => {

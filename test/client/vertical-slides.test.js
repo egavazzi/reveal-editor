@@ -46,6 +46,13 @@ describe('vertical slide stacks', () => {
     expect(bridge.index).toEqual({ h: 0, v: 1 })
   })
 
+  it('lands on the copy when a horizontal slide is duplicated', () => {
+    const bridge = bridgeFixture()
+    const clone = duplicateCurrentSlide(bridge, 0, 0)
+    expect(bridge.getSections()[1]).toBe(clone)
+    expect(bridge.index).toEqual({ h: 1, v: 0 })
+  })
+
   it('duplicates, reorders, and collapses vertical stacks', () => {
     const bridge = bridgeFixture()
     addVerticalSlide(bridge, 0, 0).textContent = 'B'
