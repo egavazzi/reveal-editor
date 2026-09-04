@@ -173,6 +173,27 @@ workflows and the one-way eject tradeoff.
   can hold the same spot across slides; pasting onto the slide it came from,
   or onto the same slide twice, steps each copy off the last one
 
+## Import and export
+
+The toolbar's menu (top right) imports and exports whole presentations.
+
+**Import** takes a reveal.js ZIP or a Keynote `.key` file and replaces the
+slides of the open deck with it, embedding the presentation's images, video
+and fonts in the slides themselves. Scripts and event handlers in an imported
+file are dropped, and the deck keeps its own reveal.js runtime. The import is
+one undo step and nothing reaches disk until you save.
+
+**Export** writes:
+
+- a single self-contained HTML file — every stylesheet, script, font, image,
+  video and same-origin iframe inlined, so the presentation is one portable
+  file. A resource that cannot be fetched fails the export rather than
+  leaving a hidden network dependency
+- a PDF, and a PPTX whose slides are full-page images. Both are rendered
+  snapshots of the deck as the editor draws it, so they are faithful but not
+  editable object by object. For a PDF with selectable text, use the toolbar's
+  PDF button instead, which opens reveal.js's own print view
+
 ## File conventions (what the editor writes)
 
 Everything is standard reveal.js except one convention: positioned elements

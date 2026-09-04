@@ -23,10 +23,23 @@ function mimeFor(name) {
   return MIME[name.split('.').pop().toLowerCase()] || 'application/octet-stream'
 }
 
+// The archive is unpacked into memory and every asset becomes a data: URL,
+// so the whole thing has to fit in the tab several times over.
+const MAX_ENTRIES = 5000
+const MAX_UNPACKED_BYTES = 512 * 1024 * 1024
+
 /** Import a conventional reveal.js ZIP without sending it to the server. */
 export async function readDeckZip(file) {
   const unpacked = unzipSync(new Uint8Array(await file.arrayBuffer()))
-  const files = new Map(Object.entries(unpacked).map(([name, bytes]) => [normalizeName(name), bytes]))
+  const entries = Object.entries(unpacked)
+  if (entries.length > MAX_ENTRIES) {
+    throw new Error(`The ZIP has ${entries.length} entries; at most ${MAX_ENTRIES} can be imported.`)
+  }
+  const unpackedBytes = entries.reduce((total, [, bytes]) => total + bytes.length, 0)
+  if (unpackedBytes > MAX_UNPACKED_BYTES) {
+    throw new Error(`The ZIP unpacks to ${Math.round(unpackedBytes / 1e6)} MB; at most ${Math.round(MAX_UNPACKED_BYTES / 1e6)} MB can be imported.`)
+  }
+  const files = new Map(entries.map(([name, bytes]) => [normalizeName(name), bytes]))
   const decoder = new TextDecoder()
   const candidates = [...files]
     .filter(([name]) => /\.html?$/i.test(name))

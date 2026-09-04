@@ -5,6 +5,7 @@
     undoAction, redoAction, openPresentation
   } from '../lib/actions.js'
   import { icon } from '../lib/icons.js'
+  import FileMenu from './FileMenu.svelte'
 
   function toggleAutosave(e) {
     editor.autosave = e.currentTarget.checked
@@ -94,6 +95,7 @@
     </span>
     <button class="ic" title="Next slide" onclick={() => runtime.bridge?.next()} disabled={!editor.ready}>{@html icon('chevronRight')}</button>
   </div>
+  <FileMenu />
 </header>
 
 <style>
