@@ -213,3 +213,43 @@ describe('self-contained HTML export', () => {
     expect(percentages.at(-1)).toBe(1)
   })
 })
+
+describe('export copies', () => {
+  it('embeds the copy the export encoder produced instead of the original', async () => {
+    const fetchImpl = vi.fn(async (url) => {
+      if (url === '/api/export/media/photo-1234abcd.jpg') return response('smaller', 'image/jpeg')
+      if (url === 'https://example.test/deck/logo.svg') return response('<svg/>', 'image/svg+xml')
+      return new Response('', { status: 404 })
+    })
+    const html = await buildSelfContainedHtml({
+      html: '<html><body><img src="photo.png"><img src="logo.svg"></body></html>',
+      baseUrl: 'https://example.test/deck/deck.html',
+      fetchImpl,
+      replacements: new Map([
+        ['https://example.test/deck/photo.png', { url: '/api/export/media/photo-1234abcd.jpg', video: false }]
+      ])
+    })
+    expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
+      '/api/export/media/photo-1234abcd.jpg',
+      'https://example.test/deck/logo.svg'
+    ])
+    expect(html).toContain('data:image/jpeg;base64,')
+    expect(html).not.toContain('photo.png')
+  })
+
+  it('plays an animation whose copy is a video as a looping muted video', async () => {
+    const html = await buildSelfContainedHtml({
+      html: '<html><body><img class="re-el" src="spin.gif" alt="a spinner" style="width: 100px"></body></html>',
+      baseUrl: 'https://example.test/deck/deck.html',
+      fetchImpl: async () => response('webm bytes', 'video/webm'),
+      replacements: new Map([
+        ['https://example.test/deck/spin.gif', { url: '/api/export/media/spin-1234abcd.webm', video: true }]
+      ])
+    })
+    expect(html).not.toContain('<img')
+    expect(html).toMatch(/<video[^>]*class="re-el"/)
+    expect(html).toMatch(/<video[^>]*style="width: 100px"/)
+    for (const flag of ['autoplay', 'loop', 'muted', 'playsinline']) expect(html).toContain(flag)
+    expect(html).toContain('data:video/webm;base64,')
+  })
+})

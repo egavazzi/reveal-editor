@@ -4,6 +4,8 @@
 // Saved decks carry media under `data-src` as well as `src` (reveal.js lazy
 // loading), so both forms are always handled.
 
+import { parseSrcset } from '../media-refs.js'
+
 // Attributes whose whole value is one URL.
 const SINGLE_URL_ATTRS = ['src', 'data-src', 'poster', 'data-background-image']
 
@@ -39,32 +41,42 @@ export function samePath(a, b) {
 
 /**
  * Every reference to a deck file under `root`, as
- * `{ element, attribute, kind, path }` — `kind` is 'attribute' for a single
- * URL, 'list' for one entry of a comma-separated attribute, and 'style' for
- * a CSS `url()` in a style attribute. Frame and crop decoration attributes
- * are not references and are left out.
+ * `{ element, attribute, kind, raw, path }` — `kind` is 'attribute' for a
+ * single URL, 'list' for one entry of a comma-separated attribute, 'srcset'
+ * for one candidate of a `srcset`, and 'style' for a CSS `url()` in a style
+ * attribute. `raw` is the reference as written, which resolves against the
+ * deck's base URL; `path` identifies the file. Frame and crop decoration
+ * attributes are not references and are left out.
  */
 export function assetReferences(root) {
   const found = []
   const elements = [root, ...root.querySelectorAll('*')].filter((el) => el?.nodeType === 1)
   for (const element of elements) {
     for (const attribute of SINGLE_URL_ATTRS) {
-      const path = normalizeAssetPath(element.getAttribute?.(attribute))
-      if (path) found.push({ element, attribute, kind: 'attribute', path })
+      const raw = element.getAttribute?.(attribute)
+      const path = normalizeAssetPath(raw)
+      if (path) found.push({ element, attribute, kind: 'attribute', raw, path })
     }
     for (const attribute of LIST_URL_ATTRS) {
       const value = element.getAttribute?.(attribute)
       if (!value) continue
       for (const entry of value.split(',')) {
         const path = normalizeAssetPath(entry)
-        if (path) found.push({ element, attribute, kind: 'list', path })
+        if (path) found.push({ element, attribute, kind: 'list', raw: entry.trim(), path })
+      }
+    }
+    const srcset = element.getAttribute?.('srcset')
+    if (srcset) {
+      for (const candidate of parseSrcset(srcset)) {
+        const path = normalizeAssetPath(candidate.url)
+        if (path) found.push({ element, attribute: 'srcset', kind: 'srcset', raw: candidate.url, path })
       }
     }
     const style = element.getAttribute?.('style')
     if (style) {
       for (const [, , url] of style.matchAll(CSS_URL)) {
         const path = normalizeAssetPath(url)
-        if (path) found.push({ element, attribute: 'style', kind: 'style', path })
+        if (path) found.push({ element, attribute: 'style', kind: 'style', raw: url, path })
       }
     }
   }

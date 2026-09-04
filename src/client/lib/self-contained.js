@@ -1,8 +1,10 @@
 import { editor, runtime } from '../stores/editor.svelte.js'
-import { fetchDeck } from './api.js'
+import { clearExportMedia, fetchDeck } from './api.js'
+import { prepareExportMedia } from './export-media.js'
 import { cleanSlides } from './model/clean.js'
 import { deckDownloadName } from './filename.js'
 import { formatSrcset, parseSrcset, splitFragment } from './media-refs.js'
+import { DEFAULT_EXPORT_CODEC, DEFAULT_EXPORT_PRESET } from './model/export-presets.js'
 import { THEME_LINK_SELECTOR } from './model/settings.js'
 
 const SKIP_URL = /^(?:data:|javascript:|mailto:|tel:|#|$)/i
@@ -55,7 +57,7 @@ async function replaceAsync(value, pattern, replacer) {
   return result + value.slice(offset)
 }
 
-function progressContext(fetchImpl, onProgress, maxBytes) {
+function progressContext(fetchImpl, onProgress, maxBytes, replacements) {
   const blobs = new Map()
   const dataUrls = new Map()
   let embeddedBytes = 0
@@ -82,7 +84,8 @@ function progressContext(fetchImpl, onProgress, maxBytes) {
       label = `Embedding ${fileLabel(url)}…`
       emit()
       const promise = (async () => {
-        const response = await fetchImpl(url, { credentials: 'same-origin' })
+        // an export copy stands in for the original wherever it is referenced
+        const response = await fetchImpl(replacements.get(url)?.url ?? url, { credentials: 'same-origin' })
         if (!response.ok) throw new Error(`could not fetch ${url} (${response.status})`)
         const blob = await response.blob()
         embeddedBytes += blob.size
@@ -103,6 +106,10 @@ function progressContext(fetchImpl, onProgress, maxBytes) {
         dataUrls.set(url, this.blob(url).then(blobAsDataUrl))
       }
       return dataUrls.get(url)
+    },
+    /** The export copy replacing `url`, or undefined when there is none. */
+    replacement(url) {
+      return replacements.get(url)
     },
     stage(next) {
       label = next
@@ -194,6 +201,27 @@ async function inlineHtmlResource(element, attribute, baseUrl, context, depth) {
   const html = await response.text()
   const embedded = await inlineDocument(html, resolved, context, null, depth + 1)
   element.setAttribute(attribute, await blobAsDataUrl(new Blob([embedded], { type: 'text/html' })))
+}
+
+/**
+ * Turn every `<img>` whose export copy is a video (an animated GIF, which
+ * compresses far better as video) into a looping muted `<video>`, so the
+ * animation still plays from the exported file.
+ */
+function playAnimationsAsVideo(document, baseUrl, context) {
+  for (const img of [...document.querySelectorAll('img[src], img[data-src]')]) {
+    const attribute = img.hasAttribute('src') ? 'src' : 'data-src'
+    const resolved = resourceUrl(img.getAttribute(attribute), baseUrl)
+    if (!resolved || !context.replacement(resolved)?.video) continue
+    const video = document.createElement('video')
+    for (const { name, value } of [...img.attributes]) {
+      if (['src', 'data-src', 'srcset', 'sizes', 'alt', 'loading'].includes(name)) continue
+      video.setAttribute(name, value)
+    }
+    video.setAttribute(attribute, img.getAttribute(attribute))
+    for (const flag of ['autoplay', 'loop', 'muted', 'playsinline']) video.setAttribute(flag, '')
+    img.replaceWith(video)
+  }
 }
 
 function katexRoot(document, baseUrl) {
@@ -349,6 +377,8 @@ async function inlineDocument(html, baseUrl, context, slidesHtml, depth = 0, the
 
   await embedKatex(document, baseUrl, context)
 
+  playAnimationsAsVideo(document, baseUrl, context)
+
   const attributes = [
     ['img[src]', 'src'], ['video[src]', 'src'], ['video[poster]', 'poster'],
     ['audio[src]', 'src'], ['source[src]', 'src'], ['track[src]', 'src'],
@@ -387,30 +417,68 @@ async function inlineDocument(html, baseUrl, context, slidesHtml, depth = 0, the
   return doctype + document.documentElement.outerHTML
 }
 
+/**
+ * The deck as one HTML file with every resource embedded. `replacements`
+ * maps the absolute URL of a deck file to `{ url, video }` — a copy the
+ * export encoder produced, embedded in its place.
+ */
 export async function buildSelfContainedHtml({
   html, slidesHtml = null, baseUrl, fetchImpl = fetch, onProgress,
-  themeHref = null, maxBytes = DEFAULT_MAX_BYTES
+  themeHref = null, maxBytes = DEFAULT_MAX_BYTES, replacements = new Map()
 }) {
-  const context = progressContext(fetchImpl, onProgress, maxBytes)
+  const context = progressContext(fetchImpl, onProgress, maxBytes, replacements)
   context.finishPreparation()
   const result = await inlineDocument(html, baseUrl, context, slidesHtml, 0, themeHref)
   context.complete()
   return result
 }
 
-export async function exportSelfContainedHtml() {
+/**
+ * Build the self-contained file and download it. `preset` and `codec` choose
+ * how the deck's media is re-encoded on the way in (see EXPORT_PRESETS);
+ * `original` embeds every file untouched. Resolves to the media summary,
+ * `{ before, after, kept }`, or null when nothing was re-encoded.
+ */
+export async function exportSelfContainedHtml({
+  preset = DEFAULT_EXPORT_PRESET, codec = DEFAULT_EXPORT_CODEC
+} = {}) {
   if (!runtime.bridge) throw new Error('The deck is not ready yet.')
+  const bridge = runtime.bridge
   const exportId = Date.now()
   editor.exportProgress = { id: exportId, done: 0, total: 1, label: 'Preparing presentation…' }
+  const compressing = preset !== 'original'
   try {
     const source = await fetchDeck()
+    const baseUrl = bridge.doc.baseURI
+    let replacements = new Map()
+    let summary = null
+    if (compressing) {
+      const config = bridge.config()
+      const media = await prepareExportMedia({
+        slidesEl: bridge.slidesEl,
+        baseUrl,
+        preset,
+        codec,
+        scale: bridge.getScale() || 1,
+        slideWidth: Number(config?.width) || 960,
+        slideHeight: Number(config?.height) || 700,
+        onProgress: ({ done, total, label }) => {
+          // the encoding runs before the inlining, which reports from zero
+          // again with its own resource count
+          editor.exportProgress = { id: exportId, done, total, label }
+        }
+      })
+      replacements = media.replacements
+      summary = media.summary
+    }
     const html = await buildSelfContainedHtml({
       html: source.html,
-      slidesHtml: cleanSlides(runtime.bridge.slidesEl),
-      baseUrl: runtime.bridge.doc.baseURI,
+      slidesHtml: cleanSlides(bridge.slidesEl),
+      baseUrl,
+      replacements,
       // The saved file may still name the previous theme; the live deck
       // carries the one the editor is showing.
-      themeHref: runtime.bridge.doc.querySelector(THEME_LINK_SELECTOR)?.href ?? null,
+      themeHref: bridge.doc.querySelector(THEME_LINK_SELECTOR)?.href ?? null,
       onProgress: (progress) => { editor.exportProgress = { id: exportId, ...progress } }
     })
     const href = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }))
@@ -420,10 +488,16 @@ export async function exportSelfContainedHtml() {
     anchor.click()
     setTimeout(() => URL.revokeObjectURL(href), 60_000)
     editor.statusMessage = `Downloaded self-contained HTML at ${new Date().toLocaleTimeString()}`
+    return summary
   } catch (err) {
     editor.statusMessage = `HTML export failed: ${err.message}`
     throw err
   } finally {
+    if (compressing) {
+      await clearExportMedia().catch((err) => {
+        console.error('could not remove the export copies from the deck folder:', err)
+      })
+    }
     setTimeout(() => {
       if (editor.exportProgress?.id === exportId) editor.exportProgress = null
     }, 1200)

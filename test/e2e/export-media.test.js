@@ -184,7 +184,8 @@ describe.skipIf(!haveFfmpeg || !magick)('POST /api/export/media', () => {
     const { last } = await readStream(await postMedia(base, {
       path: 'assets/photo.jpg', preset: 'near-lossless', target: { width: 4000, height: 4000 }
     }))
-    expect(last).toEqual({ skipped: true, reason: 'already at the size it is shown at' })
+    expect(last).toMatchObject({ skipped: true, reason: 'already at the size it is shown at' })
+    expect(last.before).toBe((await readFile(join(assetsDir, 'photo.jpg'))).length)
   }, 60_000)
 
   it('recompresses a PNG without changing a pixel', async () => {
@@ -209,7 +210,7 @@ describe.skipIf(!haveFfmpeg || !magick)('POST /api/export/media', () => {
 
   it('leaves an SVG alone', async () => {
     const { last } = await readStream(await postMedia(base, { path: 'assets/logo.svg', preset: 'compact' }))
-    expect(last).toEqual({ skipped: true, reason: 'vector image' })
+    expect(last).toMatchObject({ skipped: true, reason: 'vector image' })
   })
 
   it('re-encodes a video to the target size, streaming progress', async () => {

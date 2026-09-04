@@ -220,7 +220,8 @@ async function videoInfo(input, ffprobeBin, ffmpegBin) {
  *   its name inside `outDir`.
  * - `{ kept, before, after, reason, ssim? }` — the encode ran but is not
  *   worth using, so it was discarded and the original should be embedded.
- * - `{ skipped, reason }` — the file is embedded as it is, without encoding.
+ * - `{ skipped, before, reason }` — the file is embedded as it is, without
+ *   encoding.
  *
  * Rejects when a tool is missing or exits non-zero. The returned promise has
  * `abort()`.
@@ -239,8 +240,8 @@ export function exportMedia({
   }
 
   const promise = (async () => {
-    if (!preset?.video) return { skipped: true, reason: 'the original was asked for' }
     const before = (await stat(input)).size
+    if (!preset?.video) return { skipped: true, before, reason: 'the original was asked for' }
 
     const finish = async (partial, extra = {}) => {
       const after = (await stat(partial)).size
@@ -298,7 +299,7 @@ export function exportMedia({
 
     const ext = extensionOf(input)
     if (!IMAGE_EXTENSIONS.includes(ext)) {
-      return { skipped: true, reason: ext === 'svg' ? 'vector image' : `format left as it is: .${ext || 'none'}` }
+      return { skipped: true, before, reason: ext === 'svg' ? 'vector image' : `format left as it is: .${ext || 'none'}` }
     }
     if (/[[\]]/.test(input)) {
       throw new Error('file names containing [ or ] cannot be re-encoded; rename the file')
@@ -320,7 +321,7 @@ export function exportMedia({
     // A lossy source that is already at the size it is shown at would only
     // lose quality to another pass through the encoder.
     if (!size && !toWebp && (ext === 'jpg' || ext === 'jpeg' || ext === 'webp' || ext === 'gif')) {
-      return { skipped: true, reason: 'already at the size it is shown at' }
+      return { skipped: true, before, reason: 'already at the size it is shown at' }
     }
     const partial = join(outDir, `.encoding-${process.pid}-${Date.now()}${outExt}`)
     try {

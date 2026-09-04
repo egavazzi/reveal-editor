@@ -40,7 +40,7 @@ export async function exportRouter(deckDir) {
   // Re-encode one deck file for an export, streaming `{"progress": f}` lines
   // and ending in `{path, before, after, ssim?}` for a copy worth embedding,
   // `{kept, before, after, reason, ssim?}` when the encode was not worth its
-  // quality, `{skipped, reason}` for a file that is embedded as it is, or
+  // quality, `{skipped, before, reason}` for a file embedded as it is, or
   // `{error}`. `path` is the URL this router serves the copy from.
   router.post('/media', async (req, res) => {
     const input = resolveDeckFile(deckDir, req.body?.path)

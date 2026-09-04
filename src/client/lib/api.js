@@ -90,6 +90,31 @@ export async function convertAsset(path, { onProgress = () => {}, signal, fetchI
   return (await readJobStream(res, onProgress)).path
 }
 
+/**
+ * Re-encode one deck file (deck-relative `path`) for a self-contained
+ * export, fitting it inside `target` (`{ width, height }`, or null to keep
+ * its own size). Resolves to `{ path, before, after, ssim? }` for a copy to
+ * embed — `path` is the URL it is served from — `{ kept, before, after,
+ * reason, ssim? }` when the re-encode was not worth its quality, or
+ * `{ skipped, reason }` for a file to embed as it is. `onProgress` receives
+ * fractions in [0, 1]; aborting `signal` stops the encoder server-side.
+ */
+export async function exportMediaCopy(path, { preset, codec, target = null } = {}, { onProgress = () => {}, signal, fetchImpl = fetch } = {}) {
+  const res = await fetchImpl('/api/export/media', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, preset, codec, target }),
+    signal
+  })
+  if (!res.ok) return jsonOrThrow(res)
+  return readJobStream(res, onProgress)
+}
+
+/** Discard the copies an export produced. */
+export async function clearExportMedia({ fetchImpl = fetch } = {}) {
+  return jsonOrThrow(await fetchImpl('/api/export/media', { method: 'DELETE' }))
+}
+
 export function subscribeEvents(onEvent) {
   const source = new EventSource('/api/events')
   source.onmessage = (e) => onEvent(JSON.parse(e.data))
