@@ -38,7 +38,11 @@ function download(bytes, filename) {
   setTimeout(() => URL.revokeObjectURL(href), 60_000)
 }
 
-/** Build a standards-based PPTX whose slides are full-canvas PNG snapshots. */
+/**
+ * Build a standards-based PPTX whose slides are full-canvas PNG snapshots.
+ * Each entry of `images` is released as it is converted; a long deck would
+ * otherwise hold both the data: URL and the decoded bytes of every slide.
+ */
 export function buildPptx(images, canvasWidth, canvasHeight) {
   const width = 9_144_000
   const height = Math.round(width * canvasHeight / canvasWidth)
@@ -72,7 +76,10 @@ export function buildPptx(images, canvasWidth, canvasHeight) {
       { id: 'rId1', type: `${R_NS}/image`, target: `../media/image${number}.png` },
       { id: 'rId2', type: `${R_NS}/slideLayout`, target: '../slideLayouts/slideLayout1.xml' }
     ])
-    files[`ppt/media/image${number}.png`] = pngBytes(image)
+    // A PNG is already compressed; deflating it again costs time and grows
+    // the part.
+    files[`ppt/media/image${number}.png`] = [pngBytes(image), { level: 0 }]
+    images[index] = null
   })
   return zipSync(files, { level: 6 })
 }

@@ -31,6 +31,14 @@ const model = {
   }]
 }
 
+const withObject = (object) => ({
+  ...model, scenes: [{ ...model.scenes[0], objects: [...model.scenes[0].objects, object] }]
+})
+
+const withTable = (table) => ({
+  ...model, scenes: [{ ...model.scenes[0], tables: [...model.scenes[0].tables, table] }]
+})
+
 describe('Keynote import', () => {
   it('converts Keynote scenes to editable reveal-editor slides', () => {
     const converted = keynoteModelToReveal(model, template)
@@ -59,5 +67,60 @@ describe('Keynote import', () => {
     const converted = keynoteModelToReveal(model, template, { inlineAssets: true })
     expect(converted.html).toContain('data:image/png;base64,')
     expect(converted.assets).toEqual([])
+  })
+
+  it('leaves the open deck\'s theme alone', () => {
+    const settings = JSON.parse(
+      keynoteModelToReveal(model, template).html.match(/data-re-settings="">([\s\S]*?)<\/template>/)[1]
+    )
+    expect(settings).not.toHaveProperty('theme')
+  })
+
+  it('names an asset after its MIME subtype and warns about unrenderable ones', () => {
+    const converted = keynoteModelToReveal(withObject({
+      id: 'image-2', kind: 'image', x: 0, y: 0, width: 10, height: 10,
+      mimeType: 'image/heic', bytes: new Uint8Array([1, 2, 3])
+    }), template)
+
+    expect(converted.assets.map((asset) => asset.path)).toContain('assets/keynote-slide-001-003.heic')
+    expect(converted.warnings).toContain(
+      'Slide 1 uses a image/heic file, which browsers cannot display; replace it after importing.'
+    )
+  })
+
+  it('gives an unknown MIME type an extension a browser can act on', () => {
+    const converted = keynoteModelToReveal(withObject({
+      id: 'image-2', kind: 'image', x: 0, y: 0, width: 10, height: 10,
+      mimeType: 'image/x-canon-cr2', bytes: new Uint8Array([1])
+    }), template)
+    expect(converted.assets.map((asset) => asset.path)).toContain('assets/keynote-slide-001-003.xcanoncr2')
+  })
+
+  it('stacks every element of a slide in one order', () => {
+    const converted = keynoteModelToReveal({
+      ...model,
+      scenes: [{
+        ...model.scenes[0],
+        blocks: [{ ...model.scenes[0].blocks[0], zIndex: 5 }],
+        objects: [{ ...model.scenes[0].objects[0], zIndex: 9 }],
+        tables: [{ ...model.scenes[0].tables[0], zIndex: 1 }]
+      }]
+    }, template)
+    const doc = new DOMParser().parseFromString(converted.html, 'text/html')
+    const zOf = (selector) => doc.querySelector(`.slides > section ${selector}`).style.zIndex
+    expect([zOf('table'), zOf('.re-text'), zOf('img')]).toEqual(['1', '2', '3'])
+  })
+
+  it('clamps merge spans to the table and names the slide of an unreadable one', () => {
+    const converted = keynoteModelToReveal(withTable({
+      id: 'table-2', x: 0, y: 0, width: 100, height: 100,
+      rows: [['a', 'b'], ['c', 'd']],
+      merges: [{ row: 0, col: 0, rowspan: 65535, colspan: 65535 }]
+    }), template)
+    const cell = new DOMParser().parseFromString(converted.html, 'text/html').querySelectorAll('table')[1].querySelector('td')
+    expect([cell.getAttribute('rowspan'), cell.getAttribute('colspan')]).toEqual(['2', '2'])
+
+    expect(() => keynoteModelToReveal(withTable({ id: 'table-3', rows: null }), template))
+      .toThrow('Slide 1: a table in this Keynote presentation has no readable rows.')
   })
 })

@@ -2,12 +2,28 @@ import { strToU8, zipSync } from 'fflate'
 
 const EXTENSION_BY_MIME = {
   'image/gif': 'gif',
+  'image/heic': 'heic',
+  'image/heif': 'heif',
   'image/jpeg': 'jpg',
   'image/png': 'png',
   'image/svg+xml': 'svg',
+  'image/tiff': 'tif',
   'image/webp': 'webp',
   'video/mp4': 'mp4',
+  'video/quicktime': 'mov',
   'video/webm': 'webm'
+}
+
+// Keynote embeds these happily; no browser renders them, so the element the
+// import produces would be blank whatever extension it is given.
+const UNRENDERABLE_MIME = new Set(['image/heic', 'image/heif', 'image/tiff', 'video/quicktime'])
+
+// The subtype is the extension for everything else: an unknown type used to
+// become `.bin`, which no browser will load as an image.
+function extensionFor(mimeType) {
+  return EXTENSION_BY_MIME[mimeType]
+    || mimeType.split('/')[1]?.split(/[;+]/)[0].replace(/[^a-z0-9]/gi, '').toLowerCase()
+    || 'bin'
 }
 
 function safeName(value, fallback = 'Keynote presentation') {
@@ -26,7 +42,7 @@ function bytesToDataUrl(bytes, mimeType) {
   return `data:${mimeType};base64,${btoa(binary)}`
 }
 
-function setPosition(el, item) {
+function setPosition(el, item, zIndex = item.zIndex ?? 1) {
   Object.assign(el.style, {
     position: 'absolute',
     left: `${item.x || 0}px`,
@@ -34,7 +50,7 @@ function setPosition(el, item) {
     width: `${Math.max(1, item.width || 1)}px`,
     height: `${Math.max(1, item.height || 1)}px`,
     boxSizing: 'border-box',
-    zIndex: String(item.zIndex ?? 1)
+    zIndex: String(zIndex)
   })
   if (item.angle) el.style.transform = `rotate(${item.angle}rad)`
 }
@@ -74,7 +90,7 @@ function appendRichText(doc, parent, block) {
   }
 }
 
-function appendText(doc, section, block) {
+function appendText(doc, section, block, zIndex) {
   const plainText = block.paragraphs?.length
     ? block.paragraphs.flatMap((paragraph) => paragraph.runs || []).map((run) => run.text || '').join('')
     : block.text || ''
@@ -92,7 +108,7 @@ function appendText(doc, section, block) {
   ))
   const paddingHeight = (block.padding?.top || 0) + (block.padding?.bottom || 0)
   const fittedHeight = Math.max(block.height || 1, Math.ceil(estimatedLines * fontSize * lineHeight + paddingHeight))
-  setPosition(el, { ...block, height: fittedHeight })
+  setPosition(el, { ...block, height: fittedHeight }, zIndex)
   Object.assign(el.style, {
     overflow: 'hidden',
     whiteSpace: 'pre-wrap',
@@ -118,14 +134,14 @@ function appendText(doc, section, block) {
   section.appendChild(el)
 }
 
-function appendChart(doc, section, object) {
+function appendChart(doc, section, object, zIndex) {
   const ns = 'http://www.w3.org/2000/svg'
   const svg = doc.createElementNS(ns, 'svg')
   svg.setAttribute('class', 're-el')
   svg.setAttribute('role', 'img')
   svg.setAttribute('aria-label', object.chart ? 'Imported Keynote chart' : 'Keynote chart preview unavailable')
   svg.setAttribute('viewBox', `0 0 ${object.width} ${object.height}`)
-  setPosition(svg, object)
+  setPosition(svg, object, zIndex)
   const values = object.chart?.series?.flatMap((series) => series.values).filter(Number.isFinite) || []
   const categories = object.chart?.categories || []
   if (!values.length || !categories.length) {
@@ -173,10 +189,15 @@ function appendChart(doc, section, object) {
   section.appendChild(svg)
 }
 
-function appendTable(doc, section, table) {
+function appendTable(doc, section, table, slideLabel, zIndex) {
+  if (!Array.isArray(table.rows) || !table.rows.length || !table.rows.every(Array.isArray)) {
+    throw new Error(`${slideLabel}: a table in this Keynote presentation has no readable rows.`)
+  }
+  const rowCount = table.rows.length
+  const columnCount = Math.max(...table.rows.map((row) => row.length))
   const el = doc.createElement('table')
   el.className = 're-el'
-  setPosition(el, { ...table, width: table.width || 400, height: table.height || 200 })
+  setPosition(el, { ...table, width: table.width || 400, height: table.height || 200 }, zIndex)
   Object.assign(el.style, {
     borderCollapse: 'collapse',
     tableLayout: 'fixed',
@@ -193,9 +214,20 @@ function appendTable(doc, section, table) {
     }
     el.appendChild(columns)
   }
-  const origins = new Map((table.merges || []).map((merge) => [`${merge.row}:${merge.col}`, merge]))
+  // Spans come out of the file unchecked. Clamping them to the table keeps a
+  // corrupt 65535 x 65535 merge from building a set with billions of entries.
+  const merges = (table.merges || [])
+    .filter((merge) => Number.isInteger(merge.row) && merge.row >= 0 && merge.row < rowCount
+      && Number.isInteger(merge.col) && merge.col >= 0 && merge.col < columnCount)
+    .map((merge) => ({
+      row: merge.row,
+      col: merge.col,
+      rowspan: Math.min(Math.max(1, Math.trunc(merge.rowspan) || 1), rowCount - merge.row),
+      colspan: Math.min(Math.max(1, Math.trunc(merge.colspan) || 1), columnCount - merge.col)
+    }))
+  const origins = new Map(merges.map((merge) => [`${merge.row}:${merge.col}`, merge]))
   const covered = new Set()
-  for (const merge of table.merges || []) {
+  for (const merge of merges) {
     for (let row = merge.row; row < merge.row + merge.rowspan; row += 1) {
       for (let col = merge.col; col < merge.col + merge.colspan; col += 1) {
         if (row !== merge.row || col !== merge.col) covered.add(`${row}:${col}`)
@@ -240,11 +272,14 @@ export function keynoteModelToReveal(model, templateHtml, { inlineAssets = false
   if (!slides) throw new Error('The presentation template is invalid.')
   slides.replaceChildren()
   const assets = []
+  const assetWarnings = new Set()
   const assetRef = (object, slideIndex, objectIndex) => {
     if (!object.bytes?.length || !object.mimeType) return ''
+    if (UNRENDERABLE_MIME.has(object.mimeType)) {
+      assetWarnings.add(`Slide ${slideIndex + 1} uses a ${object.mimeType} file, which browsers cannot display; replace it after importing.`)
+    }
     if (inlineAssets) return bytesToDataUrl(object.bytes, object.mimeType)
-    const ext = EXTENSION_BY_MIME[object.mimeType] || 'bin'
-    const path = `assets/keynote-slide-${String(slideIndex + 1).padStart(3, '0')}-${String(objectIndex + 1).padStart(3, '0')}.${ext}`
+    const path = `assets/keynote-slide-${String(slideIndex + 1).padStart(3, '0')}-${String(objectIndex + 1).padStart(3, '0')}.${extensionFor(object.mimeType)}`
     assets.push({ path, bytes: Uint8Array.from(object.bytes) })
     return path
   }
@@ -254,19 +289,10 @@ export function keynoteModelToReveal(model, templateHtml, { inlineAssets = false
     section.className = 're-slide'
     section.setAttribute('data-background-color', '#ffffff')
 
-    if (model.limitedPreview && slideIndex === 0 && model.preview?.bytes?.length) {
-      const preview = doc.createElement('img')
-      preview.className = 're-el'
-      preview.alt = 'Embedded Keynote preview'
-      preview.src = assetRef(model.preview, slideIndex, 0)
-      setPosition(preview, { x: 0, y: 0, width: scene.width, height: scene.height, zIndex: 0 })
-      preview.style.objectFit = 'contain'
-      section.appendChild(preview)
-    }
-
-    scene.objects?.filter((object) => object.kind !== 'table').forEach((object, objectIndex) => {
+    const slideLabel = `Slide ${slideIndex + 1}`
+    const appendObject = (object, objectIndex, zIndex) => {
       if (object.kind === 'chart') {
-        appendChart(doc, section, object)
+        appendChart(doc, section, object, zIndex)
         return
       }
       if (object.kind === 'image' && object.bytes?.length && object.mimeType) {
@@ -274,7 +300,7 @@ export function keynoteModelToReveal(model, templateHtml, { inlineAssets = false
         image.className = 're-el'
         image.alt = object.text || 'Imported Keynote image'
         image.src = assetRef(object, slideIndex, objectIndex + 1)
-        setPosition(image, object)
+        setPosition(image, object, zIndex)
         image.style.objectFit = 'fill'
         section.appendChild(image)
         return
@@ -285,7 +311,7 @@ export function keynoteModelToReveal(model, templateHtml, { inlineAssets = false
         video.src = assetRef(object, slideIndex, objectIndex + 1)
         video.controls = true
         video.preload = 'metadata'
-        setPosition(video, object)
+        setPosition(video, object, zIndex)
         section.appendChild(video)
         return
       }
@@ -296,7 +322,7 @@ export function keynoteModelToReveal(model, templateHtml, { inlineAssets = false
       const shape = doc.createElement('div')
       shape.className = 're-el re-text'
       shape.textContent = object.text || ''
-      setPosition(shape, object)
+      setPosition(shape, object, zIndex)
       Object.assign(shape.style, {
         overflow: 'hidden',
         borderRadius: '14px',
@@ -306,9 +332,39 @@ export function keynoteModelToReveal(model, templateHtml, { inlineAssets = false
         placeItems: 'center'
       })
       section.appendChild(shape)
+    }
+
+    const items = []
+    if (model.limitedPreview && slideIndex === 0 && model.preview?.bytes?.length) {
+      items.push({
+        zIndex: 0,
+        render: (zIndex) => {
+          const preview = doc.createElement('img')
+          preview.className = 're-el'
+          preview.alt = 'Embedded Keynote preview'
+          preview.src = assetRef(model.preview, slideIndex, 0)
+          setPosition(preview, { x: 0, y: 0, width: scene.width, height: scene.height }, zIndex)
+          preview.style.objectFit = 'contain'
+          section.appendChild(preview)
+        }
+      })
+    }
+    scene.objects?.filter((object) => object.kind !== 'table').forEach((object, objectIndex) => {
+      items.push({ zIndex: object.zIndex, render: (zIndex) => appendObject(object, objectIndex, zIndex) })
     })
-    scene.blocks?.forEach((block) => appendText(doc, section, block))
-    scene.tables?.forEach((table) => appendTable(doc, section, table))
+    scene.blocks?.forEach((block) => {
+      items.push({ zIndex: block.zIndex, render: (zIndex) => appendText(doc, section, block, zIndex) })
+    })
+    scene.tables?.forEach((table) => {
+      items.push({ zIndex: table.zIndex, render: (zIndex) => appendTable(doc, section, table, slideLabel, zIndex) })
+    })
+    // One stacking order for the whole slide. Elements the parser gave a
+    // stacking position keep it; the rest keep the order they were read in,
+    // rather than every kind of element being layered after the previous kind.
+    items
+      .map((item, order) => ({ ...item, order }))
+      .sort((a, b) => (a.zIndex ?? a.order) - (b.zIndex ?? b.order) || a.order - b.order)
+      .forEach((item, index) => item.render(index + 1))
     if (scene.notes?.length) {
       const notes = doc.createElement('aside')
       notes.className = 'notes'
@@ -332,7 +388,6 @@ export function keynoteModelToReveal(model, templateHtml, { inlineAssets = false
     slideNumbers: false,
     slideNumberFormat: 'c/t',
     slideNumberPosition: 'bottom-right',
-    theme: 'white',
     typography: '',
     transition: 'none',
     transitionSpeed: 'default',
@@ -352,7 +407,7 @@ export function keynoteModelToReveal(model, templateHtml, { inlineAssets = false
     assets,
     slideCount: model.scenes.length,
     limitedPreview: Boolean(model.limitedPreview),
-    warnings: [...(model.diagnostics || []), ...(model.limits || [])]
+    warnings: [...(model.diagnostics || []), ...(model.limits || []), ...assetWarnings]
   }
 }
 
