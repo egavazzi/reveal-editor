@@ -200,3 +200,16 @@ export function convertImage({ input, output, bin = 'convert' }) {
   }
   return promise
 }
+
+/**
+ * Whether the ffmpeg on PATH has the named encoder (`libsvtav1`, say).
+ * False when ffmpeg itself is missing.
+ */
+export function hasFfmpegEncoder(name, bin = 'ffmpeg') {
+  return new Promise((resolvePromise) => {
+    execFile(bin, ['-hide_banner', '-encoders'], { timeout: 10000, maxBuffer: 8 * 1024 * 1024 }, (err, stdout) => {
+      if (err) return resolvePromise(false)
+      resolvePromise(new RegExp(`^\\s*\\S+\\s+${name}\\s`, 'm').test(String(stdout)))
+    })
+  })
+}
