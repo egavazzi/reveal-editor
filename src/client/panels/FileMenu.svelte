@@ -3,10 +3,39 @@
   import { importPresentation } from '../lib/import-deck.js'
   import { exportPresentation } from '../lib/export.js'
   import { exportSelfContainedHtml } from '../lib/self-contained.js'
+  import {
+    DEFAULT_EXPORT_CODEC, DEFAULT_EXPORT_PRESET, EXPORT_CODECS, EXPORT_PRESETS
+  } from '../lib/model/export-presets.js'
 
   let open = $state(false)
   let busy = $state(false)
   let fileInput = $state()
+  let htmlOpen = $state(false)
+  let preset = $state(DEFAULT_EXPORT_PRESET)
+  let codec = $state(DEFAULT_EXPORT_CODEC)
+  let mediaSummary = $state(null)
+  let exportError = $state('')
+
+  const presets = Object.values(EXPORT_PRESETS)
+  const codecs = Object.values(EXPORT_CODECS)
+
+  function formatSize(bytes) {
+    if (!Number.isFinite(bytes)) return ''
+    if (Math.abs(bytes) >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+    if (Math.abs(bytes) >= 1024) return `${Math.round(bytes / 1024)} kB`
+    return `${bytes} B`
+  }
+
+  async function downloadHtml() {
+    mediaSummary = null
+    exportError = ''
+    try {
+      mediaSummary = await exportSelfContainedHtml({ preset, codec })
+    } catch (err) {
+      console.error(err)
+      exportError = err.message
+    }
+  }
 
   async function importFile(event) {
     const file = event.currentTarget.files?.[0]
@@ -27,7 +56,7 @@
     }
   }
 
-  // Both export paths put their own message in the status bar and rethrow so
+  // The render exports put their own message in the status bar and rethrow so
   // the failure is visible in the console too.
   function report(promise) {
     promise.catch((err) => console.error(err))
@@ -43,10 +72,48 @@
     <header><strong>Import & export</strong></header>
     <div class="actions">
       <button onclick={() => fileInput.click()} disabled={busy || !editor.ready}>Upload ZIP or Keynote</button>
-      <button class="html-export" onclick={() => report(exportSelfContainedHtml())} disabled={!editor.ready || editor.exportProgress}>Download self-contained HTML</button>
+      <button class="html-export" onclick={() => (htmlOpen = !htmlOpen)} disabled={!editor.ready} aria-expanded={htmlOpen}>Download self-contained HTML…</button>
       <button onclick={() => report(exportPresentation('pdf'))} disabled={!editor.ready}>Download PDF</button>
       <button onclick={() => report(exportPresentation('pptx'))} disabled={!editor.ready}>Download PPTX</button>
     </div>
+    {#if htmlOpen}
+      <div class="export-options">
+        <fieldset>
+          <legend>Media</legend>
+          {#each presets as option (option.id)}
+            <label>
+              <input type="radio" name="export-preset" value={option.id} bind:group={preset} disabled={Boolean(editor.exportProgress)} />
+              <span><strong>{option.label}</strong> — {option.description}</span>
+            </label>
+          {/each}
+        </fieldset>
+        <fieldset disabled={preset === 'original' || Boolean(editor.exportProgress)}>
+          <legend>Video codec</legend>
+          {#each codecs as option (option.id)}
+            <label>
+              <input type="radio" name="export-codec" value={option.id} bind:group={codec} />
+              <span><strong>{option.label}</strong> — {option.description}</span>
+            </label>
+          {/each}
+        </fieldset>
+        <button class="download" onclick={downloadHtml} disabled={!editor.ready || Boolean(editor.exportProgress)}>Download</button>
+      </div>
+    {/if}
+    {#if exportError}
+      <p class="error" aria-live="polite">Export failed: {exportError}</p>
+    {/if}
+    {#if mediaSummary}
+      <div class="summary" aria-live="polite">
+        <span>Media {formatSize(mediaSummary.before)} → {formatSize(mediaSummary.after)}</span>
+        {#if mediaSummary.kept.length}
+          <ul>
+            {#each mediaSummary.kept as item (item.name)}
+              <li>{item.name} embedded as it is — {item.reason}{item.ssim ? ` (SSIM ${item.ssim.toFixed(3)})` : ''}</li>
+            {/each}
+          </ul>
+        {/if}
+      </div>
+    {/if}
     {#if editor.exportProgress}
       <div class="export-progress" aria-live="polite">
         <span>{editor.exportProgress.label}</span>
@@ -80,6 +147,15 @@
   .menu > header strong { flex: 1; font-size: 15px; }
   .actions { display: grid; gap: 6px; padding: 10px; }
   .actions button { width: auto; height: 31px; background: var(--ui-control); }
+  .export-options { display: grid; gap: 8px; padding: 0 12px 10px; color: var(--ui-muted); font-size: 11px; }
+  .export-options fieldset { display: grid; gap: 5px; margin: 0; padding: 6px 8px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius); }
+  .export-options fieldset:disabled { opacity: .45; }
+  .export-options legend { padding: 0 4px; color: var(--ui-text); }
+  .export-options label { display: flex; gap: 6px; align-items: baseline; line-height: 1.35; }
+  .export-options .download { width: 100%; height: 29px; background: var(--ui-primary); }
+  .error { margin: 0; padding: 0 12px 8px; color: #e3b76b; font-size: 11px; }
+  .summary { padding: 0 12px 8px; color: var(--ui-muted); font-size: 11px; line-height: 1.4; }
+  .summary ul { margin: 4px 0 0; padding-left: 16px; }
   .export-progress { display: grid; grid-template-columns: 1fr auto; gap: 5px 8px; padding: 0 12px 10px; color: var(--ui-muted); font-size: 11px; }
   .export-progress span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .export-progress progress { grid-column: 1 / -1; width: 100%; height: 7px; accent-color: var(--ui-primary); }
