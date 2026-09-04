@@ -23,6 +23,7 @@
   import Sidebar from './panels/Sidebar.svelte'
   import Inspector from './panels/Inspector.svelte'
   import ArrangeView from './panels/ArrangeView.svelte'
+  import OptimizeMedia from './panels/OptimizeMedia.svelte'
   import { icon } from './lib/icons.js'
 
   let iframeSrc = $state('')
@@ -235,6 +236,7 @@
   <PopoverEditor />
 
   {#if editor.arrangeOpen}<ArrangeView />{/if}
+  {#if editor.optimizeOpen}<OptimizeMedia />{/if}
 
   <footer class="statusbar">
     {#if editor.conversion}

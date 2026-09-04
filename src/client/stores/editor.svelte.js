@@ -25,6 +25,8 @@ export const editor = $state({
   // when pinned, the side panel never auto-switches or auto-closes on selection
   panelPinned: localStorage.getItem('reveal-editor:panel-pinned') === '1',
   arrangeOpen: false,
+  // the "Optimize media" panel (media recompression) is open
+  optimizeOpen: false,
   settings: {},
   // bumped whenever slide content changes; sidebar re-derives thumbnails
   docVersion: 0,

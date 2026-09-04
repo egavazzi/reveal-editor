@@ -143,7 +143,7 @@ describe('server e2e', () => {
     expect(first.path).toMatch(/^assets\/fig-[0-9a-f]{8}\.png$/)
     expect(second.path).toBe(first.path)
     const listing = await (await fetch(`${base}api/assets`)).json()
-    expect(listing.assets).toEqual([first.path])
+    expect(listing.assets).toEqual([{ path: first.path, size: png.length }])
   })
 
   it('rejects path traversal in asset names', async () => {

@@ -1,0 +1,117 @@
+// Every place a slide can name a media file, in one module. Optimizing an
+// asset writes a new file under a new (content-addressed) name, so each of
+// these references has to move with it — a missed one leaves a slide
+// pointing at a file that is about to be deleted.
+//
+// Saved decks carry media under `data-src` as well as `src` (reveal.js lazy
+// loading), so both forms are always handled.
+
+// Attributes whose whole value is one URL.
+const SINGLE_URL_ATTRS = ['src', 'data-src', 'poster', 'data-background-image']
+
+// reveal.js accepts a comma-separated list of sources here.
+const LIST_URL_ATTRS = ['data-background-video']
+
+const CSS_URL = /url\(\s*(['"]?)(.*?)\1\s*\)/gi
+
+/**
+ * A path as it identifies a file: query and fragment removed, percent
+ * escapes decoded, and a leading `./` or `/deck/` dropped. Returns '' for
+ * anything that is not a deck-relative reference (a data:, blob: or remote
+ * URL).
+ */
+export function normalizeAssetPath(value) {
+  const raw = String(value ?? '').trim()
+  if (!raw || /^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(raw)) return ''
+  const withoutQuery = raw.split(/[?#]/)[0]
+  let decoded
+  try {
+    decoded = decodeURIComponent(withoutQuery)
+  } catch {
+    decoded = withoutQuery
+  }
+  return decoded.replace(/^\.\//, '').replace(/^\/deck\//, '')
+}
+
+/** Whether two references name the same deck file. */
+export function samePath(a, b) {
+  const left = normalizeAssetPath(a)
+  return left !== '' && left === normalizeAssetPath(b)
+}
+
+/**
+ * Every reference to a deck file under `root`, as
+ * `{ element, attribute, kind, path }` — `kind` is 'attribute' for a single
+ * URL, 'list' for one entry of a comma-separated attribute, and 'style' for
+ * a CSS `url()` in a style attribute. Frame and crop decoration attributes
+ * are not references and are left out.
+ */
+export function assetReferences(root) {
+  const found = []
+  const elements = [root, ...root.querySelectorAll('*')].filter((el) => el?.nodeType === 1)
+  for (const element of elements) {
+    for (const attribute of SINGLE_URL_ATTRS) {
+      const path = normalizeAssetPath(element.getAttribute?.(attribute))
+      if (path) found.push({ element, attribute, kind: 'attribute', path })
+    }
+    for (const attribute of LIST_URL_ATTRS) {
+      const value = element.getAttribute?.(attribute)
+      if (!value) continue
+      for (const entry of value.split(',')) {
+        const path = normalizeAssetPath(entry)
+        if (path) found.push({ element, attribute, kind: 'list', path })
+      }
+    }
+    const style = element.getAttribute?.('style')
+    if (style) {
+      for (const [, , url] of style.matchAll(CSS_URL)) {
+        const path = normalizeAssetPath(url)
+        if (path) found.push({ element, attribute: 'style', kind: 'style', path })
+      }
+    }
+  }
+  return found
+}
+
+/** The distinct deck files referenced under `root`. */
+export function referencedAssetPaths(root) {
+  return [...new Set(assetReferences(root).map((ref) => ref.path))]
+}
+
+/** Whether anything under `root` still refers to `path`. */
+export function hasReferenceTo(root, path) {
+  return assetReferences(root).some((ref) => samePath(ref.path, path))
+}
+
+/**
+ * Point every reference to `oldPath` under `root` at `newPath`. Returns the
+ * number of attribute values changed.
+ */
+export function rewriteAssetReferences(root, oldPath, newPath) {
+  let changed = 0
+  const elements = [root, ...root.querySelectorAll('*')].filter((el) => el?.nodeType === 1)
+  for (const element of elements) {
+    for (const attribute of SINGLE_URL_ATTRS) {
+      const value = element.getAttribute?.(attribute)
+      if (value != null && samePath(value, oldPath)) {
+        element.setAttribute(attribute, newPath)
+        changed++
+      }
+    }
+    for (const attribute of LIST_URL_ATTRS) {
+      const value = element.getAttribute?.(attribute)
+      if (value == null || !value.split(',').some((entry) => samePath(entry, oldPath))) continue
+      element.setAttribute(attribute, value.split(',')
+        .map((entry) => (samePath(entry, oldPath) ? newPath : entry.trim()))
+        .join(','))
+      changed++
+    }
+    const style = element.getAttribute?.('style')
+    if (style && [...style.matchAll(CSS_URL)].some(([, , url]) => samePath(url, oldPath))) {
+      element.setAttribute('style', style.replace(CSS_URL, (whole, quote, url) =>
+        (samePath(url, oldPath) ? `url(${quote}${newPath}${quote})` : whole)))
+      changed++
+    }
+  }
+  return changed
+}
