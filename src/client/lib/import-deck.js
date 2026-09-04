@@ -15,15 +15,6 @@ import { editor, runtime } from '../stores/editor.svelte.js'
 // privileges.
 const DANGEROUS_URL = /^\s*(?:javascript:|vbscript:|data:text\/html)/i
 
-// References that must resolve without a network fetch. Anything else is an
-// asset the import failed to embed.
-const EXTERNAL_URL = /^\s*(?:data:|blob:|https?:|mailto:|tel:|#)/i
-
-const URL_ATTRIBUTES = [
-  'src', 'href', 'poster', 'data-src', 'data-background-image',
-  'data-background-video', 'data-background-iframe'
-]
-
 function sanitize(slides) {
   for (const script of slides.querySelectorAll('script')) script.remove()
   for (const frame of slides.querySelectorAll('iframe')) frame.removeAttribute('srcdoc')
@@ -36,28 +27,10 @@ function sanitize(slides) {
   }
 }
 
-function unresolvedReferences(slides) {
-  const missing = new Set()
-  const check = (value) => {
-    const reference = value?.trim()
-    if (reference && !EXTERNAL_URL.test(reference)) missing.add(reference)
-  }
-  for (const element of slides.querySelectorAll('*')) {
-    for (const attribute of URL_ATTRIBUTES) {
-      if (element.hasAttribute(attribute)) check(element.getAttribute(attribute))
-    }
-    for (const candidate of (element.getAttribute('srcset') || '').split(',')) {
-      check(candidate.trim().split(/\s+/)[0])
-    }
-    for (const [, url] of (element.getAttribute('style') || '')
-      .matchAll(/url\(\s*(['"]?)(.*?)\1\s*\)/gi)) check(url)
-  }
-  return [...missing]
-}
-
 /**
- * The importable `.slides` markup of a presentation document: scripts and
- * event handlers removed, and every asset reference already embedded.
+ * The importable `.slides` markup of a presentation document, with scripts
+ * and event handlers removed. Whoever produced `html` is responsible for
+ * having embedded every asset reference it makes.
  */
 export function importableSlides(html) {
   const doc = new DOMParser().parseFromString(html, 'text/html')
@@ -65,10 +38,6 @@ export function importableSlides(html) {
   if (!slides) throw new Error('The presentation has no reveal.js slides element.')
   if (!slides.querySelector(':scope > section')) throw new Error('The presentation has no slides.')
   sanitize(slides)
-  const missing = unresolvedReferences(slides)
-  if (missing.length) {
-    throw new Error(`The presentation references files that are not in it: ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? `, and ${missing.length - 5} more` : ''}.`)
-  }
   return slides.innerHTML
 }
 

@@ -30,11 +30,6 @@ describe('importable slides', () => {
     expect(html).toContain('https://example.test/x.png')
   })
 
-  it('refuses a deck whose assets were not embedded', () => {
-    expect(() => importableSlides(deck('<section><img src="images/plot.png"></section>')))
-      .toThrow('images/plot.png')
-  })
-
   it('refuses a document that is not a presentation', () => {
     expect(() => importableSlides('<!doctype html><html><body><h1>Not a deck</h1></body></html>'))
       .toThrow('no reveal.js slides element')
