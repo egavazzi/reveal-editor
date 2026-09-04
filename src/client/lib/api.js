@@ -30,6 +30,7 @@ export async function uploadAsset(blob, name) {
   }))
 }
 
+/** `{ assets }` — the deck's assets as `{ path, size }`, sorted by name. */
 export async function listAssets() {
   return jsonOrThrow(await fetch('/api/assets'))
 }
@@ -40,6 +41,36 @@ export async function listAssets() {
  */
 export async function converterStatus() {
   return jsonOrThrow(await fetch('/api/assets/convert'))
+}
+
+/**
+ * Read an NDJSON job stream (`{progress}` lines, then a result or
+ * `{error}`) from `res`. Resolves to the result line; rejects on an error
+ * line or a stream that ends without one.
+ */
+async function readJobStream(res, onProgress) {
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffered = ''
+  let result = null
+  const consume = (line) => {
+    if (!line.trim()) return
+    const msg = JSON.parse(line)
+    if (msg.error) throw new Error(msg.error)
+    if (typeof msg.progress === 'number') onProgress(msg.progress)
+    else result = msg
+  }
+  for (;;) {
+    const { value, done } = await reader.read()
+    if (done) break
+    buffered += decoder.decode(value, { stream: true })
+    const lines = buffered.split('\n')
+    buffered = lines.pop()
+    lines.forEach(consume)
+  }
+  consume(buffered)
+  if (!result) throw new Error('conversion ended without a result')
+  return result
 }
 
 /**
@@ -56,29 +87,32 @@ export async function convertAsset(path, { onProgress = () => {}, signal, fetchI
     signal
   })
   if (!res.ok) return jsonOrThrow(res)
-  // newline-delimited JSON: progress lines, then a final path or error line
-  const reader = res.body.getReader()
-  const decoder = new TextDecoder()
-  let buffered = ''
-  let result = null
-  const consume = (line) => {
-    if (!line.trim()) return
-    const msg = JSON.parse(line)
-    if (msg.error) throw new Error(msg.error)
-    if (msg.path) result = msg.path
-    else if (typeof msg.progress === 'number') onProgress(msg.progress)
-  }
-  for (;;) {
-    const { value, done } = await reader.read()
-    if (done) break
-    buffered += decoder.decode(value, { stream: true })
-    const lines = buffered.split('\n')
-    buffered = lines.pop()
-    lines.forEach(consume)
-  }
-  consume(buffered)
-  if (!result) throw new Error('conversion ended without a result')
-  return result
+  return (await readJobStream(res, onProgress)).path
+}
+
+/**
+ * Re-encode one deck file (deck-relative `path`) for a self-contained
+ * export, fitting it inside `target` (`{ width, height }`, or null to keep
+ * its own size). Resolves to `{ path, before, after, ssim? }` for a copy to
+ * embed — `path` is the URL it is served from — `{ kept, before, after,
+ * reason, ssim? }` when the re-encode was not worth its quality, or
+ * `{ skipped, reason }` for a file to embed as it is. `onProgress` receives
+ * fractions in [0, 1]; aborting `signal` stops the encoder server-side.
+ */
+export async function exportMediaCopy(path, { preset, codec, target = null } = {}, { onProgress = () => {}, signal, fetchImpl = fetch } = {}) {
+  const res = await fetchImpl('/api/export/media', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, preset, codec, target }),
+    signal
+  })
+  if (!res.ok) return jsonOrThrow(res)
+  return readJobStream(res, onProgress)
+}
+
+/** Discard the copies an export produced. */
+export async function clearExportMedia({ fetchImpl = fetch } = {}) {
+  return jsonOrThrow(await fetchImpl('/api/export/media', { method: 'DELETE' }))
 }
 
 export function subscribeEvents(onEvent) {

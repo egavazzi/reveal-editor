@@ -63,18 +63,18 @@ export function hasStoredSettings(slidesEl) {
   return Boolean(slidesEl?.querySelector(TEMPLATE_SELECTOR))
 }
 
+/** The deck's theme stylesheet, whichever reveal.js layout the deck uses. */
+export const THEME_LINK_SELECTOR =
+  'link[rel~="stylesheet"][href*="/theme/"], link[rel~="stylesheet"][href^="theme/"]'
+
 export function themeFromDocument(doc) {
-  const href = doc?.querySelector(
-    'link[rel~="stylesheet"][href*="/theme/"], link[rel~="stylesheet"][href^="theme/"]'
-  )?.getAttribute('href') || ''
+  const href = doc?.querySelector(THEME_LINK_SELECTOR)?.getAttribute('href') || ''
   return href.match(/(?:^|\/theme\/)([^/?#]+)\.css(?:[?#].*)?$/)?.[1] || ''
 }
 
 export function applyTheme(doc, theme) {
   if (!doc || !/^[a-z0-9_-]+$/i.test(theme || '')) return false
-  const link = doc.querySelector(
-    'link[rel~="stylesheet"][href*="/theme/"], link[rel~="stylesheet"][href^="theme/"]'
-  )
+  const link = doc.querySelector(THEME_LINK_SELECTOR)
   if (!link) return false
   const href = link.getAttribute('href') || ''
   const next = href.replace(

@@ -11,6 +11,7 @@ export const editor = $state({
   slideCount: 0,
   dirty: false,
   saving: false,
+  exportProgress: null, // { id, done, total, label } while building standalone HTML
   statusMessage: '',
   // media conversion in flight: { name, target, progress } (null progress
   // means indeterminate); null when nothing is converting

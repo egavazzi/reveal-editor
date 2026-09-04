@@ -69,8 +69,9 @@ function makeBridge(iframe, win) {
     getIndex() {
       return Reveal.getIndices()
     },
-    goTo(h, v = 0) {
-      Reveal.slide(h, v)
+    /** `f` is a fragment index: -1 reveals none, omitted keeps the state. */
+    goTo(h, v = 0, f) {
+      Reveal.slide(h, v, f)
     },
     next() {
       Reveal.next()

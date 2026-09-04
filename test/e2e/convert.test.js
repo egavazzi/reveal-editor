@@ -146,7 +146,7 @@ describe.skipIf(!haveFfmpeg)('POST /api/assets/convert', () => {
     try {
       expect(existsSync(partial)).toBe(true)
       const listing = await (await fetch(`${base}api/assets`)).json()
-      expect(listing.assets.some((a) => a.includes('re-convert'))).toBe(false)
+      expect(listing.assets.some((a) => a.path.includes('re-convert'))).toBe(false)
     } finally {
       job.abort()
       await job.catch(() => {})

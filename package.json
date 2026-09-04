@@ -18,8 +18,12 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@file-viewer/renderer-iwork": "^3.0.0",
     "chokidar": "^4.0.3",
     "express": "^5.1.0",
+    "fflate": "^0.8.3",
+    "html-to-image": "^1.11.13",
+    "jspdf": "^4.2.1",
     "open": "^10.1.0",
     "parse5": "^7.2.1",
     "postcss": "^8.5.17"

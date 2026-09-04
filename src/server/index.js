@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { loadDeck, saveDeck } from './deck.js'
 import { assetsRouter } from './assets.js'
+import { exportRouter } from './export.js'
 import { watchDeck } from './watch.js'
 
 /**
@@ -81,6 +82,7 @@ export async function createServer({ deckPath, port = 3737, dev = false, repoRoo
   })
 
   app.use('/api/assets', await assetsRouter(deckDir))
+  app.use('/api/export', await exportRouter(deckDir))
 
   app.get('/api/events', (req, res) => {
     res.set({

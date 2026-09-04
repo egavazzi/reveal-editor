@@ -1,9 +1,10 @@
 import express from 'express'
-import { createHash } from 'node:crypto'
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
-import { extname, resolve, sep } from 'node:path'
+import { extname, resolve } from 'node:path'
 import { cleanupPartials, convertImage, convertToWebm, ffmpegVersion, imageMagickVersion, imageOutputName, isVideoFile } from './convert.js'
+import { contentAddressedName, safeName } from './asset-names.js'
+import { percentProgress, resolveDeckFile, streamJob } from './http.js'
 import { webmOutputName } from '../client/lib/model/codecs.js'
 
 const EXT_BY_MIME = {
@@ -16,19 +17,21 @@ const EXT_BY_MIME = {
   'video/webm': '.webm'
 }
 
-function safeName(name) {
-  return name.replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/^[._]+/, '').slice(0, 80)
-}
-
 export async function assetsRouter(deckDir) {
   const router = express.Router()
   const assetsDir = resolve(deckDir, 'assets')
   await cleanupPartials(assetsDir)
 
+  // Every file in assets/ as `{ path, size }`, sorted by name. Dot-files
+  // are hidden: they are conversion temporaries, not deck assets.
   router.get('/', async (req, res) => {
     try {
       const files = existsSync(assetsDir) ? await readdir(assetsDir) : []
-      res.json({ assets: files.filter((f) => !f.startsWith('.')).sort().map((f) => `assets/${f}`) })
+      const assets = []
+      for (const name of files.filter((f) => !f.startsWith('.')).sort()) {
+        assets.push({ path: `assets/${name}`, size: (await stat(resolve(assetsDir, name))).size })
+      }
+      res.json({ assets })
     } catch (err) {
       res.status(500).json({ error: String(err.message ?? err) })
     }
@@ -40,11 +43,8 @@ export async function assetsRouter(deckDir) {
         return res.status(400).json({ error: 'empty body' })
       }
       const requested = safeName(String(req.query.name ?? 'pasted'))
-      const mimeExt = EXT_BY_MIME[req.headers['content-type']] ?? ''
-      const ext = extname(requested) || mimeExt || '.bin'
-      const stem = requested.replace(/\.[^.]*$/, '') || 'asset'
-      const hash = createHash('sha1').update(req.body).digest('hex').slice(0, 8)
-      const filename = `${stem}-${hash}${ext}`
+      const ext = extname(requested) || EXT_BY_MIME[req.headers['content-type']] || ''
+      const filename = contentAddressedName(requested, req.body, { ext })
       const target = resolve(assetsDir, filename)
       if (!target.startsWith(assetsDir)) {
         return res.status(400).json({ error: 'invalid name' })
@@ -63,19 +63,7 @@ export async function assetsRouter(deckDir) {
     }
   })
 
-  // Resolve a deck-relative media path (as written in a <video src>) to a
-  // file inside the deck directory; null for anything outside it or remote.
-  const deckFile = (relPath) => {
-    if (typeof relPath !== 'string' || relPath === '' || /^[a-z][a-z0-9+.-]*:/i.test(relPath)) return null
-    let decoded
-    try {
-      decoded = decodeURIComponent(relPath.split(/[?#]/)[0])
-    } catch {
-      return null
-    }
-    const abs = resolve(deckDir, decoded)
-    return abs.startsWith(deckDir + sep) ? abs : null
-  }
+  const deckFile = (relPath) => resolveDeckFile(deckDir, relPath)
 
   // Which converters this machine has: ffmpeg for video, ImageMagick for
   // images. Each field is a version string, or null when the tool is absent.
@@ -83,31 +71,6 @@ export async function assetsRouter(deckDir) {
     const [ffmpeg, magick] = await Promise.all([ffmpegVersion(), imageMagickVersion()])
     res.json({ ffmpeg, imagemagick: magick?.version ?? null })
   })
-
-  // Stream a conversion job as newline-delimited JSON: `{"progress": f}`
-  // lines while it runs, then `{"path": "…"}` or `{"error": "…"}`. Closing
-  // the request kills the converter and removes the partial output.
-  const streamJob = async (res, makeJob, outputRel, label) => {
-    res.set({ 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-cache' })
-    res.flushHeaders()
-    const send = (obj) => res.write(`${JSON.stringify(obj)}\n`)
-    const job = makeJob(send)
-    let finished = false
-    // the socket closing before the response completes is a client abort
-    res.on('close', () => {
-      if (!finished && !res.writableFinished) job.abort()
-    })
-    try {
-      await job
-      finished = true
-      send({ path: outputRel })
-    } catch (err) {
-      finished = true
-      console.error(`conversion of ${label} failed:`, err.message)
-      send({ error: String(err.message ?? err) })
-    }
-    res.end()
-  }
 
   // Convert a deck video to WebM, or a deck image to JPEG/PNG, writing the
   // result next to the original (which is kept).
@@ -123,21 +86,9 @@ export async function assetsRouter(deckDir) {
       }
       const output = webmOutputName(input)
       if (output === input) return res.status(400).json({ error: 'file is already a .webm' })
-      return streamJob(res, (send) => {
-        let lastSent = -1
-        return convertToWebm({
-          input,
-          output,
-          onProgress: (fraction) => {
-            // throttle to whole percents: ffmpeg reports several times a second
-            const pct = Math.floor(fraction * 100)
-            if (pct !== lastSent) {
-              lastSent = pct
-              send({ progress: pct / 100 })
-            }
-          }
-        })
-      }, webmOutputName(relPath), req.body.path)
+      return streamJob(res, (send) => convertToWebm({
+        input, output, onProgress: percentProgress(send)
+      }), () => ({ path: webmOutputName(relPath) }), req.body.path)
     }
 
     const magick = await imageMagickVersion()
@@ -155,7 +106,7 @@ export async function assetsRouter(deckDir) {
       // ImageMagick reports no progress; one line keeps the envelope uniform
       send({ progress: 1 })
       return job
-    }, imageOutputName(relPath), req.body.path)
+    }, () => ({ path: imageOutputName(relPath) }), req.body.path)
   })
 
   return router

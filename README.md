@@ -173,6 +173,64 @@ workflows and the one-way eject tradeoff.
   can hold the same spot across slides; pasting onto the slide it came from,
   or onto the same slide twice, steps each copy off the last one
 
+## Import and export
+
+The toolbar's menu (top right) imports and exports whole presentations.
+
+**Import** takes a reveal.js ZIP or a Keynote `.key` file and replaces the
+slides of the open deck with it, embedding the presentation's images, video
+and fonts in the slides themselves. Scripts and event handlers in an imported
+file are dropped, and the deck keeps its own reveal.js runtime. The import is
+one undo step and nothing reaches disk until you save.
+
+**Export** writes:
+
+- a single self-contained HTML file — every stylesheet, script, font, image,
+  video and same-origin iframe inlined, so the presentation is one portable
+  file. A resource that cannot be fetched fails the export rather than
+  leaving a hidden network dependency
+- a PDF, and a PPTX whose slides are full-page images. Both are rendered
+  snapshots of the deck as the editor draws it, so they are faithful but not
+  editable object by object. For a PDF with selectable text, use the toolbar's
+  PDF button instead, which opens reveal.js's own print view
+
+## Export size
+
+The self-contained HTML export asks how to treat the deck's media before it
+builds the file. Whatever you pick, `assets/` is never written to: the deck
+folder keeps the originals, and the re-encoded copies live in a scratch
+folder that is removed when the export ends.
+
+Every picture and video is embedded at twice the size the slides draw it at
+— enough for a retina screen — and is never enlarged. A file used at several
+sizes gets the largest of them, a cropped picture is sized by the picture
+rather than by the visible slice, and a slide background by the deck's slide
+size. A file whose size cannot be measured keeps its own.
+
+- **Original** — every file is embedded exactly as it is.
+- **Near-lossless** (default) — PNG is recompressed losslessly, JPEG is
+  touched only when it has to shrink (then quality 93, full chroma), SVG is
+  left alone, and video is re-encoded at VP9 CRF 22 or AV1 CRF 27.
+- **Compact** — JPEG at quality 88, photographic PNGs (no transparency, more
+  than 256 colours) as WebP at quality 90, video at VP9 CRF 30 or AV1 CRF 34.
+
+An animated GIF becomes a silent looping video, which is far smaller than the
+GIF and plays the same.
+
+Video also has to pass a quality guard: the encode is compared to the source
+with ffmpeg's SSIM filter and thrown away below a mean of 0.98 (0.95 for
+compact). Any re-encode that does not save at least 10% of the file is thrown
+away too, and the original embedded instead. The dialog lists every file that
+was kept and why.
+
+AV1 files are smaller than VP9 at the same quality but need a recent browser
+to play; VP9 is the default.
+
+This needs `ffmpeg` (with libvpx and libopus, as distribution builds have;
+libsvtav1 as well for AV1) and ImageMagick (with WebP support for the compact
+preset — `convert -list format | grep WEBP` says whether yours has it).
+Without them, only the original preset works.
+
 ## File conventions (what the editor writes)
 
 Everything is standard reveal.js except one convention: positioned elements

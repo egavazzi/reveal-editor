@@ -18,7 +18,7 @@ export { isVideoPath as isVideoFile }
 const PARTIAL_PREFIX = '.re-convert-'
 
 /** Path of the temporary file a conversion to `output` writes while running. */
-function partialPath(output) {
+export function partialPath(output) {
   return join(dirname(output), `${PARTIAL_PREFIX}${basename(output)}`)
 }
 
@@ -199,4 +199,17 @@ export function convertImage({ input, output, bin = 'convert' }) {
     child.kill('SIGKILL')
   }
   return promise
+}
+
+/**
+ * Whether the ffmpeg on PATH has the named encoder (`libsvtav1`, say).
+ * False when ffmpeg itself is missing.
+ */
+export function hasFfmpegEncoder(name, bin = 'ffmpeg') {
+  return new Promise((resolvePromise) => {
+    execFile(bin, ['-hide_banner', '-encoders'], { timeout: 10000, maxBuffer: 8 * 1024 * 1024 }, (err, stdout) => {
+      if (err) return resolvePromise(false)
+      resolvePromise(new RegExp(`^\\s*\\S+\\s+${name}\\s`, 'm').test(String(stdout)))
+    })
+  })
 }
