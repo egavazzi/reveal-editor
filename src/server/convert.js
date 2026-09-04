@@ -18,7 +18,7 @@ export { isVideoPath as isVideoFile }
 const PARTIAL_PREFIX = '.re-convert-'
 
 /** Path of the temporary file a conversion to `output` writes while running. */
-function partialPath(output) {
+export function partialPath(output) {
   return join(dirname(output), `${PARTIAL_PREFIX}${basename(output)}`)
 }
 
