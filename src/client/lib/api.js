@@ -90,30 +90,6 @@ export async function convertAsset(path, { onProgress = () => {}, signal, fetchI
   return (await readJobStream(res, onProgress)).path
 }
 
-/**
- * Re-encode a deck asset smaller. Resolves to `{ path, before, after }` for
- * a replacement written under a new deck-relative path,
- * `{ kept: true, before, after }` when the saving was too small to be worth
- * it, or `{ skipped: true, reason }` for a format the server leaves alone.
- * `onProgress` receives fractions in [0, 1]; aborting `signal` stops the
- * encoder server-side.
- */
-export async function optimizeAsset(path, options = {}, { onProgress = () => {}, signal, fetchImpl = fetch } = {}) {
-  const res = await fetchImpl('/api/assets/optimize', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path, options }),
-    signal
-  })
-  if (!res.ok) return jsonOrThrow(res)
-  return readJobStream(res, onProgress)
-}
-
-/** Delete one file from the deck's assets folder. */
-export async function deleteAsset(name, { fetchImpl = fetch } = {}) {
-  return jsonOrThrow(await fetchImpl(`/api/assets/${encodeURIComponent(name)}`, { method: 'DELETE' }))
-}
-
 export function subscribeEvents(onEvent) {
   const source = new EventSource('/api/events')
   source.onmessage = (e) => onEvent(JSON.parse(e.data))

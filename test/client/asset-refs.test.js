@@ -1,9 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest'
-import {
-  assetReferences, hasReferenceTo, normalizeAssetPath, referencedAssetPaths,
-  rewriteAssetReferences, samePath
-} from '../../src/client/lib/model/asset-refs.js'
+import { assetReferences, normalizeAssetPath, samePath } from '../../src/client/lib/model/asset-refs.js'
 
 function root(html) {
   const div = document.createElement('div')
@@ -60,43 +57,9 @@ describe('assetReferences', () => {
     ])
   })
 
-  it('lists the distinct files and answers whether one is used', () => {
-    const el = root(html)
-    expect(referencedAssetPaths(el)).toHaveLength(9)
-    expect(hasReferenceTo(el, 'assets/two.webm')).toBe(true)
-    expect(hasReferenceTo(el, './assets/css.png')).toBe(true)
-    expect(hasReferenceTo(el, 'assets/gone.png')).toBe(false)
-  })
-
   it('reads a reference on the root element itself', () => {
     const el = root('')
     el.setAttribute('data-background-image', 'assets/bg.png')
-    expect(referencedAssetPaths(el)).toEqual(['assets/bg.png'])
-  })
-})
-
-describe('rewriteAssetReferences', () => {
-  it('moves every form of reference onto the new path', () => {
-    const el = root(`
-      <img src="assets/a.png">
-      <img data-src="./assets/a.png">
-      <video poster="assets/a.png"><source src="assets/a.png?v=3"></video>
-      <section data-background-image="assets/a.png"></section>
-      <section data-background-video="assets/a.png, assets/other.webm"></section>
-      <div style="background-image: url('assets/a.png'); color: red"></div>`)
-    expect(rewriteAssetReferences(el, 'assets/a.png', 'assets/a-1234abcd.webp')).toBe(7)
-    expect(hasReferenceTo(el, 'assets/a.png')).toBe(false)
-    expect(el.querySelector('[data-background-video]').getAttribute('data-background-video'))
-      .toBe('assets/a-1234abcd.webp,assets/other.webm')
-    expect(el.querySelector('div[style]').getAttribute('style'))
-      .toBe("background-image: url('assets/a-1234abcd.webp'); color: red")
-    expect(el.querySelectorAll('[src="assets/a-1234abcd.webp"]')).toHaveLength(2)
-  })
-
-  it('leaves decoration attributes and other files alone', () => {
-    const el = root('<div data-re-frame="assets/a.png" data-crop="assets/a.png"><img src="assets/b.png"></div>')
-    expect(rewriteAssetReferences(el, 'assets/a.png', 'assets/new.png')).toBe(0)
-    expect(el.querySelector('div').getAttribute('data-re-frame')).toBe('assets/a.png')
-    expect(el.querySelector('img').getAttribute('src')).toBe('assets/b.png')
+    expect(assetReferences(el).map((r) => r.path)).toEqual(['assets/bg.png'])
   })
 })

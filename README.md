@@ -19,10 +19,7 @@ next GUI save.
 
 Needs Node.js ≥ 20. Optional: `ffmpeg` and ImageMagick (`magick` or
 `convert`) on the PATH, for converting videos and images the browser can't
-show from inside the editor, and for **Optimize media**. That feature needs
-ffmpeg built with libvpx and libopus (the usual distribution build is), and
-an ImageMagick with WebP support if you ask for WebP output — `convert -list
-format | grep WEBP` says whether yours has it.
+show from inside the editor.
 
 ```sh
 git clone <your-repo-url> reveal-editor
@@ -196,25 +193,6 @@ one undo step and nothing reaches disk until you save.
   snapshots of the deck as the editor draws it, so they are faithful but not
   editable object by object. For a PDF with selectable text, use the toolbar's
   PDF button instead, which opens reveal.js's own print view
-
-## Optimize media
-
-**Optimize media…** in the toolbar's menu recompresses the deck's pictures and
-videos and points the slides at the results, so both the deck folder and the
-self-contained HTML export get smaller.
-
-Images go through ImageMagick and videos through ffmpeg (VP9 + Opus WebM, the
-same settings the editor's video conversion uses). You choose the longest
-side (2560 px by default; nothing is ever upscaled), the JPEG/WebP quality,
-whether to keep each image's format or write WebP, and the video CRF. PNGs
-stay PNGs — they are resized and stripped of metadata, never turned into
-JPEG. SVG and GIF are left alone.
-
-A result is only adopted if it is at least 10% smaller (also adjustable):
-otherwise it is thrown away, because losing quality for a rounding error is a
-bad trade. Adopted files are written under a content-addressed name; the
-original is deleted only after the deck has been saved and the saved file no
-longer refers to it. The whole run is one undo step.
 
 ## File conventions (what the editor writes)
 

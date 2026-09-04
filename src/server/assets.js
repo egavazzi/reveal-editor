@@ -1,10 +1,9 @@
 import express from 'express'
-import { mkdir, readdir, readFile, stat, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { extname, resolve, sep } from 'node:path'
 import { cleanupPartials, convertImage, convertToWebm, ffmpegVersion, imageMagickVersion, imageOutputName, isVideoFile } from './convert.js'
 import { contentAddressedName, safeName } from './asset-names.js'
-import { normalizeOptimizeOptions, optimizeAsset, optimizeKind } from './optimize.js'
 import { webmOutputName } from '../client/lib/model/codecs.js'
 
 const EXT_BY_MIME = {
@@ -157,66 +156,6 @@ export async function assetsRouter(deckDir) {
       send({ progress: 1 })
       return job
     }, () => ({ path: imageOutputName(relPath) }), req.body.path)
-  })
-
-  // Re-encode one deck asset smaller and store the result under its
-  // content-addressed name in assets/. Streams like /convert, ending in
-  // `{path, before, after}`, `{kept, before, after}` when the saving was too
-  // small to be worth the quality, or `{skipped, reason}`. The input file is
-  // never removed here: only the client knows whether the deck still refers
-  // to it.
-  router.post('/optimize', async (req, res) => {
-    const input = deckFile(req.body?.path)
-    if (!input) return res.status(400).json({ error: 'path must point inside the deck folder' })
-    if (!existsSync(input)) return res.status(404).json({ error: `no such file: ${req.body.path}` })
-    let options
-    try {
-      options = normalizeOptimizeOptions(req.body?.options ?? {})
-    } catch (err) {
-      return res.status(400).json({ error: String(err.message ?? err) })
-    }
-    const kind = optimizeKind(input)
-    if (kind === 'video' && (await ffmpegVersion()) === null) {
-      return res.status(501).json({ error: 'ffmpeg is not installed on this machine' })
-    }
-    const magick = kind === 'video' ? null : await imageMagickVersion()
-    if (kind !== 'video' && !magick) {
-      return res.status(501).json({ error: 'ImageMagick is not installed on this machine' })
-    }
-    await mkdir(assetsDir, { recursive: true })
-    return streamJob(res, (send) => {
-      let lastSent = -1
-      return optimizeAsset({
-        input,
-        assetsDir,
-        options,
-        magickBin: magick?.bin ?? 'convert',
-        onProgress: (fraction) => {
-          const pct = Math.floor(fraction * 100)
-          if (pct !== lastSent) {
-            lastSent = pct
-            send({ progress: pct / 100 })
-          }
-        }
-      })
-    }, (result) => (result.path ? { ...result, path: `assets/${result.path}` } : result), req.body.path)
-  })
-
-  // Remove one file from assets/. The client calls this for an original its
-  // optimized replacement has superseded, once the saved deck no longer
-  // refers to it.
-  router.delete('/:name', async (req, res) => {
-    const target = resolve(assetsDir, req.params.name)
-    if (!target.startsWith(assetsDir + sep) || req.params.name.startsWith('.')) {
-      return res.status(400).json({ error: 'name must be a file in the deck assets folder' })
-    }
-    try {
-      await unlink(target)
-      res.json({ ok: true })
-    } catch (err) {
-      if (err.code === 'ENOENT') return res.status(404).json({ error: `no such asset: ${req.params.name}` })
-      res.status(500).json({ error: String(err.message ?? err) })
-    }
   })
 
   return router
