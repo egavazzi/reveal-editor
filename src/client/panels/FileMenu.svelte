@@ -47,6 +47,7 @@
       <button class="html-export" onclick={downloadHtml} disabled={!editor.ready || editor.exportProgress}>Download self-contained HTML</button>
       <button onclick={() => exportPresentation('pdf')} disabled={!editor.ready}>Download PDF</button>
       <button onclick={() => exportPresentation('pptx')} disabled={!editor.ready}>Download PPTX</button>
+      <button onclick={() => { editor.optimizeOpen = true; open = false }} disabled={!editor.ready}>Optimize media…</button>
     </div>
     {#if editor.exportProgress}
       <div class="export-progress" aria-live="polite">
