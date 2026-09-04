@@ -68,11 +68,24 @@ describe('reveal.js ZIP import', () => {
     expect(html).toContain('data:image/png;base64,')
   })
 
-  it('refuses an archive whose assets it cannot resolve', async () => {
+  it('refuses an archive missing a file a slide needs', async () => {
     await expect(readDeckZip(zipFile({
       'index.html': `<!doctype html><html><body><div class="reveal"><div class="slides">
         <section><img src="images/plot.png"></section></div></div></body></html>`
     }))).rejects.toThrow('The presentation references files that are not in it: images/plot.png')
+  })
+
+  it('imports slides that are complete even when the shell is not', async () => {
+    // Only `.slides` is imported; the deck's own head replaces this one, so a
+    // file only the shell wanted is nothing to abort over.
+    const html = await readDeckZip(zipFile({
+      'index.html': `<!doctype html><html><head><link rel="stylesheet" href="missing.css">
+        <script src="plugin/notes/plugin.js"><\/script></head>
+        <body><div class="reveal"><div class="slides"><section><img src="plot.png"></section></div></div></body></html>`,
+      'plot.png': strToU8('plot')
+    }))
+    expect(html).toContain('data:image/png;base64,')
+    expect(html).toContain('plugin/notes/plugin.js')
   })
 
   it('does not let a reference climb out of the archive', async () => {

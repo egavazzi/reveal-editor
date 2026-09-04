@@ -62,6 +62,13 @@ export async function readDeckZip(file) {
   const chosen = candidates[0]
   const cache = new Map()
   const unresolved = new Set()
+  // Every reference in the document is rewritten, but only the `.slides`
+  // subtree is imported: the deck's own shell replaces the head. A file the
+  // archive is missing therefore only matters when a slide needs it.
+  let collectMissing = false
+  const missingReference = (reference) => {
+    if (collectMissing) unresolved.add(reference)
+  }
 
   // A ZIP packed from a folder holds everything under one directory, and a
   // deck inside it writes root-relative paths as if that directory were the
@@ -98,7 +105,7 @@ export async function readDeckZip(file) {
         if (!name) return match
         const bytes = files.get(name)
         if (!bytes) {
-          unresolved.add(reference)
+          missingReference(reference)
           return match
         }
         if (chain.includes(name)) throw cycle(chain, name)
@@ -119,7 +126,7 @@ export async function readDeckZip(file) {
     if (cache.has(name)) return cache.get(name) + fragment
     const bytes = files.get(name)
     if (!bytes) {
-      unresolved.add(reference.trim())
+      missingReference(reference.trim())
       return null
     }
     if (chain.includes(name)) throw cycle(chain, name)
@@ -133,8 +140,10 @@ export async function readDeckZip(file) {
   }
 
   const doc = new DOMParser().parseFromString(chosen.html, 'text/html')
+  const slides = doc.querySelector('.reveal .slides')
   const attributes = ['src', 'poster', 'data-src', 'data-background-image', 'data-background-video', 'data-background-iframe']
   for (const element of doc.querySelectorAll('*')) {
+    collectMissing = Boolean(slides?.contains(element))
     for (const attribute of attributes) {
       if (!element.hasAttribute(attribute)) continue
       const embedded = embed(element.getAttribute(attribute), chosen.name)
@@ -152,7 +161,10 @@ export async function readDeckZip(file) {
     }
     if (element.hasAttribute('style')) element.setAttribute('style', rewriteCss(element.getAttribute('style'), chosen.name, []))
   }
-  for (const style of doc.querySelectorAll('style')) style.textContent = rewriteCss(style.textContent, chosen.name, [])
+  for (const style of doc.querySelectorAll('style')) {
+    collectMissing = Boolean(slides?.contains(style))
+    style.textContent = rewriteCss(style.textContent, chosen.name, [])
+  }
 
   if (unresolved.size) {
     const missing = [...unresolved]
