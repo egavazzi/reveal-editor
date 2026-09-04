@@ -27,11 +27,10 @@
     }
   }
 
-  function downloadHtml() {
-    exportSelfContainedHtml().catch((err) => {
-      // exportSelfContainedHtml has already put the message in the status bar.
-      console.error(err)
-    })
+  // Both export paths put their own message in the status bar and rethrow so
+  // the failure is visible in the console too.
+  function report(promise) {
+    promise.catch((err) => console.error(err))
   }
 </script>
 
@@ -44,9 +43,9 @@
     <header><strong>Import & export</strong></header>
     <div class="actions">
       <button onclick={() => fileInput.click()} disabled={busy || !editor.ready}>Upload ZIP or Keynote</button>
-      <button class="html-export" onclick={downloadHtml} disabled={!editor.ready || editor.exportProgress}>Download self-contained HTML</button>
-      <button onclick={() => exportPresentation('pdf')} disabled={!editor.ready}>Download PDF</button>
-      <button onclick={() => exportPresentation('pptx')} disabled={!editor.ready}>Download PPTX</button>
+      <button class="html-export" onclick={() => report(exportSelfContainedHtml())} disabled={!editor.ready || editor.exportProgress}>Download self-contained HTML</button>
+      <button onclick={() => report(exportPresentation('pdf'))} disabled={!editor.ready}>Download PDF</button>
+      <button onclick={() => report(exportPresentation('pptx'))} disabled={!editor.ready}>Download PPTX</button>
     </div>
     {#if editor.exportProgress}
       <div class="export-progress" aria-live="polite">
